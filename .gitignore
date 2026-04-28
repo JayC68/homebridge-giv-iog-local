@@ -5,6 +5,7 @@ npm-debug.log*
 .env
 config.json
 config.*.json
+!config.schema.json
 *.local
 *.backup
 *.bak
