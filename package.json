@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.2.4",
+  "version": "3.2.5",
   "description": "Homebridge bridge for GivTCP local telemetry and Intelligent Octopus Go charging control",
   "main": "index.js",
   "license": "Apache-2.0",
@@ -19,5 +19,10 @@
   "dependencies": {
     "mqtt": "^5.10.4"
   },
-  "displayName": "GivEnergy Local + Intelligent Octopus Go"
+  "displayName": "GivEnergy Local + Intelligent Octopus Go",
+  "files": [
+    "index.js",
+    "config.schema.json",
+    "README.md"
+  ]
 }

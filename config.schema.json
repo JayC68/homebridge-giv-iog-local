@@ -2,7 +2,7 @@
   "pluginAlias": "GivEnergy Local + Intelligent Octopus Go",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Local Homebridge bridge for GivTCP telemetry with Intelligent Octopus Go charging control. Release 3.2.4 includes the proven REST-based Force Charge / Force Export fixes and SoC tile correction.",
+  "headerDisplay": "Local Homebridge bridge for GivTCP telemetry with Intelligent Octopus Go charging control. Release 3.2.5 corrects Off-Peak Hours charging so the 23:30\u201305:30 baseline window remains active even when Octopus polling is healthy.",
   "schema": {
     "type": "object",
     "properties": {
@@ -54,12 +54,12 @@
         "maximum": 1800
       },
       "cheapStart": {
-        "title": "Fallback Cheap Window Start",
+        "title": "Off-Peak Hours Start",
         "type": "string",
         "default": "23:30"
       },
       "cheapEnd": {
-        "title": "Fallback Cheap Window End",
+        "title": "Off-Peak Hours End",
         "type": "string",
         "default": "05:30"
       },

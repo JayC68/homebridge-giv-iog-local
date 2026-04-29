@@ -4,7 +4,7 @@ const mqtt = require('mqtt');
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.2.4';
+const BUILD_VERSION = '3.2.5';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -718,11 +718,6 @@ class GivTcpMqttPlatform {
     return undefined;
   }
 
-  getBatteryWindowPosition() {
-    const soc = this.getNumber(['Power/Power/SOC'], 'SOC');
-    return this.positionFromSoc(soc);
-  }
-
   getBatteryBrightness() {
     const soc = this.getNumber(['Power/Power/SOC'], 'SOC');
     return Math.round(this.clamp(Number.isFinite(soc) ? soc : 1, 1, 99));
@@ -880,7 +875,7 @@ class GivTcpMqttPlatform {
         graceActive: false,
         smartActive: !this.isWithinFallbackWindow(now),
         cheapWindowEnd: cheapUntil,
-        source: 'octopus',
+        source: 'smart-charging',
       };
     }
 
@@ -890,7 +885,7 @@ class GivTcpMqttPlatform {
         graceActive: true,
         smartActive: !this.isWithinFallbackWindow(now),
         cheapWindowEnd: this.octopus.lastCheapUntil,
-        source: 'octopus-grace',
+        source: 'grace-period',
       };
     }
 
@@ -899,7 +894,7 @@ class GivTcpMqttPlatform {
       graceActive: false,
       smartActive: false,
       cheapWindowEnd: null,
-      source: 'octopus',
+      source: 'smart-charging',
     };
   }
 
@@ -916,7 +911,7 @@ class GivTcpMqttPlatform {
         graceActive: false,
         smartActive: false,
         cheapWindowEnd: standard.end,
-        source: 'fallback-standard',
+        source: 'off-peak-hours',
       };
     }
 
@@ -928,7 +923,7 @@ class GivTcpMqttPlatform {
           graceActive: false,
           smartActive: true,
           cheapWindowEnd: window.end,
-          source: 'fallback-manual',
+          source: 'smart-charging',
         };
       }
     }
@@ -938,18 +933,60 @@ class GivTcpMqttPlatform {
       graceActive: false,
       smartActive: false,
       cheapWindowEnd: null,
-      source: 'fallback',
+      source: 'idle',
+    };
+  }
+
+  mergeCheapStates(primary, secondary) {
+    const cheapActive = Boolean(primary?.cheapActive || secondary?.cheapActive);
+    const graceActive = Boolean(primary?.graceActive || secondary?.graceActive);
+    const smartActive = Boolean(primary?.smartActive || secondary?.smartActive);
+
+    let cheapWindowEnd = null;
+    const ends = [primary?.cheapWindowEnd, secondary?.cheapWindowEnd]
+      .filter((value) => value instanceof Date && !Number.isNaN(value.getTime()));
+    if (ends.length > 0) {
+      cheapWindowEnd = new Date(Math.max(...ends.map((value) => value.getTime())));
+    }
+
+    const labels = [];
+    if (secondary?.cheapActive && !secondary?.smartActive) {
+      labels.push('off-peak-hours');
+    }
+    if (primary?.smartActive) {
+      labels.push(primary.graceActive ? 'grace-period' : 'smart-charging');
+    } else if (primary?.graceActive) {
+      labels.push('grace-period');
+    } else if (primary?.cheapActive) {
+      labels.push('smart-charging');
+    } else if (secondary?.smartActive) {
+      labels.push('smart-charging');
+    }
+
+    return {
+      cheapActive,
+      graceActive,
+      smartActive,
+      cheapWindowEnd,
+      source: labels.length > 0 ? labels.join('+') : 'idle',
     };
   }
 
   getCheapState(now) {
+    const fallback = this.getFallbackCheapState(now);
     const hasOctopusConfig = Boolean(this.octopusApiKey && this.octopusAccountNumber);
 
     if (hasOctopusConfig && this.octopus.lastPollOk) {
-      return this.getOctopusCheapState(now);
+      const octopus = this.getOctopusCheapState(now);
+      return this.mergeCheapStates(octopus, fallback);
     }
 
-    return this.getFallbackCheapState(now);
+    return {
+      ...fallback,
+      source: fallback.cheapActive
+        ? (fallback.smartActive ? 'smart-charging' : 'off-peak-hours')
+        : 'idle',
+    };
   }
 
   getSnapshot() {
@@ -1120,16 +1157,6 @@ class GivTcpMqttPlatform {
 
       let chargePct = 100;
       let smooth = false;
-
-      if (this.commandStates.smoothCharging && remainingMinutes >= 60) {
-        const socGapPct = Math.max(0, this.targetSoc - snap.soc);
-        const energyNeededKwh = this.batteryUsableCapacityKwh * (socGapPct / 100);
-        const requiredKw = energyNeededKwh / (remainingMinutes / 60);
-        const requiredPct = Math.ceil((requiredKw / Math.max(0.1, this.maxChargePowerKw)) * 100);
-
-        chargePct = this.clamp(requiredPct, 5, 100);
-        smooth = true;
-      }
 
       desired = {
         mode: 'charge',

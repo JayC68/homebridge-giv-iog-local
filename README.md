@@ -91,3 +91,18 @@ Then:
 2. restart Homebridge
 3. add the new accessories in the Home app
 4. test behaviour during a cheap period before relying on automation
+
+
+## 3.2.5
+
+Critical fix release.
+
+Changes:
+- corrects Off-Peak Hours charging logic so the default `23:30–05:30` baseline window continues to run even when Octopus polling is healthy
+- keeps Smart Charging and Grace Period additive on top of the baseline cheap window, rather than replacing it
+- removes stale internal Smooth Charging references from the active automation path
+
+Behaviour:
+- Off-Peak Hours remain the always-available default cheap window unless the user changes those settings
+- Smart Charging can overlap, extend before, continue through, or finish after Off-Peak Hours
+- charging now activates whenever either Off-Peak Hours or Smart Charging makes the period cheap
