@@ -1,28 +1,47 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.2.5",
-  "description": "Homebridge bridge for GivTCP local telemetry and Intelligent Octopus Go charging control",
+  "version": "3.4.2",
+  "description": "GivHome brings Intelligent Octopus Go smart charging to GivEnergy batteries in Apple Home using local GivTCP control",
   "main": "index.js",
   "license": "Apache-2.0",
   "keywords": [
-    "homebridge-plugin",
-    "homebridge",
+    "apple-home",
     "givenergy",
+    "givhome",
     "givtcp",
+    "homebridge",
+    "homebridge-plugin",
+    "intelligent-octopus-go",
     "mqtt",
     "octopus"
   ],
   "engines": {
-    "homebridge": "^1.8.0 || ^2.0.0-beta.0",
-    "node": "^18.20.4 || ^20.15.1 || ^22"
+    "homebridge": "^1.8.0 || ^2.0.0",
+    "node": "^18.20.4 || ^20.15.1 || ^22 || ^24"
   },
   "dependencies": {
     "mqtt": "^5.10.4"
   },
-  "displayName": "GivEnergy Local + Intelligent Octopus Go",
+  "displayName": "GivHome",
   "files": [
     "index.js",
     "config.schema.json",
-    "README.md"
-  ]
+    "README.md",
+    "CHANGELOG.md",
+    "homebridge-ui"
+  ],
+  "author": "@jayc68",
+  "homepage": "https://givhome.kernowekconsulting.co.uk/",
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://buymeacoffee.com/jayc68"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jayc68/homebridge-giv-iog-local.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jayc68/homebridge-giv-iog-local/issues"
+  },
+  "icon": "homebridge-ui/public/logo.svg"
 }

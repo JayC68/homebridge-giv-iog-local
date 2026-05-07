@@ -1,10 +1,12 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const mqtt = require('mqtt');
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.2.5';
+const BUILD_VERSION = '3.4.2-beta-1';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -21,9 +23,9 @@ class GivTcpMqttPlatform {
     this.Categories = this.api.hap.Categories;
     this.uuid = this.api.hap.uuid;
 
-    this.platformName = this.config.name || 'GivEnergy IOG';
+    this.platformName = this.config.name || 'GivHome';
 
-    this.mqttUrl = this.config.mqttUrl || 'mqtt://192.168.0.49:1884';
+    this.mqttUrl = this.config.mqttUrl || 'mqtt://127.0.0.1:1883';
     this.mqttUsername = this.config.mqttUsername || '';
     this.mqttPassword = this.config.mqttPassword || '';
     this.mqttRootTopic = (this.config.mqttRootTopic || 'GivEnergy').replace(/\/+$/, '');
@@ -42,12 +44,6 @@ class GivTcpMqttPlatform {
     this.graceMinutes = Number.isFinite(this.config.graceMinutes) ? this.config.graceMinutes : 30;
     this.targetSoc = Number.isFinite(this.config.targetSoc) ? this.config.targetSoc : 100;
 
-    this.batteryUsableCapacityKwh = Number.isFinite(this.config.batteryUsableCapacityKwh)
-      ? this.config.batteryUsableCapacityKwh
-      : 13.5;
-    this.maxChargePowerKw = Number.isFinite(this.config.maxChargePowerKw)
-      ? this.config.maxChargePowerKw
-      : 6.0;
     this.maxPvKw = Number.isFinite(this.config.maxPvKw)
       ? this.config.maxPvKw
       : 2.88;
@@ -56,10 +52,29 @@ class GivTcpMqttPlatform {
 
     this.forceChargeMinutes = Number.isFinite(this.config.forceChargeMinutes) ? this.config.forceChargeMinutes : 60;
     this.forceExportMinutes = Number.isFinite(this.config.forceExportMinutes) ? this.config.forceExportMinutes : 60;
+    this.slotToleranceMinutes = Number.isFinite(this.config.slotToleranceMinutes) ? this.config.slotToleranceMinutes : 10;
 
-    this.lowBatteryThreshold = Number.isFinite(this.config.lowBatteryThreshold) ? this.config.lowBatteryThreshold : 20;
+    this.manualDurations = {
+      forceCharge: [30, 60, 90, 120],
+      forceExport: [30, 60, 90, 120],
+    };
+
+    // Activity thresholds are split by sensor to reduce Home app notification noise from normal battery breathing.
+    // Charge_Power includes solar charging, so the default stays low enough for UK winter PV.
+    this.chargeActiveThresholdW = Number.isFinite(this.config.chargeActiveThresholdW) ? this.config.chargeActiveThresholdW : 1000;
+    this.solarChargeActiveThresholdW = Number.isFinite(this.config.solarChargeActiveThresholdW) ? this.config.solarChargeActiveThresholdW : 250;
+    this.dischargeActiveThresholdW = Number.isFinite(this.config.dischargeActiveThresholdW) ? this.config.dischargeActiveThresholdW : 250;
+    this.importActiveThresholdW = Number.isFinite(this.config.importActiveThresholdW) ? this.config.importActiveThresholdW : 250;
+    this.exportActiveThresholdW = Number.isFinite(this.config.exportActiveThresholdW) ? this.config.exportActiveThresholdW : 1000;
+
+    // Legacy fallback for users upgrading with only the old single threshold set.
     this.powerActiveThreshold = Number.isFinite(this.config.powerActiveThreshold) ? this.config.powerActiveThreshold : 20;
+
     this.staleSeconds = Number.isFinite(this.config.staleSeconds) ? this.config.staleSeconds : 180;
+
+    this.updateCheckEnabled = this.config.updateCheckEnabled !== false;
+    this.updatePollHours = Number.isFinite(this.config.updatePollHours) ? this.config.updatePollHours : 24;
+    this.updateCheckUrl = this.config.updateCheckUrl || 'https://registry.npmjs.org/homebridge-giv-iog-local/latest';
 
     this.accessories = new Map();
     this.client = null;
@@ -70,12 +85,13 @@ class GivTcpMqttPlatform {
       updatedAt: 0,
     };
 
-    this.commandStates = {
-      forceCharge: false,
-      forceExport: false,
-    };
+    this.commandStates = {};
 
     this.commandTimers = new Map();
+    this.manualSessionFile = path.join(process.env.HOMEBRIDGE_STORAGE_PATH || '/var/lib/homebridge', '.givhome-manual-sessions.json');
+    this.manualSessions = this.loadManualSessions();
+    this.restoreManualSessionTimers();
+
     this.manualQueue = Promise.resolve();
     this.automationQueue = Promise.resolve();
 
@@ -91,6 +107,14 @@ class GivTcpMqttPlatform {
       lastCheapUntil: null,
     };
 
+    this.updateStatus = {
+      checking: false,
+      updateAvailable: false,
+      latestVersion: null,
+      lastCheckedMs: 0,
+      lastError: null,
+    };
+
     this.lastAutomationSignature = '';
     this.lastStatusSignature = '';
 
@@ -103,11 +127,18 @@ class GivTcpMqttPlatform {
       'importing',
       'exporting',
       'online',
+      'updateAvailable',
     ];
 
     this.switchKinds = [
       'forceCharge',
+      'forceCharge30',
+      'forceCharge90',
+      'forceCharge120',
       'forceExport',
+      'forceExport30',
+      'forceExport90',
+      'forceExport120',
     ];
 
     this.api.on('didFinishLaunching', () => {
@@ -119,6 +150,10 @@ class GivTcpMqttPlatform {
       this.connectMqtt();
       this.maybePollOctopus(true).catch((err) => {
         this.log.warn(`Initial Octopus poll failed: ${err.message}`);
+      });
+
+      this.maybeCheckForUpdates(true).catch((err) => {
+        this.log.warn(`Initial update check failed: ${err.message}`);
       });
     });
   }
@@ -140,6 +175,12 @@ class GivTcpMqttPlatform {
         this.log.warn(`Octopus poll error: ${err.message}`);
       });
     }, 30_000);
+
+    setInterval(() => {
+      this.maybeCheckForUpdates(false).catch((err) => {
+        this.log.warn(`Update check error: ${err.message}`);
+      });
+    }, 60 * 60 * 1000);
   }
 
   connectMqtt() {
@@ -286,6 +327,28 @@ class GivTcpMqttPlatform {
     ]);
   }
 
+  getManualSwitchMeta(kind) {
+    if (kind === 'forceCharge') {
+      return { family: 'forceCharge', slotKind: 'charge', minutes: 60, displayAction: 'Force Charge' };
+    }
+
+    if (kind === 'forceExport') {
+      return { family: 'forceExport', slotKind: 'discharge', minutes: 60, displayAction: 'Force Export' };
+    }
+
+    let match = kind.match(/^forceCharge(30|90|120)$/);
+    if (match) {
+      return { family: 'forceCharge', slotKind: 'charge', minutes: Number(match[1]), displayAction: 'Force Charge' };
+    }
+
+    match = kind.match(/^forceExport(30|90|120)$/);
+    if (match) {
+      return { family: 'forceExport', slotKind: 'discharge', minutes: Number(match[1]), displayAction: 'Force Export' };
+    }
+
+    return null;
+  }
+
   ensureAccessories() {
     const serial = this.activeSerial || this.inverterSerial || 'pending';
 
@@ -300,9 +363,17 @@ class GivTcpMqttPlatform {
     this.ensureAccessory('importing', `${this.platformName} Importing`, this.Categories.SENSOR);
     this.ensureAccessory('exporting', `${this.platformName} Exporting`, this.Categories.SENSOR);
     this.ensureAccessory('online', `${this.platformName} Online`, this.Categories.SENSOR);
+    this.ensureAccessory('updateAvailable', `${this.platformName} Update Available`, this.Categories.SENSOR);
 
-    this.ensureAccessory('forceCharge', `${this.platformName} Force Charge`, this.Categories.SWITCH);
-    this.ensureAccessory('forceExport', `${this.platformName} Force Export`, this.Categories.SWITCH);
+    this.ensureAccessory('forceCharge', 'Charge 60m', this.Categories.SWITCH);
+    this.ensureAccessory('forceCharge30', 'Charge 30m', this.Categories.SWITCH);
+    this.ensureAccessory('forceCharge90', 'Charge 90m', this.Categories.SWITCH);
+    this.ensureAccessory('forceCharge120', 'Charge 120m', this.Categories.SWITCH);
+
+    this.ensureAccessory('forceExport', 'Export 60m', this.Categories.SWITCH);
+    this.ensureAccessory('forceExport30', 'Export 30m', this.Categories.SWITCH);
+    this.ensureAccessory('forceExport90', 'Export 90m', this.Categories.SWITCH);
+    this.ensureAccessory('forceExport120', 'Export 120m', this.Categories.SWITCH);
 
     this.cleanupStaleAccessories(serial);
 
@@ -401,17 +472,19 @@ class GivTcpMqttPlatform {
     }
 
     if (this.sensorKinds.includes(kind)) {
-      accessory.getServiceById(this.Service.OccupancySensor, kind)
+      const service = accessory.getServiceById(this.Service.OccupancySensor, kind)
         || accessory.addService(this.Service.OccupancySensor, displayName, kind);
+      service.setCharacteristic(this.Characteristic.Name, displayName);
       return;
     }
 
     if (this.switchKinds.includes(kind)) {
       const service = accessory.getServiceById(this.Service.Switch, kind)
         || accessory.addService(this.Service.Switch, displayName, kind);
+      service.setCharacteristic(this.Characteristic.Name, displayName);
 
       service.getCharacteristic(this.Characteristic.On)
-        .onGet(() => Boolean(this.commandStates[kind]))
+        .onGet(() => this.getSwitchState(kind))
         .onSet(async (value) => {
           await this.handleSwitchSet(kind, Boolean(value));
         });
@@ -419,31 +492,20 @@ class GivTcpMqttPlatform {
   }
 
   async handleSwitchSet(kind, value) {
-    switch (kind) {
-      case 'forceCharge':
-        if (value) {
-          const start = new Date();
-          const end = new Date(Date.now() + (this.forceChargeMinutes * 60000));
-          this.enqueueManualSequence('Manual Force Charge', this.buildTimedSlotSteps('Manual Force Charge', 'charge', start, end, this.targetSoc));
-          this.setCommandState(kind, true, this.forceChargeMinutes, () => this.cleanupTimedManualAction(kind, 'timer expired'));
-        } else {
-          this.cleanupTimedManualAction(kind, 'manual off');
-        }
-        break;
+    const meta = this.getManualSwitchMeta(kind);
+    if (!meta) {
+      return;
+    }
 
-      case 'forceExport':
-        if (value) {
-          const start = new Date();
-          const end = new Date(Date.now() + (this.forceExportMinutes * 60000));
-          this.enqueueManualSequence('Manual Force Export', this.buildTimedSlotSteps('Manual Force Export', 'discharge', start, end));
-          this.setCommandState(kind, true, this.forceExportMinutes, () => this.cleanupTimedManualAction(kind, 'timer expired'));
-        } else {
-          this.cleanupTimedManualAction(kind, 'manual off');
-        }
-        break;
-
-      default:
-        break;
+    if (value) {
+      const start = new Date();
+      const end = new Date(Date.now() + (meta.minutes * 60000));
+      const label = `Manual ${meta.displayAction} ${meta.minutes}m`;
+      this.clearSiblingManualIntents(kind, meta.family);
+      this.setManualSession(kind, meta, start, end);
+      this.enqueueManualSequence(label, this.buildTimedSlotSteps(label, meta.slotKind, start, end, meta.slotKind === 'charge' ? this.targetSoc : null));
+    } else {
+      this.cleanupTimedManualAction(meta.family, 'manual off');
     }
 
     this.refreshAccessories();
@@ -469,6 +531,310 @@ class GivTcpMqttPlatform {
       }, timeoutMs);
       this.commandTimers.set(kind, timer);
     }
+  }
+
+  loadManualSessions() {
+    try {
+      if (!fs.existsSync(this.manualSessionFile)) {
+        return {};
+      }
+
+      const parsed = JSON.parse(fs.readFileSync(this.manualSessionFile, 'utf8'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return {};
+      }
+
+      const now = Date.now();
+      const active = {};
+      for (const [kind, session] of Object.entries(parsed)) {
+        if (!session || typeof session !== 'object') {
+          continue;
+        }
+        if (!Number.isFinite(session.expiresAtMs) || session.expiresAtMs <= now) {
+          continue;
+        }
+        active[kind] = session;
+      }
+      return active;
+    } catch (err) {
+      this.log.warn(`Manual session state could not be loaded: ${err.message}`);
+      return {};
+    }
+  }
+
+  saveManualSessions() {
+    try {
+      fs.writeFileSync(this.manualSessionFile, JSON.stringify(this.manualSessions, null, 2));
+    } catch (err) {
+      this.log.warn(`Manual session state could not be saved: ${err.message}`);
+    }
+  }
+
+  restoreManualSessionTimers() {
+    for (const [kind, session] of Object.entries(this.manualSessions)) {
+      this.scheduleManualSessionExpiry(kind, session.expiresAtMs);
+    }
+  }
+
+  scheduleManualSessionExpiry(kind, expiresAtMs) {
+    if (this.commandTimers.has(kind)) {
+      clearTimeout(this.commandTimers.get(kind));
+      this.commandTimers.delete(kind);
+    }
+
+    const delayMs = Math.max(1, Number(expiresAtMs) - Date.now());
+    const timer = setTimeout(() => {
+      if (this.manualSessions[kind] && this.manualSessions[kind].expiresAtMs <= Date.now()) {
+        delete this.manualSessions[kind];
+        this.saveManualSessions();
+        this.log.info(`Manual ${kind} session expired`);
+        this.refreshAccessories();
+      }
+      this.commandTimers.delete(kind);
+    }, delayMs);
+    this.commandTimers.set(kind, timer);
+  }
+
+  setManualSession(kind, meta, start, end) {
+    const session = {
+      kind,
+      family: meta.family,
+      slotKind: meta.slotKind,
+      minutes: meta.minutes,
+      startedAtMs: start.getTime(),
+      expiresAtMs: end.getTime(),
+    };
+
+    this.manualSessions[kind] = session;
+    this.saveManualSessions();
+    this.scheduleManualSessionExpiry(kind, session.expiresAtMs);
+    this.log.info(`Manual ${kind} session active until ${end.toISOString()}`);
+  }
+
+  getActiveManualSession(kind) {
+    const session = this.manualSessions[kind];
+    if (!session) {
+      return null;
+    }
+
+    if (!Number.isFinite(session.expiresAtMs) || session.expiresAtMs <= Date.now()) {
+      delete this.manualSessions[kind];
+      this.saveManualSessions();
+      if (this.commandTimers.has(kind)) {
+        clearTimeout(this.commandTimers.get(kind));
+        this.commandTimers.delete(kind);
+      }
+      return null;
+    }
+
+    return session;
+  }
+
+  clearManualSession(kind) {
+    if (this.manualSessions[kind]) {
+      delete this.manualSessions[kind];
+      this.saveManualSessions();
+    }
+    if (this.commandTimers.has(kind)) {
+      clearTimeout(this.commandTimers.get(kind));
+      this.commandTimers.delete(kind);
+    }
+  }
+
+  clearManualSessionsForFamily(family, exceptKind = null) {
+    let changed = false;
+    for (const [kind, session] of Object.entries(this.manualSessions)) {
+      if (session?.family !== family || kind === exceptKind) {
+        continue;
+      }
+      delete this.manualSessions[kind];
+      changed = true;
+      if (this.commandTimers.has(kind)) {
+        clearTimeout(this.commandTimers.get(kind));
+        this.commandTimers.delete(kind);
+      }
+    }
+    if (changed) {
+      this.saveManualSessions();
+    }
+  }
+
+  clearSiblingManualIntents(activeKind, family) {
+    this.clearManualSessionsForFamily(family, activeKind);
+    for (const kind of this.switchKinds) {
+      const meta = this.getManualSwitchMeta(kind);
+      if (!meta || meta.family !== family || kind === activeKind) {
+        continue;
+      }
+      this.commandStates[kind] = false;
+      if (this.commandTimers.has(kind)) {
+        clearTimeout(this.commandTimers.get(kind));
+        this.commandTimers.delete(kind);
+      }
+    }
+  }
+
+  normalizeSwitchText(value) {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  isEnabledValue(value) {
+    const text = this.normalizeSwitchText(value);
+    return value === true || value === 1 || text === '1' || text === 'true' || text === 'enabled' || text === 'enable' || text === 'on';
+  }
+
+  firstKnownText(paths, leaves = []) {
+    for (const path of paths) {
+      const value = this.getText([path]);
+      if (value !== undefined && value !== '') {
+        return value;
+      }
+    }
+
+    for (const leaf of leaves) {
+      const value = this.getText([], leaf);
+      if (value !== undefined && value !== '') {
+        return value;
+      }
+    }
+
+    return undefined;
+  }
+
+  getScheduleValue(slotKind, valueKind) {
+    const isCharge = slotKind === 'charge';
+    const prefix = isCharge ? 'Charge' : 'Discharge';
+    const lower = isCharge ? 'charge' : 'discharge';
+    const snake = isCharge ? 'charge' : 'discharge';
+
+    if (valueKind === 'enabled') {
+      return this.firstKnownText([
+        `Control/${prefix}_Schedule`,
+        `Control/${prefix}/Schedule`,
+        `Control/${prefix}_Schedule_Enable`,
+        `Control/${prefix}/Schedule_Enable`,
+        `Control/${lower}_schedule`,
+        `Control/${lower}/schedule`,
+        `Control/${snake}_schedule`,
+        `Battery_Details/${prefix}_Schedule`,
+        `Battery_Details/${prefix}/Schedule`,
+      ], [
+        `${prefix}_Schedule`,
+        `${prefix}_Schedule_Enable`,
+        `${lower}_schedule`,
+        `${snake}_schedule`,
+      ]);
+    }
+
+    const suffix = valueKind === 'start' ? 'Start' : 'End';
+    const restSuffix = valueKind === 'start' ? 'start' : 'finish';
+    return this.firstKnownText([
+      `Control/${prefix}_Slot_1_${suffix}`,
+      `Control/${prefix}/Slot_1_${suffix}`,
+      `Control/${prefix}_Slot_1/${suffix}`,
+      `Control/${prefix}/Slot_1/${suffix}`,
+      `Control/${prefix}_Slot_1_${restSuffix}`,
+      `Control/${prefix}/Slot_1/${restSuffix}`,
+      `Control/${lower}_slot_1_${valueKind}`,
+      `Control/${lower}/slot_1/${valueKind}`,
+      `Battery_Details/${prefix}_Slot_1_${suffix}`,
+      `Battery_Details/${prefix}/Slot_1_${suffix}`,
+    ], [
+      `${prefix}_Slot_1_${suffix}`,
+      `${prefix}_Slot_1_${restSuffix}`,
+      `${lower}_slot_1_${valueKind}`,
+    ]);
+  }
+
+  parseSlotClock(value) {
+    const minutes = this.parseTimeToMinutes(value);
+    if (minutes === null) {
+      return null;
+    }
+    return minutes;
+  }
+
+  getSlotWindowForToday(startText, endText, now = new Date()) {
+    const startMinutes = this.parseSlotClock(startText);
+    const endMinutes = this.parseSlotClock(endText);
+    if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) {
+      return null;
+    }
+
+    const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+    const start = new Date(now);
+    const end = new Date(now);
+    start.setSeconds(0, 0);
+    end.setSeconds(0, 0);
+
+    start.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+    end.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+
+    if (startMinutes > endMinutes) {
+      if (nowMinutes >= startMinutes) {
+        end.setDate(end.getDate() + 1);
+      } else {
+        start.setDate(start.getDate() - 1);
+      }
+    }
+
+    return { start, end, startMinutes, endMinutes };
+  }
+
+  getLiveSlotState(slotKind) {
+    const enabled = this.isEnabledValue(this.getScheduleValue(slotKind, 'enabled'));
+    const startText = this.getScheduleValue(slotKind, 'start');
+    const endText = this.getScheduleValue(slotKind, 'end');
+    const window = this.getSlotWindowForToday(startText, endText);
+
+    if (!enabled || !window) {
+      return { active: false, enabled, start: null, end: null, durationMinutes: 0 };
+    }
+
+    const now = Date.now();
+    const toleranceMs = Math.max(0, this.slotToleranceMinutes) * 60000;
+    const active = now >= (window.start.getTime() - toleranceMs) && now <= (window.end.getTime() + toleranceMs);
+    const durationMinutes = Math.round((window.end.getTime() - window.start.getTime()) / 60000);
+
+    return {
+      active,
+      enabled,
+      start: window.start,
+      end: window.end,
+      durationMinutes,
+    };
+  }
+
+  durationMatches(actualMinutes, expectedMinutes) {
+    return Math.abs(Number(actualMinutes) - Number(expectedMinutes)) <= Math.max(0, this.slotToleranceMinutes);
+  }
+
+  getSwitchState(kind) {
+    const meta = this.getManualSwitchMeta(kind);
+    if (!meta) {
+      return false;
+    }
+
+    if (this.getActiveManualSession(kind)) {
+      return true;
+    }
+
+    if (this.commandStates[kind]) {
+      return true;
+    }
+
+    const slot = this.getLiveSlotState(meta.slotKind);
+    return Boolean(slot.active && this.durationMatches(slot.durationMinutes, meta.minutes));
+  }
+
+  isManualFamilyActive(family) {
+    for (const kind of this.switchKinds) {
+      const meta = this.getManualSwitchMeta(kind);
+      if (meta?.family === family && this.getSwitchState(kind)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   publishControl(topicLeaf, payload) {
@@ -576,18 +942,27 @@ class GivTcpMqttPlatform {
     return this.automationQueue;
   }
 
-  cleanupTimedManualAction(kind, reason) {
-    const slotKind = kind === 'forceCharge' ? 'charge' : kind === 'forceExport' ? 'discharge' : null;
+  cleanupTimedManualAction(kindOrFamily, reason) {
+    const family = kindOrFamily.startsWith('forceCharge') ? 'forceCharge' : kindOrFamily.startsWith('forceExport') ? 'forceExport' : null;
+    const slotKind = family === 'forceCharge' ? 'charge' : family === 'forceExport' ? 'discharge' : null;
     if (!slotKind) {
       return;
     }
 
-    const label = kind === 'forceCharge' ? 'Force Charge' : 'Force Export';
-    this.commandStates[kind] = false;
+    const label = family === 'forceCharge' ? 'Force Charge' : 'Force Export';
 
-    if (this.commandTimers.has(kind)) {
-      clearTimeout(this.commandTimers.get(kind));
-      this.commandTimers.delete(kind);
+    this.clearManualSessionsForFamily(family);
+
+    for (const kind of this.switchKinds) {
+      const meta = this.getManualSwitchMeta(kind);
+      if (meta?.family !== family) {
+        continue;
+      }
+      this.commandStates[kind] = false;
+      if (this.commandTimers.has(kind)) {
+        clearTimeout(this.commandTimers.get(kind));
+        this.commandTimers.delete(kind);
+      }
     }
 
     this.enqueueManualSequence(`Manual ${label} Cleanup`, this.buildNeutralizeSlotSteps(`Manual ${label} Cleanup (${reason})`, slotKind));
@@ -727,6 +1102,132 @@ class GivTcpMqttPlatform {
     const pvPower = this.getNumber(['Power/Power/PV_Power'], 'PV_Power') || 0;
     const maxPvW = Math.max(100, this.maxPvKw * 1000);
     return this.clamp(Math.round((pvPower / maxPvW) * 100), 0, 100);
+  }
+
+
+  async maybeCheckForUpdates(force) {
+    if (!this.updateCheckEnabled) {
+      return;
+    }
+
+    if (this.updateStatus.checking) {
+      return;
+    }
+
+    const now = Date.now();
+    const intervalMs = Math.max(1, this.updatePollHours) * 60 * 60 * 1000;
+    if (!force && (now - this.updateStatus.lastCheckedMs) < intervalMs) {
+      return;
+    }
+
+    this.updateStatus.checking = true;
+
+    try {
+      const response = await fetch(this.updateCheckUrl, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Update check failed (${response.status})`);
+      }
+
+      const data = await response.json();
+      const latest = String(data.version || '').trim();
+      if (!latest) {
+        throw new Error('Update check response did not include a version');
+      }
+
+      const available = this.isVersionGreater(latest, BUILD_VERSION);
+      const changed = available !== this.updateStatus.updateAvailable || latest !== this.updateStatus.latestVersion;
+
+      this.updateStatus.latestVersion = latest;
+      this.updateStatus.updateAvailable = available;
+      this.updateStatus.lastCheckedMs = now;
+      this.updateStatus.lastError = null;
+
+      if (changed) {
+        if (available) {
+          this.log.warn(`GivHome update available: ${BUILD_VERSION} -> ${latest}`);
+        } else {
+          this.log.info(`GivHome update check ok: running ${BUILD_VERSION}, latest ${latest}`);
+        }
+        this.refreshAccessories();
+      }
+    } catch (err) {
+      this.updateStatus.lastCheckedMs = now;
+      this.updateStatus.lastError = err.message;
+      this.log.warn(`GivHome update check failed: ${err.message}`);
+    } finally {
+      this.updateStatus.checking = false;
+    }
+  }
+
+  parseVersion(version) {
+    const match = String(version || '').trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+]([0-9A-Za-z.-]+))?/);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      major: Number(match[1]),
+      minor: Number(match[2]),
+      patch: Number(match[3]),
+      pre: match[4] || '',
+    };
+  }
+
+  comparePrerelease(a, b) {
+    if (!a && !b) {
+      return 0;
+    }
+    if (!a) {
+      return 1;
+    }
+    if (!b) {
+      return -1;
+    }
+
+    const aParts = a.split('.').join('-').split('-');
+    const bParts = b.split('.').join('-').split('-');
+    const len = Math.max(aParts.length, bParts.length);
+
+    for (let i = 0; i < len; i += 1) {
+      const av = aParts[i];
+      const bv = bParts[i];
+      if (av === undefined) {
+        return -1;
+      }
+      if (bv === undefined) {
+        return 1;
+      }
+
+      const an = Number(av);
+      const bn = Number(bv);
+      const bothNumeric = !Number.isNaN(an) && !Number.isNaN(bn);
+      if (bothNumeric && an !== bn) {
+        return an > bn ? 1 : -1;
+      }
+      if (!bothNumeric && av !== bv) {
+        return av > bv ? 1 : -1;
+      }
+    }
+
+    return 0;
+  }
+
+  isVersionGreater(candidate, current) {
+    const a = this.parseVersion(candidate);
+    const b = this.parseVersion(current);
+    if (!a || !b) {
+      return false;
+    }
+
+    for (const key of ['major', 'minor', 'patch']) {
+      if (a[key] !== b[key]) {
+        return a[key] > b[key];
+      }
+    }
+
+    return this.comparePrerelease(a.pre, b.pre) > 0;
   }
 
   async maybePollOctopus(force) {
@@ -989,6 +1490,29 @@ class GivTcpMqttPlatform {
     };
   }
 
+
+  getChargingActiveThresholdW(chargePower, importPower, pvPower, cheapState = {}) {
+    // Charge_Power can represent both intentional grid charging and solar-to-battery charging.
+    // Use a higher threshold for grid/cheap-slot charging to suppress Home notification noise,
+    // but keep solar charging responsive for low UK winter PV generation.
+    const intentionalGridCharge = Boolean(
+      cheapState.cheapActive
+      || cheapState.smartActive
+      || cheapState.graceActive
+      || importPower >= this.importActiveThresholdW
+    );
+
+    if (intentionalGridCharge) {
+      return this.chargeActiveThresholdW;
+    }
+
+    if (pvPower >= this.solarChargeActiveThresholdW) {
+      return this.solarChargeActiveThresholdW;
+    }
+
+    return this.solarChargeActiveThresholdW;
+  }
+
   getSnapshot() {
     const soc = this.getNumber(['Power/Power/SOC'], 'SOC');
     const pvPower = this.getNumber(['Power/Power/PV_Power'], 'PV_Power') || 0;
@@ -1021,10 +1545,11 @@ class GivTcpMqttPlatform {
       smartActive: cheap.smartActive,
       cheapWindowEnd: cheap.cheapWindowEnd,
       cheapSource: cheap.source,
-      charging: chargePower > this.powerActiveThreshold,
-      discharging: dischargePower > this.powerActiveThreshold,
-      importing: importPower > this.powerActiveThreshold,
-      exporting: exportPower > this.powerActiveThreshold,
+      charging: chargePower > this.getChargingActiveThresholdW(chargePower, importPower, pvPower, cheap),
+      discharging: dischargePower > this.dischargeActiveThresholdW,
+      importing: importPower > this.importActiveThresholdW,
+      exporting: exportPower > this.exportActiveThresholdW,
+      updateAvailable: this.updateStatus.updateAvailable,
     };
   }
 
@@ -1046,6 +1571,7 @@ class GivTcpMqttPlatform {
     this.updateBinaryAccessory('importing', snap.importing);
     this.updateBinaryAccessory('exporting', snap.exporting);
     this.updateBinaryAccessory('online', snap.online);
+    this.updateBinaryAccessory('updateAvailable', snap.updateAvailable);
 
     this.updateSwitchAccessories();
 
@@ -1126,12 +1652,12 @@ class GivTcpMqttPlatform {
         continue;
       }
 
-      service.updateCharacteristic(this.Characteristic.On, Boolean(this.commandStates[kind]));
+      service.updateCharacteristic(this.Characteristic.On, this.getSwitchState(kind));
     }
   }
 
   isManualOverrideActive() {
-    return this.commandStates.forceCharge || this.commandStates.forceExport;
+    return this.isManualFamilyActive('forceCharge') || this.isManualFamilyActive('forceExport');
   }
 
   applyAutomation() {
