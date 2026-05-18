@@ -1,32 +1,33 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.5.0-beta",
-  "description": "GivHome brings local GivEnergy battery control into Apple Home with Intelligent Octopus Go automation, manual charge/export controls and Eve energy history",
+  "version": "3.5.0-beta.1",
+  "description": "Local GivEnergy + Intelligent Octopus Go integration for Homebridge and Apple Home",
   "main": "index.js",
-  "license": "Apache-2.0",
   "keywords": [
     "homebridge-plugin",
     "homebridge",
     "givenergy",
-    "givtcp",
-    "mqtt",
-    "octopus",
-    "apple-home",
-    "homekit",
     "intelligent-octopus-go",
-    "eve",
-    "energy-history",
-    "local-control"
+    "octopus-energy",
+    "apple-home",
+    "eve-history",
+    "solar",
+    "battery"
   ],
   "engines": {
-    "homebridge": "^1.8.0 || ^2.0.0-beta.0",
-    "node": "^18.20.4 || ^20.15.1 || ^22 || ^24"
+    "homebridge": ">=1.6.0",
+    "node": ">=18.0.0"
   },
-  "dependencies": {
-    "mqtt": "^5.10.4",
-    "fakegato-history": "^0.6.5"
+  "homepage": "https://givhome.kernowekconsulting.co.uk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JayC68/homebridge-giv-iog-local.git"
   },
-  "displayName": "GivHome",
+  "bugs": {
+    "url": "https://github.com/JayC68/homebridge-giv-iog-local/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "JayC68",
   "files": [
     "index.js",
     "config.schema.json",
@@ -34,5 +35,12 @@
     "CHANGELOG.md",
     "homebridge-ui"
   ],
-  "icon": "homebridge-ui/public/logo.svg"
+  "homepageDisplay": "GivHome",
+  "scripts": {
+    "test": "echo \"No tests specified\""
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "homebridge": "^1.6.0"
+  }
 }
