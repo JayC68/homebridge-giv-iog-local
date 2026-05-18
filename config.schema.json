@@ -1,8 +1,8 @@
 {
-  "pluginAlias": "GivEnergy Local + Intelligent Octopus Go",
+  "pluginAlias": "GivHome",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery \u2014 automatically, locally, and beautifully inside Apple Home.",
+  "headerDisplay": "GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery — automatically, locally, and beautifully inside Apple Home.",
   "schema": {
     "type": "object",
     "properties": {
@@ -10,15 +10,18 @@
         "title": "Battery Serial Number",
         "type": "string",
         "default": "",
-        "description": "Find this in the GivEnergy app: Settings \u2192 Local Monitoring \u2192 Scan for your inverter. This is the battery/inverter serial used by GivTCP topics."
+        "description": "Required. Find this in the GivEnergy app: Settings → Local Monitoring → Scan for your inverter. Example: CH2344G083.",
+        "minLength": 6,
+        "maxLength": 20,
+        "pattern": "^([A-Z]{2}\\d{4}[A-Z]\\d{3}|[A-Z0-9]{6,20})$"
       },
       "maxPvKw": {
         "title": "Maximum Solar Power (kW)",
         "type": "number",
-        "default": 2.88,
-        "minimum": 0.1,
+        "default": 0,
+        "minimum": 0,
         "maximum": 100,
-        "description": "Maximum PV/solar output used to scale the Solar Power tile. Example: 2.88 for a 2.88 kW array."
+        "description": "Optional. Maximum PV/solar output used to scale the Solar tile. Leave blank or set to 0 if this battery system does not have solar PV. Example: 2.88 for a 2.88 kW array."
       },
       "octopusAccountNumber": {
         "title": "Octopus Account Number",
@@ -44,13 +47,15 @@
         "title": "Off-Peak Start",
         "type": "string",
         "default": "23:30",
-        "description": "Default Intelligent Octopus Go off-peak start time. Leave at 23:30 unless your tariff differs."
+        "description": "Default Intelligent Octopus Go off-peak start time. Leave at 23:30 unless your tariff differs. Use HH:MM 24-hour format, for example 23:30.",
+        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
       },
       "cheapEnd": {
         "title": "Off-Peak End",
         "type": "string",
         "default": "05:30",
-        "description": "Default Intelligent Octopus Go off-peak end time. Leave at 05:30 unless your tariff differs."
+        "description": "Default Intelligent Octopus Go off-peak end time. Leave at 05:30 unless your tariff differs. Use HH:MM 24-hour format, for example 23:30.",
+        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
       },
       "graceMinutes": {
         "title": "Grace Period",
@@ -63,14 +68,14 @@
       "name": {
         "title": "Homebridge Platform Name",
         "type": "string",
-        "default": "",
-        "description": "Advanced. Optional internal Homebridge platform name. Leave blank for the default GivHome naming; Home tiles use simple labels such as Charge 60m and Export 90m."
+        "default": "GivHome",
+        "description": "Advanced. Internal Homebridge platform display name. Leave as GivHome."
       },
       "mqttUrl": {
         "title": "MQTT URL",
         "type": "string",
-        "default": "mqtt://127.0.0.1:1883",
-        "description": "Advanced. Local MQTT broker used by GivTCP telemetry. Leave unchanged for the standard Pi/Homebridge setup."
+        "default": "mqtt://127.0.0.1:1884",
+        "description": "Advanced. Local MQTT broker used by GivTCP telemetry. Leave unchanged for the standard GivHome appliance where host port 1884 maps to Mosquitto container port 1883. Existing non-appliance installs may use their own broker."
       },
       "mqttUsername": {
         "title": "MQTT Username",
@@ -94,7 +99,7 @@
         "title": "GivTCP Local Address",
         "type": "string",
         "default": "http://127.0.0.1:6345",
-        "description": "Advanced. Local GivTCP REST control endpoint. Leave unchanged unless GivTCP is running on another device. If you need to locate your inverter, use the GivEnergy app: Settings \u2192 Local Monitoring \u2192 Scan for your inverter."
+        "description": "Advanced. Local GivTCP REST control endpoint. Leave unchanged unless GivTCP is running on another device. If you need to locate your inverter, use the GivEnergy app: Settings → Local Monitoring → Scan for your inverter."
       },
       "octopusPollSeconds": {
         "title": "Octopus Polling Seconds",
@@ -105,20 +110,20 @@
         "description": "Advanced. How often the plugin checks Octopus for updated smart charging windows."
       },
       "slotToleranceMinutes": {
-        "title": "Manual Tile Tolerance Minutes",
+        "title": "Manual Tile Tolerance",
         "type": "integer",
-        "default": 10,
+        "default": 5,
         "minimum": 0,
-        "maximum": 30,
-        "description": "Advanced. Tolerance used when deciding which manual duration tile should show On from the live inverter slot."
+        "maximum": 10,
+        "description": "Extra time allowed when checking whether manual charge or export slots are still active. Helps absorb inverter clock drift and telemetry delays."
       },
       "powerActiveThreshold": {
-        "title": "Legacy Power Active Threshold W",
+        "title": "Legacy Shared Power Active Threshold W",
         "type": "integer",
         "default": 20,
         "minimum": 0,
         "maximum": 5000,
-        "description": "Advanced legacy fallback only. New installs should use the separate activity thresholds below."
+        "description": "Legacy fallback only. If the new separate thresholds are unset, this value is used as their default. New installs should use the individual threshold controls below."
       },
       "staleSeconds": {
         "title": "Telemetry Stale Seconds",
@@ -126,7 +131,7 @@
         "default": 180,
         "minimum": 30,
         "maximum": 3600,
-        "description": "Advanced. How long MQTT telemetry can be silent before the inverter is shown as offline."
+        "description": "How long MQTT telemetry can be silent before the inverter is shown as offline."
       },
       "smartWindowsJson": {
         "title": "Manual Smart Windows JSON",
@@ -134,91 +139,71 @@
         "default": "[]",
         "description": "Advanced fallback only. Optional extra cheap windows, e.g. [{\"start\":\"13:30\",\"end\":\"15:00\"}]."
       },
-      "forceChargeMinutes": {
-        "title": "Legacy Force Charge Minutes",
-        "type": "integer",
-        "default": 60,
-        "minimum": 1,
-        "maximum": 1440,
-        "description": "Legacy compatibility only. Home tiles now provide 30, 60, 90, and 120 minute charge options."
-      },
-      "forceExportMinutes": {
-        "title": "Legacy Force Export Minutes",
-        "type": "integer",
-        "default": 60,
-        "minimum": 1,
-        "maximum": 1440,
-        "description": "Legacy compatibility only. Home tiles now provide 30, 60, 90, and 120 minute export options."
-      },
-      "chargeActiveThresholdW": {
-        "title": "Charging Active Threshold W",
-        "type": "integer",
-        "default": 1000,
-        "minimum": 0,
-        "maximum": 10000,
-        "description": "Advanced. Grid or smart charging sensor threshold in watts. Raised by default to reduce Home app notification noise from tiny battery-breathing events."
-      },
-      "solarChargeActiveThresholdW": {
-        "title": "Solar Charging Active Threshold W",
-        "type": "integer",
-        "default": 250,
-        "minimum": 0,
-        "maximum": 10000,
-        "description": "Advanced. Solar-to-battery charging sensor threshold in watts. Kept lower so useful UK winter solar charging is still visible."
-      },
-      "dischargeActiveThresholdW": {
-        "title": "Discharging Active Threshold W",
-        "type": "integer",
-        "default": 250,
-        "minimum": 0,
-        "maximum": 10000,
-        "description": "Advanced. Battery discharging is shown as active above this wattage."
-      },
-      "importActiveThresholdW": {
-        "title": "Importing Active Threshold W",
-        "type": "integer",
-        "default": 250,
-        "minimum": 0,
-        "maximum": 10000,
-        "description": "Advanced. Grid importing is shown as active above this wattage."
-      },
-      "exportActiveThresholdW": {
-        "title": "Exporting Active Threshold W",
-        "type": "integer",
-        "default": 1000,
-        "minimum": 0,
-        "maximum": 10000,
-        "description": "Advanced. Exporting sensor threshold in watts. Raised by default to avoid Home app notification noise from brief battery breathing or load-drop overspill."
-      },
-      "updateCheckEnabled": {
-        "title": "Update Available Sensor",
-        "type": "boolean",
-        "default": true,
-        "description": "Advanced. Enables the GivHome Update Available Home tile. It checks the npm registry periodically for a newer plugin release."
-      },
-      "updatePollHours": {
-        "title": "Update Check Hours",
-        "type": "integer",
-        "default": 24,
-        "minimum": 1,
-        "maximum": 168,
-        "description": "Advanced. How often GivHome checks for plugin updates."
-      },
-      "updateCheckUrl": {
-        "title": "Update Check URL",
+      "inverterIp": {
+        "title": "Inverter IP Address",
         "type": "string",
-        "default": "https://registry.npmjs.org/homebridge-giv-iog-local/latest",
-        "description": "Advanced. npm registry endpoint used by the Update Available sensor. Leave unchanged unless testing."
+        "default": "",
+        "pattern": "^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$",
+        "description": "Required for new appliance setup. Find this in the same GivEnergy app scan result as the Battery Serial Number: Settings → Local Monitoring → Scan for your inverter. Example: 192.168.0.223."
+      },
+      "chargePowerActiveThreshold": {
+        "title": "Battery Charging Threshold (Watts)",
+        "type": "integer",
+        "default": 100,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "Wattage threshold used to decide when the Battery Charging Light in Apple Home becomes active. Increase this value to ignore smaller or less interesting power changes. Set to 0 to disable this observation."
+      },
+      "dischargePowerActiveThreshold": {
+        "title": "Battery Discharging Threshold (Watts)",
+        "type": "integer",
+        "default": 100,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "Wattage threshold used to decide when the Battery Discharging Light in Apple Home becomes active. Increase this value to ignore smaller or less interesting power changes. Set to 0 to disable this observation."
+      },
+      "importPowerActiveThreshold": {
+        "title": "Grid Import Threshold (Watts)",
+        "type": "integer",
+        "default": 50,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "Wattage threshold used to decide when the Grid Import Light in Apple Home becomes active. Increase this value to ignore smaller or less interesting power changes. Set to 0 to disable this observation."
+      },
+      "exportPowerActiveThreshold": {
+        "title": "Grid Export Threshold (Watts)",
+        "type": "integer",
+        "default": 50,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "Wattage threshold used to decide when the Grid Export Light in Apple Home becomes active. Increase this value to ignore smaller or less interesting power changes. Set to 0 to disable this observation."
+      },
+      "exposeAdvancedTelemetry": {
+        "title": "Extra Indicators in Apple Home",
+        "type": "boolean",
+        "default": false,
+        "description": "Optional. Adds extra informational Lights to Apple Home for states such as Cheap Rate, Grace Period, Battery Charging, Battery Discharging, Grid Import, Grid Export, and Online. These are indicators, not controls."
+      },
+      "enableEveEnergyHistory": {
+        "title": "Energy History in the Eve App",
+        "type": "boolean",
+        "default": false,
+        "description": "Optional beta. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
       }
-    }
+    },
+    "required": [
+      "inverterSerial",
+      "inverterIp"
+    ]
   },
   "form": [
     {
       "type": "fieldset",
       "title": "Required Setup",
-      "description": "Most users only need these details.",
+      "description": "Most users only need these details. The Battery Serial Number and Inverter IP Address are both shown in the GivEnergy app under Settings → Local Monitoring → Scan for your inverter.",
       "items": [
         "inverterSerial",
+        "inverterIp",
         "maxPvKw",
         "octopusAccountNumber",
         "octopusApiKey"
@@ -239,43 +224,36 @@
     },
     {
       "type": "fieldset",
+      "title": "Personal Preference Settings",
+      "expandable": true,
+      "expanded": false,
+      "description": "Optional settings for extra Apple Home tiles, Eve energy history, manual tile tolerance, and observation thresholds. Smart Window shows as ‘On’ when Intelligent Octopus smart charging is active. For cleaner Apple Home use, set non-daily GivHome tiles to Exclude from Home View.",
+      "items": [
+        "exposeAdvancedTelemetry",
+        "enableEveEnergyHistory",
+        "slotToleranceMinutes",
+        "chargePowerActiveThreshold",
+        "dischargePowerActiveThreshold",
+        "importPowerActiveThreshold",
+        "exportPowerActiveThreshold"
+      ]
+    },
+    {
+      "type": "fieldset",
       "title": "Advanced Local Connection",
       "expandable": true,
       "expanded": false,
-      "description": "MQTT, GivTCP, and polling settings. Leave unchanged for the standard local setup.",
+      "description": "MQTT, GivTCP, polling, and telemetry timeout settings. Leave unchanged for the standard local setup.",
       "items": [
         "mqttUrl",
         "mqttUsername",
         "mqttPassword",
         "mqttRootTopic",
         "givTcpRestUrl",
-        "octopusPollSeconds"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Advanced Tuning",
-      "expandable": true,
-      "expanded": false,
-      "description": "Rarely used tuning, activity thresholds, update checks, and compatibility settings.",
-      "items": [
-        "name",
-        "slotToleranceMinutes",
-        "chargeActiveThresholdW",
-        "solarChargeActiveThresholdW",
-        "dischargeActiveThresholdW",
-        "importActiveThresholdW",
-        "exportActiveThresholdW",
-        "powerActiveThreshold",
-        "updateCheckEnabled",
-        "updatePollHours",
-        "updateCheckUrl",
+        "octopusPollSeconds",
         "staleSeconds",
-        "smartWindowsJson",
-        "forceChargeMinutes",
-        "forceExportMinutes"
+        "name"
       ]
     }
-  ],
-  "customUi": true
+  ]
 }

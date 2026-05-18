@@ -1,12 +1,19 @@
 'use strict';
 
+const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
-const mqtt = require('mqtt');
+
+let fakeGatoHistoryModule = null;
+try {
+  fakeGatoHistoryModule = require('fakegato-history');
+} catch {
+  fakeGatoHistoryModule = null;
+}
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.4.2-beta-1';
+const BUILD_VERSION = '3.4.6-beta-3b.14';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -23,14 +30,30 @@ class GivTcpMqttPlatform {
     this.Categories = this.api.hap.Categories;
     this.uuid = this.api.hap.uuid;
 
+    this.EveEnergyCharacteristic = this.createEveEnergyCharacteristics();
+    this.FakeGatoHistoryService = null;
+    this._warnedMissingFakeGato = false;
+    if (fakeGatoHistoryModule) {
+      try {
+        this.FakeGatoHistoryService = fakeGatoHistoryModule(this.api);
+      } catch (err) {
+        try {
+          this.FakeGatoHistoryService = fakeGatoHistoryModule;
+        } catch {
+          this.log.warn(`Eve history support could not initialise: ${err.message}`);
+        }
+      }
+    }
+
     this.platformName = this.config.name || 'GivHome';
 
-    this.mqttUrl = this.config.mqttUrl || 'mqtt://127.0.0.1:1883';
+    this.mqttUrl = this.config.mqttUrl || 'mqtt://127.0.0.1:1884';
     this.mqttUsername = this.config.mqttUsername || '';
     this.mqttPassword = this.config.mqttPassword || '';
     this.mqttRootTopic = (this.config.mqttRootTopic || 'GivEnergy').replace(/\/+$/, '');
     this.givTcpRestUrl = (this.config.givTcpRestUrl || 'http://127.0.0.1:6345').replace(/\/+$/, '');
     this.inverterSerial = (this.config.inverterSerial || '').trim();
+    this.inverterIp = (this.config.inverterIp || '').trim();
     this.activeSerial = this.inverterSerial || null;
 
     this.octopusApiKey = (this.config.octopusApiKey || '').trim();
@@ -44,37 +67,45 @@ class GivTcpMqttPlatform {
     this.graceMinutes = Number.isFinite(this.config.graceMinutes) ? this.config.graceMinutes : 30;
     this.targetSoc = Number.isFinite(this.config.targetSoc) ? this.config.targetSoc : 100;
 
-    this.maxPvKw = Number.isFinite(this.config.maxPvKw)
+    this.maxPvKw = Number.isFinite(this.config.maxPvKw) && this.config.maxPvKw > 0
       ? this.config.maxPvKw
-      : 2.88;
+      : null;
+    this.hasSolarPv = Number.isFinite(this.maxPvKw) && this.maxPvKw > 0;
+
+    // Preserve existing HomeKit names. Recommended names are applied only to newly created accessories.
 
     this.manualSmartWindows = this.parseSmartWindows(this.config.smartWindowsJson || '[]');
 
-    this.forceChargeMinutes = Number.isFinite(this.config.forceChargeMinutes) ? this.config.forceChargeMinutes : 60;
-    this.forceExportMinutes = Number.isFinite(this.config.forceExportMinutes) ? this.config.forceExportMinutes : 60;
-    this.slotToleranceMinutes = Number.isFinite(this.config.slotToleranceMinutes) ? this.config.slotToleranceMinutes : 10;
+    this.slotToleranceMinutes = Number.isFinite(this.config.slotToleranceMinutes) ? this.config.slotToleranceMinutes : 5;
 
     this.manualDurations = {
       forceCharge: [30, 60, 90, 120],
       forceExport: [30, 60, 90, 120],
     };
 
-    // Activity thresholds are split by sensor to reduce Home app notification noise from normal battery breathing.
-    // Charge_Power includes solar charging, so the default stays low enough for UK winter PV.
-    this.chargeActiveThresholdW = Number.isFinite(this.config.chargeActiveThresholdW) ? this.config.chargeActiveThresholdW : 1000;
-    this.solarChargeActiveThresholdW = Number.isFinite(this.config.solarChargeActiveThresholdW) ? this.config.solarChargeActiveThresholdW : 250;
-    this.dischargeActiveThresholdW = Number.isFinite(this.config.dischargeActiveThresholdW) ? this.config.dischargeActiveThresholdW : 250;
-    this.importActiveThresholdW = Number.isFinite(this.config.importActiveThresholdW) ? this.config.importActiveThresholdW : 250;
-    this.exportActiveThresholdW = Number.isFinite(this.config.exportActiveThresholdW) ? this.config.exportActiveThresholdW : 1000;
-
-    // Legacy fallback for users upgrading with only the old single threshold set.
-    this.powerActiveThreshold = Number.isFinite(this.config.powerActiveThreshold) ? this.config.powerActiveThreshold : 20;
-
+    const legacyPowerActiveThreshold = Number.isFinite(this.config.powerActiveThreshold) ? this.config.powerActiveThreshold : null;
+    this.chargePowerActiveThreshold = Number.isFinite(this.config.chargePowerActiveThreshold)
+      ? this.config.chargePowerActiveThreshold
+      : (legacyPowerActiveThreshold ?? 100);
+    this.dischargePowerActiveThreshold = Number.isFinite(this.config.dischargePowerActiveThreshold)
+      ? this.config.dischargePowerActiveThreshold
+      : (legacyPowerActiveThreshold ?? 100);
+    this.importPowerActiveThreshold = Number.isFinite(this.config.importPowerActiveThreshold)
+      ? this.config.importPowerActiveThreshold
+      : (legacyPowerActiveThreshold ?? 50);
+    this.exportPowerActiveThreshold = Number.isFinite(this.config.exportPowerActiveThreshold)
+      ? this.config.exportPowerActiveThreshold
+      : (legacyPowerActiveThreshold ?? 50);
     this.staleSeconds = Number.isFinite(this.config.staleSeconds) ? this.config.staleSeconds : 180;
 
-    this.updateCheckEnabled = this.config.updateCheckEnabled !== false;
-    this.updatePollHours = Number.isFinite(this.config.updatePollHours) ? this.config.updatePollHours : 24;
-    this.updateCheckUrl = this.config.updateCheckUrl || 'https://registry.npmjs.org/homebridge-giv-iog-local/latest';
+    this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
+    this.eveEnergyHistoryServices = new Map();
+    this.lastEveEnergyHistoryEntryMs = 0;
+    this.eveEnergyHistorySampleMinutes = 5;
+    // Five years of five-minute Eve Energy history samples. Long-term seasonal comparison is core to this feature.
+    this.eveEnergyHistorySize = 12 * 24 * 365 * 5;
+    this.eveEnergyRuntimeTotalsKwh = new Map();
+    this.eveEnergyRuntimeTotalUpdatedMs = 0;
 
     this.accessories = new Map();
     this.client = null;
@@ -88,10 +119,6 @@ class GivTcpMqttPlatform {
     this.commandStates = {};
 
     this.commandTimers = new Map();
-    this.manualSessionFile = path.join(process.env.HOMEBRIDGE_STORAGE_PATH || '/var/lib/homebridge', '.givhome-manual-sessions.json');
-    this.manualSessions = this.loadManualSessions();
-    this.restoreManualSessionTimers();
-
     this.manualQueue = Promise.resolve();
     this.automationQueue = Promise.resolve();
 
@@ -107,27 +134,33 @@ class GivTcpMqttPlatform {
       lastCheapUntil: null,
     };
 
-    this.updateStatus = {
-      checking: false,
-      updateAvailable: false,
-      latestVersion: null,
-      lastCheckedMs: 0,
-      lastError: null,
-    };
-
     this.lastAutomationSignature = '';
     this.lastStatusSignature = '';
 
-    this.sensorKinds = [
-      'cheapRate',
-      'gracePeriod',
+    this.coreObservationKinds = [
       'smartWindow',
       'charging',
-      'discharging',
       'importing',
       'exporting',
+    ];
+
+    this.advancedTelemetryKinds = [
+      'cheapRate',
+      'gracePeriod',
+      'discharging',
       'online',
-      'updateAvailable',
+    ];
+
+    this.exposeAdvancedTelemetry = Boolean(this.config.exposeAdvancedTelemetry);
+    this.observationKinds = [
+      ...this.coreObservationKinds,
+      ...(this.exposeAdvancedTelemetry ? this.advancedTelemetryKinds : []),
+    ];
+
+    this.eveEnergyHistoryKinds = [
+      'solarEnergyHistory',
+      'gridImportEnergyHistory',
+      'gridExportEnergyHistory',
     ];
 
     this.switchKinds = [
@@ -141,7 +174,10 @@ class GivTcpMqttPlatform {
       'forceExport120',
     ];
 
+    this.loadEveEnergyRuntimeTotals();
+
     this.api.on('didFinishLaunching', () => {
+      this.validateSetupConfig();
       if (this.activeSerial) {
         this.ensureAccessories();
       }
@@ -151,11 +187,109 @@ class GivTcpMqttPlatform {
       this.maybePollOctopus(true).catch((err) => {
         this.log.warn(`Initial Octopus poll failed: ${err.message}`);
       });
-
-      this.maybeCheckForUpdates(true).catch((err) => {
-        this.log.warn(`Initial update check failed: ${err.message}`);
-      });
     });
+  }
+
+
+  createEveEnergyCharacteristics() {
+    const Characteristic = this.Characteristic;
+    const inherited = require('util').inherits;
+
+    const Consumption = function () {
+      Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'W',
+        minValue: 0,
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    };
+    inherited(Consumption, Characteristic);
+    Consumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
+
+    const TotalConsumption = function () {
+      Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'kWh',
+        minValue: 0,
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    };
+    inherited(TotalConsumption, Characteristic);
+    TotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
+
+    const Voltage = function () {
+      Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'V',
+        minValue: 0,
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    };
+    inherited(Voltage, Characteristic);
+    Voltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
+
+    const Current = function () {
+      Characteristic.call(this, 'Current', 'E863F126-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.FLOAT,
+        unit: 'A',
+        minValue: 0,
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    };
+    inherited(Current, Characteristic);
+    Current.UUID = 'E863F126-079E-48FF-8F27-9C2605A29F52';
+
+    const ResetTotal = function () {
+      Characteristic.call(this, 'Reset Total', 'E863F112-079E-48FF-8F27-9C2605A29F52');
+      this.setProps({
+        format: Characteristic.Formats.UINT32,
+        minValue: 0,
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.WRITE, Characteristic.Perms.NOTIFY],
+      });
+      this.value = this.getDefaultValue();
+    };
+    inherited(ResetTotal, Characteristic);
+    ResetTotal.UUID = 'E863F112-079E-48FF-8F27-9C2605A29F52';
+
+    return { Consumption, TotalConsumption, Voltage, Current, ResetTotal };
+  }
+
+  validateSetupConfig() {
+    const warnings = [];
+
+    if (!this.inverterSerial) {
+      warnings.push('Battery Serial Number is missing. Add it in GivHome settings.');
+    } else if (!/^([A-Z]{2}\d{4}[A-Z]\d{3}|[A-Z0-9]{6,20})$/.test(this.inverterSerial)) {
+      warnings.push(`Battery Serial Number "${this.inverterSerial}" does not look like a normal GivEnergy serial. Check the value from Settings → Local Monitoring → Scan for your inverter.`);
+    }
+
+    if (!this.inverterIp) {
+      warnings.push('Inverter IP Address is missing. Existing upgraded systems may continue if GivTCP is already configured, but golden-image/new appliance setup requires it.');
+    } else if (!/^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(this.inverterIp)) {
+      warnings.push(`Inverter IP Address "${this.inverterIp}" is not a valid IPv4 address.`);
+    }
+
+    for (const [key, value] of [['cheapStart', this.cheapStart], ['cheapEnd', this.cheapEnd]]) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''))) {
+        warnings.push(`${key} should be in HH:MM 24-hour format, for example 23:30.`);
+      }
+    }
+
+    if (this.mqttUrl === 'mqtt://127.0.0.1:1883') {
+      warnings.push('MQTT URL is set to 127.0.0.1:1883. The standard GivHome appliance image normally uses mqtt://127.0.0.1:1884.');
+    }
+
+    for (const warning of warnings) {
+      this.log.warn(`Setup warning: ${warning}`);
+    }
   }
 
   configureAccessory(accessory) {
@@ -171,16 +305,18 @@ class GivTcpMqttPlatform {
     }, 30_000);
 
     setInterval(() => {
+      this.recordEveEnergyHistory();
+    }, Math.max(1, this.eveEnergyHistorySampleMinutes) * 60_000);
+
+    setTimeout(() => {
+      this.recordEveEnergyHistory(true);
+    }, 20_000);
+
+    setInterval(() => {
       this.maybePollOctopus(false).catch((err) => {
         this.log.warn(`Octopus poll error: ${err.message}`);
       });
     }, 30_000);
-
-    setInterval(() => {
-      this.maybeCheckForUpdates(false).catch((err) => {
-        this.log.warn(`Update check error: ${err.message}`);
-      });
-    }, 60 * 60 * 1000);
   }
 
   connectMqtt() {
@@ -321,29 +457,64 @@ class GivTcpMqttPlatform {
   desiredKinds() {
     return new Set([
       'batterySoc',
-      'solarPower',
-      ...this.sensorKinds,
+      ...(this.hasSolarPv ? ['solarPower'] : []),
+      ...this.coreObservationKinds,
+      ...(this.exposeAdvancedTelemetry ? this.advancedTelemetryKinds : []),
+      ...(this.enableEveEnergyHistory ? this.getDesiredEveEnergyHistoryKinds() : []),
       ...this.switchKinds,
     ]);
   }
 
+  getDesiredEveEnergyHistoryKinds() {
+    return [
+      ...(this.hasSolarPv ? ['solarEnergyHistory'] : []),
+      'gridImportEnergyHistory',
+      'gridExportEnergyHistory',
+    ];
+  }
+
+  getEveEnergyHistoryMeta(kind) {
+    const meta = {
+      solarEnergyHistory: {
+        displayName: 'Eve Solar History',
+        legacyDisplayNames: [`${this.platformName} Solar Generated`],
+        valueKey: 'pvPower',
+        description: 'Eve solar history',
+      },
+      gridImportEnergyHistory: {
+        displayName: 'Eve Import History',
+        legacyDisplayNames: [`${this.platformName} Grid Import History`],
+        valueKey: 'importPower',
+        description: 'Eve import history',
+      },
+      gridExportEnergyHistory: {
+        displayName: 'Eve Export History',
+        legacyDisplayNames: [`${this.platformName} Grid Export History`],
+        valueKey: 'exportPower',
+        description: 'Eve export history',
+      },
+    };
+
+    return meta[kind] || null;
+  }
+
   getManualSwitchMeta(kind) {
     if (kind === 'forceCharge') {
-      return { family: 'forceCharge', slotKind: 'charge', minutes: 60, displayAction: 'Force Charge' };
+      return { family: 'forceCharge', slotKind: 'charge', minutes: 60, displayAction: 'Charge' };
     }
 
     if (kind === 'forceExport') {
-      return { family: 'forceExport', slotKind: 'discharge', minutes: 60, displayAction: 'Force Export' };
+      return { family: 'forceExport', slotKind: 'discharge', minutes: 60, displayAction: 'Export' };
     }
 
     let match = kind.match(/^forceCharge(30|90|120)$/);
     if (match) {
-      return { family: 'forceCharge', slotKind: 'charge', minutes: Number(match[1]), displayAction: 'Force Charge' };
+      return { family: 'forceCharge', slotKind: 'charge', minutes: Number(match[1]), displayAction: 'Charge' };
     }
 
     match = kind.match(/^forceExport(30|90|120)$/);
     if (match) {
-      return { family: 'forceExport', slotKind: 'discharge', minutes: Number(match[1]), displayAction: 'Force Export' };
+      return { family: 'forceExport', slotKind: 'discharge', minutes: Number(match[1]), displayAction: 'Export' };
     }
 
     return null;
@@ -352,18 +523,31 @@ class GivTcpMqttPlatform {
   ensureAccessories() {
     const serial = this.activeSerial || this.inverterSerial || 'pending';
 
-    this.ensureAccessory('batterySoc', `${this.platformName} Battery SOC`, this.Categories.WINDOW_COVERING);
-    this.ensureAccessory('solarPower', `${this.platformName} Solar Power`, this.Categories.LIGHTBULB);
+    this.ensureAccessory('batterySoc', `${this.platformName} Battery Level`, this.Categories.WINDOW_COVERING);
+    if (this.hasSolarPv) {
+      this.ensureAccessory('solarPower', `${this.platformName} Solar Generating`, this.Categories.LIGHTBULB);
+    }
 
-    this.ensureAccessory('cheapRate', `${this.platformName} Cheap Rate`, this.Categories.SENSOR);
-    this.ensureAccessory('gracePeriod', `${this.platformName} Grace Period`, this.Categories.SENSOR);
-    this.ensureAccessory('smartWindow', `${this.platformName} Smart Window`, this.Categories.SENSOR);
-    this.ensureAccessory('charging', `${this.platformName} Charging`, this.Categories.SENSOR);
-    this.ensureAccessory('discharging', `${this.platformName} Discharging`, this.Categories.SENSOR);
-    this.ensureAccessory('importing', `${this.platformName} Importing`, this.Categories.SENSOR);
-    this.ensureAccessory('exporting', `${this.platformName} Exporting`, this.Categories.SENSOR);
-    this.ensureAccessory('online', `${this.platformName} Online`, this.Categories.SENSOR);
-    this.ensureAccessory('updateAvailable', `${this.platformName} Update Available`, this.Categories.SENSOR);
+    this.ensureAccessory('smartWindow', `${this.platformName} Smart Window`, this.Categories.LIGHTBULB);
+    this.ensureAccessory('charging', `${this.platformName} Battery Charging`, this.Categories.LIGHTBULB);
+    this.ensureAccessory('importing', `${this.platformName} Grid Import`, this.Categories.LIGHTBULB);
+    this.ensureAccessory('exporting', `${this.platformName} Grid Export`, this.Categories.LIGHTBULB);
+
+    if (this.exposeAdvancedTelemetry) {
+      this.ensureAccessory('cheapRate', `${this.platformName} Cheap Rate`, this.Categories.LIGHTBULB);
+      this.ensureAccessory('gracePeriod', `${this.platformName} Grace Period`, this.Categories.LIGHTBULB);
+      this.ensureAccessory('discharging', `${this.platformName} Battery Discharging`, this.Categories.LIGHTBULB);
+      this.ensureAccessory('online', `${this.platformName} Online`, this.Categories.LIGHTBULB);
+    }
+
+    if (this.enableEveEnergyHistory) {
+      for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+        const meta = this.getEveEnergyHistoryMeta(kind);
+        if (meta) {
+          this.ensureAccessory(kind, meta.displayName, this.Categories.OUTLET || this.Categories.SWITCH);
+        }
+      }
+    }
 
     this.ensureAccessory('forceCharge', 'Charge 60m', this.Categories.SWITCH);
     this.ensureAccessory('forceCharge30', 'Charge 30m', this.Categories.SWITCH);
@@ -414,11 +598,14 @@ class GivTcpMqttPlatform {
       isNew = true;
     }
 
-    accessory.displayName = displayName;
+    const shouldApplyName = isNew;
+    if (shouldApplyName) {
+      accessory.displayName = displayName;
+    }
     accessory.context.kind = kind;
     accessory.context.serial = serial;
 
-    this.configureAccessoryServices(accessory, kind, displayName);
+    this.configureAccessoryServices(accessory, kind, displayName, shouldApplyName);
 
     this.accessories.set(kind, accessory);
 
@@ -427,13 +614,18 @@ class GivTcpMqttPlatform {
     }
   }
 
-  configureAccessoryServices(accessory, kind, displayName) {
+  configureAccessoryServices(accessory, kind, displayName, shouldApplyName = false) {
     const info = accessory.getService(this.Service.AccessoryInformation)
       || accessory.addService(this.Service.AccessoryInformation);
 
-    info.setCharacteristic(this.Characteristic.Manufacturer, 'JayC68 / OpenAI')
+    const baseSerial = this.activeSerial || this.inverterSerial || 'pending';
+    const accessorySerial = this.eveEnergyHistoryKinds.includes(kind)
+      ? `${baseSerial}-${kind}`
+      : baseSerial;
+
+    info.setCharacteristic(this.Characteristic.Manufacturer, 'JayC68 Vibed')
       .setCharacteristic(this.Characteristic.Model, 'GivTCP MQTT + Octopus')
-      .setCharacteristic(this.Characteristic.SerialNumber, this.activeSerial || this.inverterSerial || 'pending')
+      .setCharacteristic(this.Characteristic.SerialNumber, accessorySerial)
       .setCharacteristic(this.Characteristic.FirmwareRevision, BUILD_VERSION);
 
     if (kind === 'batterySoc') {
@@ -444,6 +636,9 @@ class GivTcpMqttPlatform {
 
       const service = accessory.getServiceById(this.Service.Lightbulb, 'batterySoc')
         || accessory.addService(this.Service.Lightbulb, displayName, 'batterySoc');
+      if (shouldApplyName) {
+        service.setCharacteristic(this.Characteristic.Name, displayName);
+      }
 
       service.getCharacteristic(this.Characteristic.On)
         .onGet(() => true)
@@ -459,6 +654,9 @@ class GivTcpMqttPlatform {
     if (kind === 'solarPower') {
       const service = accessory.getServiceById(this.Service.Lightbulb, 'solarPower')
         || accessory.addService(this.Service.Lightbulb, displayName, 'solarPower');
+      if (shouldApplyName) {
+        service.setCharacteristic(this.Characteristic.Name, displayName);
+      }
 
       service.getCharacteristic(this.Characteristic.On)
         .onGet(() => this.getSolarBrightness() > 0)
@@ -471,23 +669,433 @@ class GivTcpMqttPlatform {
       return;
     }
 
-    if (this.sensorKinds.includes(kind)) {
-      const service = accessory.getServiceById(this.Service.OccupancySensor, kind)
-        || accessory.addService(this.Service.OccupancySensor, displayName, kind);
-      service.setCharacteristic(this.Characteristic.Name, displayName);
+    if (this.observationKinds.includes(kind)) {
+      const legacyOccupancy = accessory.getServiceById(this.Service.OccupancySensor, kind);
+      if (legacyOccupancy) {
+        accessory.removeService(legacyOccupancy);
+      }
+
+      const service = accessory.getServiceById(this.Service.Lightbulb, kind)
+        || accessory.addService(this.Service.Lightbulb, displayName, kind);
+      if (shouldApplyName) {
+        service.setCharacteristic(this.Characteristic.Name, displayName);
+      }
+
+      service.getCharacteristic(this.Characteristic.On)
+        .onGet(() => this.getObservationState(kind))
+        .onSet(async () => {});
+
+      return;
+    }
+
+    if (this.eveEnergyHistoryKinds.includes(kind)) {
+      this.configureEveEnergyHistoryAccessory(accessory, kind, displayName, shouldApplyName);
       return;
     }
 
     if (this.switchKinds.includes(kind)) {
       const service = accessory.getServiceById(this.Service.Switch, kind)
         || accessory.addService(this.Service.Switch, displayName, kind);
-      service.setCharacteristic(this.Characteristic.Name, displayName);
+      if (shouldApplyName) {
+        service.setCharacteristic(this.Characteristic.Name, displayName);
+      }
 
       service.getCharacteristic(this.Characteristic.On)
         .onGet(() => this.getSwitchState(kind))
         .onSet(async (value) => {
           await this.handleSwitchSet(kind, Boolean(value));
         });
+    }
+  }
+
+  getStoragePath() {
+    try {
+      if (this.api?.user && typeof this.api.user.storagePath === 'function') {
+        return this.api.user.storagePath();
+      }
+    } catch {
+      // Fall through to process.cwd().
+    }
+    return process.cwd();
+  }
+
+  getEveEnergyTotalsStatePath() {
+    const serial = String(this.activeSerial || this.inverterSerial || 'pending').replace(/[^a-z0-9._-]+/gi, '_');
+    return path.join(this.getStoragePath(), `givhome_${serial}_eve_energy_totals.json`);
+  }
+
+  loadEveEnergyRuntimeTotals() {
+    if (!this.enableEveEnergyHistory) {
+      return;
+    }
+
+    const loaded = {};
+    const statePath = this.getEveEnergyTotalsStatePath();
+
+    try {
+      if (fs.existsSync(statePath)) {
+        const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        const totals = parsed?.totals && typeof parsed.totals === 'object' ? parsed.totals : {};
+        for (const [kind, value] of Object.entries(totals)) {
+          const numeric = Number(value);
+          if (Number.isFinite(numeric) && numeric >= 0) {
+            loaded[kind] = numeric;
+          }
+        }
+      }
+    } catch (err) {
+      this.log.warn(`[EveHistory] could not load cumulative totals state: ${err.message}`);
+    }
+
+    const recovered = this.recoverEveEnergyTotalsFromFakegatoStorage();
+    const kinds = new Set([...Object.keys(loaded), ...Object.keys(recovered), ...this.getDesiredEveEnergyHistoryKinds()]);
+
+    for (const kind of kinds) {
+      const best = Math.max(Number(loaded[kind] || 0), Number(recovered[kind] || 0));
+      if (Number.isFinite(best) && best > 0) {
+        this.eveEnergyRuntimeTotalsKwh.set(kind, best);
+      }
+    }
+
+    if (this.eveEnergyRuntimeTotalsKwh.size > 0) {
+      const summary = [...this.eveEnergyRuntimeTotalsKwh.entries()]
+        .map(([kind, value]) => `${kind}=${Number(value).toFixed(3)}kWh`)
+        .join(' | ');
+      this.log.info(`[EveHistory] restored cumulative totals ${summary}`);
+      this.persistEveEnergyRuntimeTotals();
+    }
+  }
+
+  recoverEveEnergyTotalsFromFakegatoStorage() {
+    const totals = {};
+    const storagePath = this.getStoragePath();
+
+    let files = [];
+    try {
+      files = fs.readdirSync(storagePath);
+    } catch {
+      return totals;
+    }
+
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const meta = this.getEveEnergyHistoryMeta(kind);
+      if (!meta?.displayName) {
+        continue;
+      }
+
+      const displayNames = [meta.displayName, ...(meta.legacyDisplayNames || [])];
+      const candidates = files.filter((file) => displayNames.some((name) => file.includes(name)) && file.endsWith('_persist.json'));
+      for (const file of candidates) {
+        const candidatePath = path.join(storagePath, file);
+        try {
+          const parsed = JSON.parse(fs.readFileSync(candidatePath, 'utf8'));
+          const history = Array.isArray(parsed?.history) ? parsed.history : [];
+          for (const entry of history) {
+            if (!entry || typeof entry !== 'object') {
+              continue;
+            }
+            const numeric = Number(entry.totalConsumption);
+            if (Number.isFinite(numeric) && numeric >= 0) {
+              totals[kind] = Math.max(totals[kind] || 0, numeric);
+            }
+          }
+        } catch {
+          // Ignore malformed or partially-written fakegato files; fakegato owns them.
+        }
+      }
+    }
+
+    return totals;
+  }
+
+  persistEveEnergyRuntimeTotals() {
+    if (!this.enableEveEnergyHistory) {
+      return;
+    }
+
+    const totals = {};
+    for (const [kind, value] of this.eveEnergyRuntimeTotalsKwh.entries()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric >= 0) {
+        totals[kind] = Number(numeric.toFixed(6));
+      }
+    }
+
+    try {
+      fs.writeFileSync(this.getEveEnergyTotalsStatePath(), JSON.stringify({
+        version: BUILD_VERSION,
+        updatedAt: new Date().toISOString(),
+        totals,
+      }, null, 2));
+    } catch (err) {
+      this.log.warn(`[EveHistory] could not persist cumulative totals state: ${err.message}`);
+    }
+  }
+
+  configureEveEnergyHistoryAccessory(accessory, kind, displayName, shouldApplyName = false) {
+    const meta = this.getEveEnergyHistoryMeta(kind);
+    if (!meta) {
+      return;
+    }
+
+    const service = accessory.getServiceById(this.Service.Outlet, kind)
+      || accessory.addService(this.Service.Outlet, displayName, kind);
+    if (shouldApplyName) {
+      service.setCharacteristic(this.Characteristic.Name, displayName);
+    }
+
+    this.prepareEveEnergyOutletService(service);
+
+    // Eve History accessories are data collectors, not live controls.
+    // Keep their HomeKit outlet state inactive while still publishing Eve Energy measurements/history.
+    service.getCharacteristic(this.Characteristic.On)
+      .onGet(() => false)
+      .onSet(async () => {});
+
+    service.getCharacteristic(this.Characteristic.OutletInUse)
+      .onGet(() => false);
+
+    this.ensureEveEnergyCharacteristics(service, kind);
+    this.seedEveEnergyCharacteristics(service, kind);
+    this.setupEveEnergyHistoryService(accessory, kind);
+  }
+
+  prepareEveEnergyOutletService(service) {
+    if (!service || !this.EveEnergyCharacteristic) {
+      return;
+    }
+
+    const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
+    for (const CharacteristicClass of [Consumption, TotalConsumption, Voltage, Current]) {
+      if (!CharacteristicClass) {
+        continue;
+      }
+      try {
+        service.addOptionalCharacteristic(CharacteristicClass);
+      } catch {
+        // Already optional or not supported by this Homebridge/HAP version.
+      }
+    }
+  }
+
+  seedEveEnergyCharacteristics(service, kind) {
+    if (!service || !this.EveEnergyCharacteristic) {
+      return;
+    }
+
+    const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
+    const power = this.getEveEnergyHistoryPower(kind);
+    const totalKwh = this.eveEnergyRuntimeTotalsKwh.get(kind) || 0;
+
+    service.setCharacteristic(Consumption, Math.max(0, Number(power.toFixed ? power.toFixed(1) : power)));
+    service.setCharacteristic(TotalConsumption, Math.max(0, Number(totalKwh.toFixed(3))));
+    service.setCharacteristic(Voltage, Number((this.getGridVoltage() || 230).toFixed(1)));
+    service.setCharacteristic(Current, this.getEveEnergyHistoryCurrent(kind));
+  }
+
+  ensureEveEnergyCharacteristics(service, kind) {
+    if (!this.EveEnergyCharacteristic) {
+      return;
+    }
+
+    const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
+
+    this.prepareEveEnergyOutletService(service);
+
+    this.getOrAddCharacteristic(service, Consumption)
+      .onGet(() => this.getEveEnergyHistoryPower(kind));
+    this.getOrAddCharacteristic(service, TotalConsumption)
+      .onGet(() => Math.max(0, Number((this.eveEnergyRuntimeTotalsKwh.get(kind) || 0).toFixed(3))));
+    this.getOrAddCharacteristic(service, Voltage)
+      .onGet(() => Number((this.getGridVoltage() || 230).toFixed(1)));
+    this.getOrAddCharacteristic(service, Current)
+      .onGet(() => this.getEveEnergyHistoryCurrent(kind));
+  }
+
+  getEveEnergyResetTimestamp() {
+    // Eve uses seconds since 1 Jan 2001 for its totalizer reset characteristic.
+    const eveEpochMs = Date.UTC(2001, 0, 1, 0, 0, 0);
+    return Math.max(0, Math.floor((Date.now() - eveEpochMs) / 1000));
+  }
+
+  handleEveEnergyReset(kind, value) {
+    // Intentionally inert in 3b.11: Eve may write/read the reset characteristic during
+    // accessory initialisation, which previously zeroed long-term totals on startup.
+    const numeric = Number(value);
+    this.log.debug?.(`[EveHistory] ignored reset-total write for ${kind}${Number.isFinite(numeric) ? ` at Eve timestamp ${numeric}` : ''}`);
+  }
+
+  getOrAddCharacteristic(service, CharacteristicClass) {
+    return service.getCharacteristic(CharacteristicClass) || service.addCharacteristic(CharacteristicClass);
+  }
+
+  getGridVoltage() {
+    return this.getNumber([
+      'Power/Power/Grid_Voltage',
+      'Power/Power/Grid_Voltage_L1',
+      'Power/Power/Voltage',
+      'Stats/Grid_Voltage',
+      'Grid/Grid_Voltage',
+    ], 'Grid_Voltage');
+  }
+
+  getEveEnergyHistoryCurrent(kind) {
+    const voltage = this.getGridVoltage() || 230;
+    if (!Number.isFinite(voltage) || voltage <= 0) {
+      return 0;
+    }
+    return Number((this.getEveEnergyHistoryPower(kind) / voltage).toFixed(2));
+  }
+
+  setupEveEnergyHistoryService(accessory, kind) {
+    if (!this.enableEveEnergyHistory || !this.FakeGatoHistoryService) {
+      if (this.enableEveEnergyHistory && !this.FakeGatoHistoryService && !this._warnedMissingFakeGato) {
+        this._warnedMissingFakeGato = true;
+        this.log.warn('Eve Energy history is enabled, but fakegato-history is not available. Install dependencies and restart Homebridge.');
+      }
+      return null;
+    }
+
+    if (this.eveEnergyHistoryServices.has(kind)) {
+      return this.eveEnergyHistoryServices.get(kind);
+    }
+
+    accessory.log = this.log;
+    const service = accessory.getServiceById(this.Service.Outlet, kind);
+    if (service) {
+      this.prepareEveEnergyOutletService(service);
+      this.seedEveEnergyCharacteristics(service, kind);
+    }
+
+    const history = new this.FakeGatoHistoryService('energy', accessory, {
+      size: this.eveEnergyHistorySize,
+      storage: 'fs',
+      disableRepeatLastData: false,
+      log: this.log,
+    });
+    if (!history) {
+      this.log.error(`[EveHistory] failed to create history service for ${kind}`);
+      return null;
+    }
+    this.eveEnergyHistoryServices.set(kind, history);
+    this.log.info(`Eve Energy history enabled for ${accessory.displayName || kind}`);
+    return history;
+  }
+
+  getEveEnergyHistoryPower(kind, snap = null) {
+    const meta = this.getEveEnergyHistoryMeta(kind);
+    if (!meta) {
+      return 0;
+    }
+
+    const source = snap || this.getSnapshot();
+    const value = Number(source[meta.valueKey] || 0);
+    if (!Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+    return Math.round(value);
+  }
+
+  updateEveEnergyHistoryAccessories(snap) {
+    if (!this.enableEveEnergyHistory) {
+      return;
+    }
+
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const accessory = this.accessories.get(kind);
+      if (!accessory) {
+        continue;
+      }
+
+      const service = accessory.getServiceById(this.Service.Outlet, kind);
+      if (!service) {
+        continue;
+      }
+
+      const power = this.getEveEnergyHistoryPower(kind, snap);
+      // Suppress active-state flicker for Eve History accessories. Graphs still receive real values below.
+      service.updateCharacteristic(this.Characteristic.On, false);
+      service.updateCharacteristic(this.Characteristic.OutletInUse, false);
+      if (this.EveEnergyCharacteristic) {
+        const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
+        service.updateCharacteristic(Consumption, Math.max(0, Number(power.toFixed ? power.toFixed(1) : power)));
+        service.updateCharacteristic(TotalConsumption, Math.max(0, Number((this.eveEnergyRuntimeTotalsKwh.get(kind) || 0).toFixed(3))));
+        service.updateCharacteristic(Voltage, Number((this.getGridVoltage() || 230).toFixed(1)));
+        service.updateCharacteristic(Current, this.getEveEnergyHistoryCurrent(kind));
+      }
+    }
+  }
+
+  recordEveEnergyHistory(force = false) {
+    if (!this.enableEveEnergyHistory) {
+      return;
+    }
+
+    if (!this.FakeGatoHistoryService) {
+      if (!this._warnedMissingFakeGato) {
+        this._warnedMissingFakeGato = true;
+        this.log.warn('Eve Energy history is enabled, but fakegato-history is not available. Install dependencies and restart Homebridge.');
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const minimumMs = Math.max(1, this.eveEnergyHistorySampleMinutes) * 60 * 1000;
+    if (!force && now - this.lastEveEnergyHistoryEntryMs < minimumMs) {
+      return;
+    }
+
+    const snap = this.getSnapshot();
+    const time = Math.round(now / 1000);
+    const elapsedHours = this.eveEnergyRuntimeTotalUpdatedMs > 0
+      ? Math.max(0, (now - this.eveEnergyRuntimeTotalUpdatedMs) / 3_600_000)
+      : 0;
+    const recorded = [];
+
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const accessory = this.accessories.get(kind);
+      if (!accessory) {
+        this.log.debug?.(`[EveHistory] ${kind} accessory not available yet`);
+        continue;
+      }
+
+      const history = this.setupEveEnergyHistoryService(accessory, kind);
+      if (!history) {
+        continue;
+      }
+
+      const power = this.getEveEnergyHistoryPower(kind, snap);
+      const previousTotal = Math.max(0, Number(this.eveEnergyRuntimeTotalsKwh.get(kind) || 0));
+      if (elapsedHours > 0) {
+        const increment = Math.max(0, power * elapsedHours / 1000);
+        this.eveEnergyRuntimeTotalsKwh.set(kind, previousTotal + increment);
+      } else if (!this.eveEnergyRuntimeTotalsKwh.has(kind)) {
+        this.eveEnergyRuntimeTotalsKwh.set(kind, previousTotal);
+      }
+
+      const service = accessory.getServiceById(this.Service.Outlet, kind);
+      if (service) {
+        this.seedEveEnergyCharacteristics(service, kind);
+      }
+
+      const totalKwh = Math.max(0, Number((this.eveEnergyRuntimeTotalsKwh.get(kind) || 0).toFixed(3)));
+      const entry = { time, power, totalConsumption: totalKwh };
+      try {
+        history.addEntry(entry);
+        recorded.push(`${this.getEveEnergyHistoryMeta(kind)?.description || kind}=${power}W total=${totalKwh}kWh`);
+      } catch (err) {
+        this.log.warn(`[EveHistory] failed to add history entry for ${kind}: ${err.message}`);
+      }
+    }
+
+    this.eveEnergyRuntimeTotalUpdatedMs = now;
+
+    if (recorded.length > 0) {
+      this.persistEveEnergyRuntimeTotals();
+      this.lastEveEnergyHistoryEntryMs = now;
+      this.log.info(`[EveHistory] recorded ${recorded.join(' | ')}`);
+    } else {
+      this.log.warn('[EveHistory] no entries recorded; check Eve history accessories and GivTCP telemetry');
     }
   }
 
@@ -501,9 +1109,9 @@ class GivTcpMqttPlatform {
       const start = new Date();
       const end = new Date(Date.now() + (meta.minutes * 60000));
       const label = `Manual ${meta.displayAction} ${meta.minutes}m`;
-      this.clearSiblingManualIntents(kind, meta.family);
-      this.setManualSession(kind, meta, start, end);
       this.enqueueManualSequence(label, this.buildTimedSlotSteps(label, meta.slotKind, start, end, meta.slotKind === 'charge' ? this.targetSoc : null));
+      this.setCommandState(kind, true, 2);
+      this.clearSiblingManualIntents(kind, meta.family);
     } else {
       this.cleanupTimedManualAction(meta.family, 'manual off');
     }
@@ -533,134 +1141,7 @@ class GivTcpMqttPlatform {
     }
   }
 
-  loadManualSessions() {
-    try {
-      if (!fs.existsSync(this.manualSessionFile)) {
-        return {};
-      }
-
-      const parsed = JSON.parse(fs.readFileSync(this.manualSessionFile, 'utf8'));
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return {};
-      }
-
-      const now = Date.now();
-      const active = {};
-      for (const [kind, session] of Object.entries(parsed)) {
-        if (!session || typeof session !== 'object') {
-          continue;
-        }
-        if (!Number.isFinite(session.expiresAtMs) || session.expiresAtMs <= now) {
-          continue;
-        }
-        active[kind] = session;
-      }
-      return active;
-    } catch (err) {
-      this.log.warn(`Manual session state could not be loaded: ${err.message}`);
-      return {};
-    }
-  }
-
-  saveManualSessions() {
-    try {
-      fs.writeFileSync(this.manualSessionFile, JSON.stringify(this.manualSessions, null, 2));
-    } catch (err) {
-      this.log.warn(`Manual session state could not be saved: ${err.message}`);
-    }
-  }
-
-  restoreManualSessionTimers() {
-    for (const [kind, session] of Object.entries(this.manualSessions)) {
-      this.scheduleManualSessionExpiry(kind, session.expiresAtMs);
-    }
-  }
-
-  scheduleManualSessionExpiry(kind, expiresAtMs) {
-    if (this.commandTimers.has(kind)) {
-      clearTimeout(this.commandTimers.get(kind));
-      this.commandTimers.delete(kind);
-    }
-
-    const delayMs = Math.max(1, Number(expiresAtMs) - Date.now());
-    const timer = setTimeout(() => {
-      if (this.manualSessions[kind] && this.manualSessions[kind].expiresAtMs <= Date.now()) {
-        delete this.manualSessions[kind];
-        this.saveManualSessions();
-        this.log.info(`Manual ${kind} session expired`);
-        this.refreshAccessories();
-      }
-      this.commandTimers.delete(kind);
-    }, delayMs);
-    this.commandTimers.set(kind, timer);
-  }
-
-  setManualSession(kind, meta, start, end) {
-    const session = {
-      kind,
-      family: meta.family,
-      slotKind: meta.slotKind,
-      minutes: meta.minutes,
-      startedAtMs: start.getTime(),
-      expiresAtMs: end.getTime(),
-    };
-
-    this.manualSessions[kind] = session;
-    this.saveManualSessions();
-    this.scheduleManualSessionExpiry(kind, session.expiresAtMs);
-    this.log.info(`Manual ${kind} session active until ${end.toISOString()}`);
-  }
-
-  getActiveManualSession(kind) {
-    const session = this.manualSessions[kind];
-    if (!session) {
-      return null;
-    }
-
-    if (!Number.isFinite(session.expiresAtMs) || session.expiresAtMs <= Date.now()) {
-      delete this.manualSessions[kind];
-      this.saveManualSessions();
-      if (this.commandTimers.has(kind)) {
-        clearTimeout(this.commandTimers.get(kind));
-        this.commandTimers.delete(kind);
-      }
-      return null;
-    }
-
-    return session;
-  }
-
-  clearManualSession(kind) {
-    if (this.manualSessions[kind]) {
-      delete this.manualSessions[kind];
-      this.saveManualSessions();
-    }
-    if (this.commandTimers.has(kind)) {
-      clearTimeout(this.commandTimers.get(kind));
-      this.commandTimers.delete(kind);
-    }
-  }
-
-  clearManualSessionsForFamily(family, exceptKind = null) {
-    let changed = false;
-    for (const [kind, session] of Object.entries(this.manualSessions)) {
-      if (session?.family !== family || kind === exceptKind) {
-        continue;
-      }
-      delete this.manualSessions[kind];
-      changed = true;
-      if (this.commandTimers.has(kind)) {
-        clearTimeout(this.commandTimers.get(kind));
-        this.commandTimers.delete(kind);
-      }
-    }
-    if (changed) {
-      this.saveManualSessions();
-    }
-  }
-
   clearSiblingManualIntents(activeKind, family) {
-    this.clearManualSessionsForFamily(family, activeKind);
     for (const kind of this.switchKinds) {
       const meta = this.getManualSwitchMeta(kind);
       if (!meta || meta.family !== family || kind === activeKind) {
@@ -815,10 +1296,6 @@ class GivTcpMqttPlatform {
       return false;
     }
 
-    if (this.getActiveManualSession(kind)) {
-      return true;
-    }
-
     if (this.commandStates[kind]) {
       return true;
     }
@@ -949,9 +1426,7 @@ class GivTcpMqttPlatform {
       return;
     }
 
-    const label = family === 'forceCharge' ? 'Force Charge' : 'Force Export';
-
-    this.clearManualSessionsForFamily(family);
+    const label = family === 'forceCharge' ? 'Charge' : 'Export';
 
     for (const kind of this.switchKinds) {
       const meta = this.getManualSwitchMeta(kind);
@@ -1099,135 +1574,12 @@ class GivTcpMqttPlatform {
   }
 
   getSolarBrightness() {
+    if (!this.hasSolarPv) {
+      return 0;
+    }
     const pvPower = this.getNumber(['Power/Power/PV_Power'], 'PV_Power') || 0;
     const maxPvW = Math.max(100, this.maxPvKw * 1000);
     return this.clamp(Math.round((pvPower / maxPvW) * 100), 0, 100);
-  }
-
-
-  async maybeCheckForUpdates(force) {
-    if (!this.updateCheckEnabled) {
-      return;
-    }
-
-    if (this.updateStatus.checking) {
-      return;
-    }
-
-    const now = Date.now();
-    const intervalMs = Math.max(1, this.updatePollHours) * 60 * 60 * 1000;
-    if (!force && (now - this.updateStatus.lastCheckedMs) < intervalMs) {
-      return;
-    }
-
-    this.updateStatus.checking = true;
-
-    try {
-      const response = await fetch(this.updateCheckUrl, {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!response.ok) {
-        throw new Error(`Update check failed (${response.status})`);
-      }
-
-      const data = await response.json();
-      const latest = String(data.version || '').trim();
-      if (!latest) {
-        throw new Error('Update check response did not include a version');
-      }
-
-      const available = this.isVersionGreater(latest, BUILD_VERSION);
-      const changed = available !== this.updateStatus.updateAvailable || latest !== this.updateStatus.latestVersion;
-
-      this.updateStatus.latestVersion = latest;
-      this.updateStatus.updateAvailable = available;
-      this.updateStatus.lastCheckedMs = now;
-      this.updateStatus.lastError = null;
-
-      if (changed) {
-        if (available) {
-          this.log.warn(`GivHome update available: ${BUILD_VERSION} -> ${latest}`);
-        } else {
-          this.log.info(`GivHome update check ok: running ${BUILD_VERSION}, latest ${latest}`);
-        }
-        this.refreshAccessories();
-      }
-    } catch (err) {
-      this.updateStatus.lastCheckedMs = now;
-      this.updateStatus.lastError = err.message;
-      this.log.warn(`GivHome update check failed: ${err.message}`);
-    } finally {
-      this.updateStatus.checking = false;
-    }
-  }
-
-  parseVersion(version) {
-    const match = String(version || '').trim().match(/^(\d+)\.(\d+)\.(\d+)(?:[-+]([0-9A-Za-z.-]+))?/);
-    if (!match) {
-      return null;
-    }
-
-    return {
-      major: Number(match[1]),
-      minor: Number(match[2]),
-      patch: Number(match[3]),
-      pre: match[4] || '',
-    };
-  }
-
-  comparePrerelease(a, b) {
-    if (!a && !b) {
-      return 0;
-    }
-    if (!a) {
-      return 1;
-    }
-    if (!b) {
-      return -1;
-    }
-
-    const aParts = a.split('.').join('-').split('-');
-    const bParts = b.split('.').join('-').split('-');
-    const len = Math.max(aParts.length, bParts.length);
-
-    for (let i = 0; i < len; i += 1) {
-      const av = aParts[i];
-      const bv = bParts[i];
-      if (av === undefined) {
-        return -1;
-      }
-      if (bv === undefined) {
-        return 1;
-      }
-
-      const an = Number(av);
-      const bn = Number(bv);
-      const bothNumeric = !Number.isNaN(an) && !Number.isNaN(bn);
-      if (bothNumeric && an !== bn) {
-        return an > bn ? 1 : -1;
-      }
-      if (!bothNumeric && av !== bv) {
-        return av > bv ? 1 : -1;
-      }
-    }
-
-    return 0;
-  }
-
-  isVersionGreater(candidate, current) {
-    const a = this.parseVersion(candidate);
-    const b = this.parseVersion(current);
-    if (!a || !b) {
-      return false;
-    }
-
-    for (const key of ['major', 'minor', 'patch']) {
-      if (a[key] !== b[key]) {
-        return a[key] > b[key];
-      }
-    }
-
-    return this.comparePrerelease(a.pre, b.pre) > 0;
   }
 
   async maybePollOctopus(force) {
@@ -1490,29 +1842,6 @@ class GivTcpMqttPlatform {
     };
   }
 
-
-  getChargingActiveThresholdW(chargePower, importPower, pvPower, cheapState = {}) {
-    // Charge_Power can represent both intentional grid charging and solar-to-battery charging.
-    // Use a higher threshold for grid/cheap-slot charging to suppress Home notification noise,
-    // but keep solar charging responsive for low UK winter PV generation.
-    const intentionalGridCharge = Boolean(
-      cheapState.cheapActive
-      || cheapState.smartActive
-      || cheapState.graceActive
-      || importPower >= this.importActiveThresholdW
-    );
-
-    if (intentionalGridCharge) {
-      return this.chargeActiveThresholdW;
-    }
-
-    if (pvPower >= this.solarChargeActiveThresholdW) {
-      return this.solarChargeActiveThresholdW;
-    }
-
-    return this.solarChargeActiveThresholdW;
-  }
-
   getSnapshot() {
     const soc = this.getNumber(['Power/Power/SOC'], 'SOC');
     const pvPower = this.getNumber(['Power/Power/PV_Power'], 'PV_Power') || 0;
@@ -1545,11 +1874,10 @@ class GivTcpMqttPlatform {
       smartActive: cheap.smartActive,
       cheapWindowEnd: cheap.cheapWindowEnd,
       cheapSource: cheap.source,
-      charging: chargePower > this.getChargingActiveThresholdW(chargePower, importPower, pvPower, cheap),
-      discharging: dischargePower > this.dischargeActiveThresholdW,
-      importing: importPower > this.importActiveThresholdW,
-      exporting: exportPower > this.exportActiveThresholdW,
-      updateAvailable: this.updateStatus.updateAvailable,
+      charging: this.chargePowerActiveThreshold > 0 && chargePower > this.chargePowerActiveThreshold,
+      discharging: this.dischargePowerActiveThreshold > 0 && dischargePower > this.dischargePowerActiveThreshold,
+      importing: this.importPowerActiveThreshold > 0 && importPower > this.importPowerActiveThreshold,
+      exporting: this.exportPowerActiveThreshold > 0 && exportPower > this.exportPowerActiveThreshold,
     };
   }
 
@@ -1571,8 +1899,8 @@ class GivTcpMqttPlatform {
     this.updateBinaryAccessory('importing', snap.importing);
     this.updateBinaryAccessory('exporting', snap.exporting);
     this.updateBinaryAccessory('online', snap.online);
-    this.updateBinaryAccessory('updateAvailable', snap.updateAvailable);
 
+    this.updateEveEnergyHistoryAccessories(snap);
     this.updateSwitchAccessories();
 
     const signature = [
@@ -1621,23 +1949,35 @@ class GivTcpMqttPlatform {
     service.updateCharacteristic(this.Characteristic.Brightness, snap.solarBrightness);
   }
 
+  getObservationState(kind) {
+    const snap = this.getSnapshot();
+
+    const states = {
+      cheapRate: snap.cheapActive,
+      gracePeriod: snap.graceActive,
+      smartWindow: snap.smartActive,
+      charging: snap.charging,
+      discharging: snap.discharging,
+      importing: snap.importing,
+      exporting: snap.exporting,
+      online: snap.online,
+    };
+
+    return Boolean(states[kind]);
+  }
+
   updateBinaryAccessory(kind, active) {
     const accessory = this.accessories.get(kind);
     if (!accessory) {
       return;
     }
 
-    const service = accessory.getServiceById(this.Service.OccupancySensor, kind);
+    const service = accessory.getServiceById(this.Service.Lightbulb, kind);
     if (!service) {
       return;
     }
 
-    service.updateCharacteristic(
-      this.Characteristic.OccupancyDetected,
-      active
-        ? this.Characteristic.OccupancyDetected.OCCUPANCY_DETECTED
-        : this.Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED,
-    );
+    service.updateCharacteristic(this.Characteristic.On, Boolean(active));
   }
 
   updateSwitchAccessories() {

@@ -1,174 +1,313 @@
 # GivHome
 
-GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery — automatically, locally, and beautifully inside Apple Home.
+Local-first Apple Home integration of your GivEnergy battery with optional Intelligent Octopus Go automation.
 
-## What this plugin does
+A clean Apple Home experience focused on stability, visibility, and predictable behaviour.
 
-GivHome brings clean local control of your GivEnergy battery system into Apple Home via Homebridge.
+Designed for users who want reliable local control of their GivEnergy system without dependence on the GivEnergy cloud.
 
-It offers:
+---
 
-- Intelligent Octopus Go dispatch-aware battery charging
-- Grace period handling after smart charging sessions, rounded to the end of the current `:00` or `:30` half-hour period
-- Charging during your configured **Off-Peak Hours**, with a default of `23:30–05:30`
-- Manual timed charge and export tiles:
-  - Charge 30m / 60m / 90m / 120m
-  - Export 30m / 60m / 90m / 120m
-- Manual tile state synced from the live inverter schedule where GivTCP publishes schedule enable and slot start/end telemetry
-- Battery SoC shown as a clear percentage tile
-- Solar generation shown in Home, including **Off** at night
-- Useful status sensors for:
-  - Cheap Rate
-  - Grace Period
-  - Smart Window
-  - Charging
-  - Discharging
-  - Importing
-  - Exporting
-  - Online
-  - Update Available
+## Core Philosophy
 
-All inverter control commands are sent over your local network. The plugin does not rely on GivEnergy cloud control.
+### Local first
 
-## Architecture
+GivHome communicates locally with your inverter via GivTCP/REST.
 
-The plugin is designed to work with:
+Core automation and control continue operating even if external cloud services become unavailable.
 
-- **GivTCP** — local inverter telemetry via MQTT and local inverter control via REST
-- **Mosquitto** or another MQTT broker
-- **Octopus Energy API** — only for retrieving Intelligent Octopus Go dispatch windows
+### Predictable behaviour
 
-In practice:
+Battery behaviour should be understandable.
 
-- **Reading telemetry** → MQTT from GivTCP
-- **Writing control commands** → local GivTCP REST API
-- **Smart charging logic** → Octopus API polling for cheap-rate windows
+GivHome prioritises deterministic scheduling and observed inverter state over aggressive automation complexity.
 
-## Requirements
+### Apple Home native experience
 
-You will need the following running on your local network:
+The project is designed around Apple Home and HomeKit behaviour:
 
-- GivTCP
-- an MQTT broker, such as Mosquitto
-- Homebridge
+- clean tile layout
+- useful observability
+- stable automations
+- child bridge support
+- Siri compatibility
+- Eve app history integration
 
-Disable any other plugins or automations that may send conflicting commands to the inverter.
+### Intelligent Octopus Go integration
 
-## Main controls in Apple Home
+GivHome fulfils:
 
-- **Charge 30m / 60m / 90m / 120m** — starts a timed local charge window using the GivTCP REST slot system
-- **Export 30m / 60m / 90m / 120m** — starts a timed local discharge/export window using the GivTCP REST slot system
-- **Automatic IOG + Off-Peak Charging** — runs in the background, opening a battery charge window during Intelligent Octopus Go smart dispatches and your configured off-peak hours
+- Off-Peak windows
+- Intelligent Octopus smart dispatch windows
+- grace periods
+- prevents battery to EV drain
 
-Turning any Charge tile off neutralises the charge slot and disables the local charge schedule. Turning any Export tile off neutralises the export slot and disables the local discharge schedule.
+into a unified charging strategy.
 
-## Live manual tile state
+---
 
-Manual switch state is truth-based where telemetry is available. The plugin checks the live charge/discharge schedule enable state and slot 1 start/end times, then lights the matching duration tile within the configured slot tolerance.
+## Key Features
 
-This means:
+### Intelligent Octopus Go automation
 
-- neutral schedules show manual tiles as off
-- a live 30, 60, 90, or 120 minute charge/export slot can light the matching tile
-- plugin-side command state is only used briefly as a pending overlay immediately after you press a tile
+Automatically responds to:
 
-## Important notes
+- cheap-rate windows
+- smart charging windows
+- tariff transitions
+- inverter schedule state
 
-- All inverter control is performed locally on your network
-- This plugin is intended to be the primary controller for scheduled charging and export
-- Avoid overlapping control from other plugins, apps, or automations
-- Energy management actions are taken at your own risk, so test carefully before relying on unattended automations
+while maintaining stable overnight charging behaviour.
 
-## Configuration
+### Manual Charge and Export controls
 
-Most users only need:
+Simple HomeKit switches for:
 
-- Battery / inverter serial number
-- Maximum solar power in kW, used to scale the Solar Power tile
-- Octopus account number and API key for Intelligent Octopus Go dispatch windows
+- Charge 30m
+- Charge 60m
+- Charge 90m
+- Charge 120m
+- Export 30m
+- Export 60m
+- Export 90m
+- Export 120m
 
-The serial number can be found in the GivEnergy app: **Settings → Local Monitoring → Scan for your inverter**.
+Manual controls reflect real inverter state.
 
-The Octopus API key can be found in your Octopus Energy online account under Developer Settings / API access.
+### Real-time battery visibility
 
-Optional behaviour settings include:
+Observe:
 
-- Target Charge %, default `100`
-- Off-Peak Start and End, default `23:30–05:30`
-- Grace Period, default `30` minutes, which means continue only until the end of the current half-hour period
+- battery level (SOC)
+- solar generation (PV power)
+- grid import/export
+- charge/discharge activity
+- inverter operating state
 
-Advanced settings for MQTT, GivTCP REST, polling, slot tolerance, activity thresholds, update checks, and telemetry thresholds are available in Homebridge but are prefilled for the standard local setup.
+all inside Apple Home app.
+
+### Eve History integration
+
+GivHome includes integrated historical energy tracking compatible with the Eve app.
+
+Included history accessories:
+
+- Eve Solar History
+- Eve Import History
+- Eve Export History
+
+These accessories provide:
+
+- historical graphs
+- cumulative energy totals
+- long-term trend visibility
+- persisted history across restarts
+
+while remaining lightweight and fully local.
+
+---
 
 ## Installation
 
-Install the plugin through the Homebridge UI or via npm.
+### Recommended image
 
-Then:
+The easiest installation method is the prebuilt GivHome Homebridge image for Raspberry Pi from:
 
-1. configure the required setup fields
-2. restart Homebridge
-3. add the new accessories in the Home app
-4. test behaviour during a cheap period before relying on automation
+https://givhome.kernowekconsulting.co.uk/
 
-## 3.4.2-beta-1
+Features include:
 
-Beta readiness release.
+- Homebridge preinstalled
+- GivTCP preconfigured
+- MQTT configured
+- Apple Home ready
+- local web management
 
-Changes:
-- adds `CHANGELOG.md` so Homebridge can display release notes during plugin updates
-- improves the GivHome setup landing page logo placement
-- separates intentional grid/smart charging notification threshold from lower solar-to-battery charging visibility
-- keeps the internal Homebridge platform identifier unchanged for upgrade compatibility
+---
 
-## 3.4.2-beta-1-beta-2
+## After Initial Installation to Setup
 
-Beta release for GivHome verification readiness, product assets, quieter activity sensors, and update awareness.
+Open your browser and go to:
 
-Changes:
-- renames the public plugin display name to **GivHome**
-- adds GivHome logo assets for the custom setup UI and package
-- adds an **Update Available** Home sensor that checks the npm registry for newer plugin versions every 24 hours
-- splits activity thresholds so brief battery-breathing events no longer trigger noisy Home notifications
-- defaults Charging, Discharging, and Importing active thresholds to `250W` so solar-to-battery charging remains visible in lower UK winter generation
-- defaults Exporting active threshold to `1000W` to suppress short grid overspill events
-- keeps Charge/Export 30m, 60m, 90m, and 120m tile labels unchanged
-- adds maintenance guidance: check Homebridge occasionally for OS, Node.js, and plugin updates
+```text
+givhome-pi.local
+```
 
-Maintenance note:
-GivHome is designed to run quietly in the background. Occasionally, Homebridge may show updates for the operating system, Node.js or GivHome itself. Applying updates every few months is recommended and usually takes only a few minutes.
+Create your own Homebridge username and password, or leave the default as `admin` / `admin`.
 
-## 3.4.0
+### Configure GivHome
 
-Production release of the new HomeKit tile and configuration experience.
+Navigate to:
 
-Changes:
-- adds simple manual duration tiles for Charge and Export: 30m, 60m, 90m, and 120m
-- keeps the original `forceCharge` and `forceExport` accessory kinds as the fixed 60 minute tiles for HomeKit continuity
-- syncs manual tile state from the live inverter schedule where GivTCP publishes schedule enable and slot start/end telemetry
-- treats plugin-side command state as a short-lived pending overlay, not the long-term source of truth
-- turning any Charge tile off neutralises the charge slot and disables the charge schedule
-- turning any Export tile off neutralises the export slot and disables the discharge/export schedule
-- simplifies the Homebridge config UI so most users only see the key setup fields
-- moves MQTT, GivTCP REST, polling, tolerance, telemetry, and legacy compatibility settings into advanced sections
-- removes unused Battery Size, Low Battery Threshold, and Maximum Battery Charge Power settings left over from earlier experiments
-- keeps Off-Peak Hours as the baseline cheap window and merges Intelligent Octopus Go dispatch windows and grace periods on top
+```text
+Plugins → GivHome → Plugin Config
+```
 
-Behaviour:
-- Off-Peak Hours default to `23:30–05:30`
-- Grace Period defaults to continuing only until the end of the current `:00` or `:30` half-hour period
-- Octopus credentials are optional; without them the plugin can still monitor, run manual tiles, and use the configured off-peak window
-- all inverter control remains local via GivTCP REST
+Enter:
 
-## 3.2.5
+- GivEnergy inverter IP
+- inverter serial number
+- Octopus account details
+- Intelligent Octopus settings
 
-Critical fix release.
+Save and restart.
 
-Changes:
-- corrects Off-Peak Hours charging logic so the default `23:30–05:30` baseline window continues to run even when Octopus polling is healthy
-- keeps Smart Charging and Grace Period additive on top of the baseline cheap window, rather than replacing it
-- removes stale internal Smooth Charging references from the active automation path
+### Enable Child Bridge
 
-Behaviour:
-- Off-Peak Hours remain the always-available default cheap window unless the user changes those settings
-- Smart Charging can overlap, extend before, continue through, or finish after Off-Peak Hours
-- charging now activates whenever either Off-Peak Hours or Smart Charging makes the period cheap
+For best HomeKit stability:
+
+1. Open GivHome in Homebridge.
+2. Press the purple bridge icon.
+3. Enable Child Bridge.
+4. Save and restart.
+
+### Pair with Apple Home
+
+Use the QR code shown on the GivHome accessory card inside Homebridge.
+
+---
+
+## Apple Home Notes
+
+### Home View
+
+Apple Home includes a summary area called Home View.
+
+Many users prefer to exclude historical accessories from Home View to reduce clutter.
+
+For the Eve History accessories:
+
+1. Hold the tile.
+2. Open Accessory Settings.
+3. Turn off: **Include in Home View**.
+
+### Tile organisation
+
+Apple Home allows manual tile ordering.
+
+To rearrange tiles:
+
+1. Hold a tile.
+2. Select **Edit Room**.
+3. Reorder to suit your layout.
+
+### Siri behaviour
+
+GivHome functional tiles intentionally behave like HomeKit controls.
+
+Be mindful when using broad Siri commands such as:
+
+- “Turn off all lights” if you have not yet turned off **Include in Home View**
+
+as this may affect active manual charge/export sessions.
+
+---
+
+## Eve App Support
+
+The Eve app provides advanced graphing and historical visualisation for the Eve History accessories.
+
+### Eve Solar History
+
+Tracks:
+
+- solar generation power
+- cumulative solar generation
+- historical generation trends
+
+### Eve Import History
+
+Tracks:
+
+- grid import power
+- cumulative imported energy
+- overnight charging behaviour
+
+### Eve Export History
+
+Tracks:
+
+- grid export power
+- cumulative exported energy
+- export session visibility
+
+History persists across:
+
+- Homebridge restarts
+- child bridge restarts
+- system reboots
+
+---
+
+## Stability
+
+GivHome prioritises reliability.
+
+The project deliberately avoids:
+
+- cloud dependence
+- excessive automation layers
+- aggressive inverter manipulation
+- hidden scheduling logic
+
+The goal is a system that behaves consistently day after day.
+
+---
+
+## Advanced Notes
+
+### GivTCP integration
+
+GivHome uses:
+
+- GivTCP MQTT telemetry
+- GivTCP REST control
+- local inverter communication
+
+### MQTT
+
+MQTT telemetry is used as the primary real-time observability source.
+
+### REST control validation
+
+Some upstream inverter or GivTCP REST acknowledgements may occasionally report unexpected slot values despite the inverter applying the correct behaviour.
+
+Where possible, GivHome prioritises observed telemetry and resulting inverter behaviour rather than relying solely on REST response text.
+
+---
+
+## Supported Hardware
+
+Tested primarily with:
+
+- GivEnergy All In One
+- Intelligent Octopus Go
+- Raspberry Pi 4
+- Apple Home
+- Eve app
+
+---
+
+## Credits
+
+Built on top of the excellent work from:
+
+- Homebridge
+- GivTCP
+- Eve Systems / Matthias Hochgatterer (Fakegato history)
+- MQTT ecosystem contributors
+- Apple Home community
+- Intelligent Octopus user community
+
+---
+
+## Disclaimer
+
+GivHome is an independent community project and is not affiliated with:
+
+- GivEnergy
+- Octopus Energy
+- Apple
+- Homebridge
+
+Use at your own discretion.

@@ -1,55 +1,102 @@
 # Changelog
 
-## 3.4.2-beta-2
+## 3.5.0-beta
 
-- Reworked the GivHome setup UI save flow to avoid hanging inside the Homebridge modal.
-- Removed the sticky internal footer that could interact badly with Homebridge modal scrolling.
-- Save now updates plugin config, triggers Homebridge save without waiting on a modal-destroying promise, and shows immediate user feedback.
+- Promotes Eve energy history from prototype to the v3.5.0 beta release line.
+- Adds integrated Eve-compatible history accessories:
+  - Eve Solar History
+  - Eve Import History
+  - Eve Export History
+- Persists solar, grid import and grid export history across Homebridge restarts, child bridge restarts and system reboots.
+- Suppresses active On/Off behaviour on Eve History tiles so they act as quiet data collectors rather than flickering live controls.
+- Keeps real graph and measurement data flowing to Eve while avoiding misleading HomeKit activity state for history accessories.
+- Confirms stable manual Charge and Export controls after soak testing.
+- Refreshes README and public website wording around local control, Intelligent Octopus Go integration, Apple Home visibility and Eve history.
 
-## 3.4.2-beta-1
+## 3.4.6-beta-3b.15
 
-- Rebuilds the GivHome setup UI with its own visible **Save settings** button.
-- Saves setup details through the Homebridge custom UI API rather than relying on the outer modal footer.
-- Reduces modal scroll friction on first-run setup and updates Step 5 wording.
-- No automation or inverter-control changes from 3.4.1.
+- Final Eve History polish build used as the source baseline for v3.5.0-beta.
+- Keeps Eve Solar, Import and Export history recording real values.
+- Suppresses Eve History accessory active-state flicker in Apple Home and Eve.
+- Preserves existing control, automation and manual tile behaviour.
 
-## 3.4.1-beta-5
+## 3.4.6-beta-3b.14
 
-- Fixes timed manual Charge/Export tile persistence so the active duration tile remains On for the running session.
-- Adds persistent manual session state so users can still cancel an active timed export/charge after a child-bridge restart.
-- Keeps manual Charge/Export cancellation available by turning the active tile Off.
+- Renames Eve history accessories for clearer user-facing intent:
+  - Eve Solar History
+  - Eve Import History
+  - Eve Export History
+- Keeps graph persistence and cumulative totals intact.
+- Improves Apple Home / Eve presentation without changing automation behaviour.
 
+## 3.4.6-beta-3b.13
 
-## 3.4.1-beta-5
+- Preserves the 3b.10 Eve graphing/service changes that enabled Solar history rendering in Eve.
+- Removes the reset-total characteristic from Eve Energy history services to prevent cumulative totals being reset during startup or Eve accessory initialisation.
+- Keeps fakegato initialisation, history entry format, unique Eve serials, and automation/control behaviour unchanged.
+- Includes final config wording polish for Extra Indicators in Apple Home and threshold descriptions.
+- Ensures packaged Homebridge UI logo assets are included for the plugin icon.
 
-- Fixes beta-3 crash loop caused by missing `getChargingActiveThresholdW()` helper.
-- Preserves split Charging/Solar Charge threshold behaviour.
+## 3.4.6-beta-3b.9
 
-## 3.4.1-beta-3
+- Gave each Eve Energy history accessory a unique HomeKit serial number to avoid Eve merging same-type histories.
+- Updated manufacturer text to avoid slash characters in Eve accessory metadata.
+- Refined Apple Home indicator wording in plugin config, including threshold descriptions and the optional extra indicators label.
 
-- Added `CHANGELOG.md` so Homebridge can show release notes during plugin updates.
-- Improved the GivHome setup landing page logo placement.
-- Changed Charging threshold behaviour so intentional grid/smart charging uses a higher default threshold while solar-to-battery charging remains visible at lower winter-friendly levels.
-- Preserved the internal Homebridge platform identifier for upgrade compatibility.
+## 3.4.6-beta-3b.8
 
-## 3.4.1-beta-2
+- Config UI wording cleanup focused on clearer human-facing labels.
+- Renames Energy History to make Eve app integration explicit.
+- Moves local connection settings to the bottom of the config form.
+- Renames Advanced Tuning to Personal Preference Settings.
+- Changes Manual Tile Tolerance default to 5 minutes and limits the slider to 0-10 minutes.
+- Clarifies that observation thresholds control Light accessories in Apple Home and that 0 disables each observation.
+- Removes Manual Smart Windows JSON from the visible config form.
 
-- Added Update Available Home sensor using npm registry checks.
-- Added split activity thresholds for quieter Home notifications.
-- Updated Homebridge 2 stable compatibility metadata.
-- Improved GivHome setup UI and maintenance wording.
+## 3.4.6-beta-3b.7
 
-## 3.4.1-beta-1
+- Persists Eve Energy cumulative kWh totals across restarts.
+- Recovers cumulative totals from existing fakegato persistence files where possible.
+- Prevents Total Consumption from resetting backwards after Homebridge/plugin restarts.
 
-- Added GivHome logo assets and funding metadata.
-- Prepared package metadata for Homebridge verification readiness.
-- Updated image landing page and website assets.
+## 3.4.6-beta-3b.6
 
-## 3.4.1-beta-0
+- Seeds Eve Energy characteristics before FakeGato history service creation.
+- Keeps the proven FakeGato initialisation path from 3b.5.
+- Changes Eve Total Consumption characteristic to floating kWh and keeps it moving from sampled power.
+- Adds safer history-entry logging with cumulative kWh context.
 
-- Introduced GivHome branding across package metadata and setup assets.
-- Added first Update Available sensor implementation.
-- Added quieter activity threshold configuration.
+## 3.4.6-beta-3b.5
+
+- Compatibility recovery: restored the legacy Homebridge platform registration identifier so existing config.json entries continue to load.
+- Retains GivHome user-facing naming, Energy History labelling, five-year 5-minute history sizing, and the working fakegato initialisation path from earlier 3b builds.
+
+## 3.4.6-beta-3b.1
+
+- Adds a deliberately narrow Eve Energy history prototype behind an opt-in Homebridge config switch.
+- Creates separate Eve-style energy history accessories for Solar Generated, Grid Import History, and Grid Export History.
+- Feeds periodic native-style watt samples into fakegato-history so Eve can derive historical energy graphs.
+- Keeps Smart Window as a live operational truth only; no Smart Window history is added in this build.
+- Does not add low-value engineering telemetry or custom dashboard behaviour.
+
+## 3.4.6-beta-3a
+
+- Clean-and-polish release after the beta-2b observation-to-Lightbulb migration.
+- Changes the default platform fallback name from `GivHome` where safe.
+- Cleans internal terminology from sensor wording toward observation wording while preserving existing HomeKit accessory identifiers.
+- Keeps Observations as read-only Lightbulb services and manual Charge/Export controls as Switch services.
+- Keeps advanced telemetry opt-in for Cheap Rate, Grace Period, Battery Discharging, and Online.
+- Adds Node 24 to the declared supported Node.js engine range.
+
+## 3.4.6
+
+- Adds required native Homebridge config validation for Battery Serial Number and Inverter IP Address.
+- Adds IPv4 validation for Inverter IP Address.
+- Adds GivEnergy-style serial validation while allowing compatible alphanumeric serials.
+- Adds HH:MM validation for Off-Peak Start and Off-Peak End.
+- Adds runtime setup warnings for missing/invalid serial, inverter IP, time format, or appliance MQTT port mismatch.
+- Documents the `1883` to `1884` MQTT appliance port change and the upgrade requirement to populate Inverter IP Address.
+- Keeps native Homebridge config UI to avoid the custom UI modal endless-scroll issue.
 
 ## 3.4.0
 
@@ -58,4 +105,3 @@
 - Added truth-based manual tile state from live inverter schedule telemetry where available.
 - Simplified Homebridge configuration for normal users and moved local connection/tuning settings into Advanced sections.
 - Removed unused Battery Size, Low Battery Threshold, and Maximum Battery Charge Power settings from earlier experiments.
-
