@@ -1,7 +1,7 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.5.1-beta",
-  "description": "GivHome brings Intelligent Octopus Go smart charging to GivEnergy batteries in Apple Home using local GivTCP control",
+  "version": "3.5.1-beta.2",
+  "description": "GivHome brings local GivEnergy battery control into Apple Home with Intelligent Octopus Go automation, manual charge/export controls and Eve energy history",
   "main": "index.js",
   "license": "Apache-2.0",
   "keywords": [
@@ -10,15 +10,29 @@
     "givenergy",
     "givtcp",
     "mqtt",
-    "octopus"
+    "octopus",
+    "apple-home",
+    "homekit",
+    "intelligent-octopus-go",
+    "eve",
+    "energy-history",
+    "local-control"
   ],
   "engines": {
-    "homebridge": "^1.8.0 || ^2.0.0-beta.0",
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0 || ^2.0.0",
     "node": "^18.20.4 || ^20.15.1 || ^22 || ^24"
   },
   "dependencies": {
     "mqtt": "^5.10.4",
     "fakegato-history": "^0.6.5"
+  },
+  "homepage": "https://givhome.kernowekconsulting.co.uk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JayC68/homebridge-giv-iog-local.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JayC68/homebridge-giv-iog-local/issues"
   },
   "displayName": "GivHome",
   "files": [

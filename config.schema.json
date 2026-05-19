@@ -1,5 +1,5 @@
 {
-  "pluginAlias": "GivHome",
+  "pluginAlias": "GivEnergy Local + Intelligent Octopus Go",
   "pluginType": "platform",
   "singular": true,
   "headerDisplay": "GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery \u2014 automatically, locally, and beautifully inside Apple Home.",
@@ -182,13 +182,13 @@
         "title": "Extra Indicators in Apple Home",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Adds extra informational Lights to Apple Home for states such as Cheap Rate, Grace Period, Battery Charging, Battery Discharging, Grid Import, Grid Export, and Online."
+        "description": "Optional. Adds extra informational Lights to Apple Home for states such as Cheap Rate, Grace Period, Battery Charging, Battery Discharging, Grid Import, Grid Export, and Online. These are indicators, not controls."
       },
       "enableEveEnergyHistory": {
         "title": "Energy History in the Eve App",
         "type": "boolean",
         "default": false,
-        "description": "Optional beta. Creates local energy history accessories for Solar Generated, Grid Import, and Grid Export so the Eve app can show long-term energy trends. The Eve app is available from the App Store for iPhone, iPad, and Mac. Leave off unless you want to test or use Eve energy graphs."
+        "description": "Optional beta. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
       }
     },
     "required": [
@@ -227,7 +227,7 @@
       "title": "Personal Preference Settings",
       "expandable": true,
       "expanded": false,
-      "description": "Optional settings for extra Apple Home tiles, Eve energy history, manual tile tolerance, and observation thresholds.",
+      "description": "Optional settings for extra Apple Home tiles, Eve energy history, manual tile tolerance, and observation thresholds. Smart Window shows as \u2018On\u2019 when Intelligent Octopus smart charging is active. For cleaner Apple Home use, set non-daily GivHome tiles to Exclude from Home View.",
       "items": [
         "exposeAdvancedTelemetry",
         "enableEveEnergyHistory",
