@@ -12,8 +12,8 @@ try {
 }
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
-const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.4.6-beta-3b.14';
+const PLATFORM_NAME = 'GivHome';
+const BUILD_VERSION = '3.4.6-beta-3b.13';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -476,22 +476,19 @@ class GivTcpMqttPlatform {
   getEveEnergyHistoryMeta(kind) {
     const meta = {
       solarEnergyHistory: {
-        displayName: 'Eve Solar History',
-        legacyDisplayNames: [`${this.platformName} Solar Generated`],
+        displayName: `${this.platformName} Solar Generated`,
         valueKey: 'pvPower',
-        description: 'Eve solar history',
+        description: 'PV generation history',
       },
       gridImportEnergyHistory: {
-        displayName: 'Eve Import History',
-        legacyDisplayNames: [`${this.platformName} Grid Import History`],
+        displayName: `${this.platformName} Grid Import History`,
         valueKey: 'importPower',
-        description: 'Eve import history',
+        description: 'Grid import history',
       },
       gridExportEnergyHistory: {
-        displayName: 'Eve Export History',
-        legacyDisplayNames: [`${this.platformName} Grid Export History`],
+        displayName: `${this.platformName} Grid Export History`,
         valueKey: 'exportPower',
-        description: 'Eve export history',
+        description: 'Grid export history',
       },
     };
 
@@ -783,8 +780,7 @@ class GivTcpMqttPlatform {
         continue;
       }
 
-      const displayNames = [meta.displayName, ...(meta.legacyDisplayNames || [])];
-      const candidates = files.filter((file) => displayNames.some((name) => file.includes(name)) && file.endsWith('_persist.json'));
+      const candidates = files.filter((file) => file.includes(meta.displayName) && file.endsWith('_persist.json'));
       for (const file of candidates) {
         const candidatePath = path.join(storagePath, file);
         try {
@@ -846,14 +842,12 @@ class GivTcpMqttPlatform {
 
     this.prepareEveEnergyOutletService(service);
 
-    // Eve History accessories are data collectors, not live controls.
-    // Keep their HomeKit outlet state inactive while still publishing Eve Energy measurements/history.
     service.getCharacteristic(this.Characteristic.On)
-      .onGet(() => false)
+      .onGet(() => this.getEveEnergyHistoryPower(kind) > 0)
       .onSet(async () => {});
 
     service.getCharacteristic(this.Characteristic.OutletInUse)
-      .onGet(() => false);
+      .onGet(() => this.getEveEnergyHistoryPower(kind) > 0);
 
     this.ensureEveEnergyCharacteristics(service, kind);
     this.seedEveEnergyCharacteristics(service, kind);
@@ -1013,9 +1007,9 @@ class GivTcpMqttPlatform {
       }
 
       const power = this.getEveEnergyHistoryPower(kind, snap);
-      // Suppress active-state flicker for Eve History accessories. Graphs still receive real values below.
-      service.updateCharacteristic(this.Characteristic.On, false);
-      service.updateCharacteristic(this.Characteristic.OutletInUse, false);
+      const active = power > 0;
+      service.updateCharacteristic(this.Characteristic.On, active);
+      service.updateCharacteristic(this.Characteristic.OutletInUse, active);
       if (this.EveEnergyCharacteristic) {
         const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
         service.updateCharacteristic(Consumption, Math.max(0, Number(power.toFixed ? power.toFixed(1) : power)));

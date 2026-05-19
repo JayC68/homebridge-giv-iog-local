@@ -2,7 +2,7 @@
   "pluginAlias": "GivHome",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery — automatically, locally, and beautifully inside Apple Home.",
+  "headerDisplay": "GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery \u2014 automatically, locally, and beautifully inside Apple Home.",
   "schema": {
     "type": "object",
     "properties": {
@@ -10,7 +10,7 @@
         "title": "Battery Serial Number",
         "type": "string",
         "default": "",
-        "description": "Required. Find this in the GivEnergy app: Settings → Local Monitoring → Scan for your inverter. Example: CH2344G083.",
+        "description": "Required. Find this in the GivEnergy app: Settings \u2192 Local Monitoring \u2192 Scan for your inverter. Example: CH2344G083.",
         "minLength": 6,
         "maxLength": 20,
         "pattern": "^([A-Z]{2}\\d{4}[A-Z]\\d{3}|[A-Z0-9]{6,20})$"
@@ -99,7 +99,7 @@
         "title": "GivTCP Local Address",
         "type": "string",
         "default": "http://127.0.0.1:6345",
-        "description": "Advanced. Local GivTCP REST control endpoint. Leave unchanged unless GivTCP is running on another device. If you need to locate your inverter, use the GivEnergy app: Settings → Local Monitoring → Scan for your inverter."
+        "description": "Advanced. Local GivTCP REST control endpoint. Leave unchanged unless GivTCP is running on another device. If you need to locate your inverter, use the GivEnergy app: Settings \u2192 Local Monitoring \u2192 Scan for your inverter."
       },
       "octopusPollSeconds": {
         "title": "Octopus Polling Seconds",
@@ -144,7 +144,7 @@
         "type": "string",
         "default": "",
         "pattern": "^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$",
-        "description": "Required for new appliance setup. Find this in the same GivEnergy app scan result as the Battery Serial Number: Settings → Local Monitoring → Scan for your inverter. Example: 192.168.0.223."
+        "description": "Required for new appliance setup. Find this in the same GivEnergy app scan result as the Battery Serial Number: Settings \u2192 Local Monitoring \u2192 Scan for your inverter. Example: 192.168.0.223."
       },
       "chargePowerActiveThreshold": {
         "title": "Battery Charging Threshold (Watts)",
@@ -182,13 +182,13 @@
         "title": "Extra Indicators in Apple Home",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Adds extra informational Lights to Apple Home for states such as Cheap Rate, Grace Period, Battery Charging, Battery Discharging, Grid Import, Grid Export, and Online. These are indicators, not controls."
+        "description": "Optional. Adds extra informational Lights to Apple Home for states such as Cheap Rate, Grace Period, Battery Charging, Battery Discharging, Grid Import, Grid Export, and Online."
       },
       "enableEveEnergyHistory": {
         "title": "Energy History in the Eve App",
         "type": "boolean",
         "default": false,
-        "description": "Optional beta. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
+        "description": "Optional beta. Creates local energy history accessories for Solar Generated, Grid Import, and Grid Export so the Eve app can show long-term energy trends. The Eve app is available from the App Store for iPhone, iPad, and Mac. Leave off unless you want to test or use Eve energy graphs."
       }
     },
     "required": [
@@ -200,7 +200,7 @@
     {
       "type": "fieldset",
       "title": "Required Setup",
-      "description": "Most users only need these details. The Battery Serial Number and Inverter IP Address are both shown in the GivEnergy app under Settings → Local Monitoring → Scan for your inverter.",
+      "description": "Most users only need these details. The Battery Serial Number and Inverter IP Address are both shown in the GivEnergy app under Settings \u2192 Local Monitoring \u2192 Scan for your inverter.",
       "items": [
         "inverterSerial",
         "inverterIp",
@@ -227,7 +227,7 @@
       "title": "Personal Preference Settings",
       "expandable": true,
       "expanded": false,
-      "description": "Optional settings for extra Apple Home tiles, Eve energy history, manual tile tolerance, and observation thresholds. Smart Window shows as ‘On’ when Intelligent Octopus smart charging is active. For cleaner Apple Home use, set non-daily GivHome tiles to Exclude from Home View.",
+      "description": "Optional settings for extra Apple Home tiles, Eve energy history, manual tile tolerance, and observation thresholds.",
       "items": [
         "exposeAdvancedTelemetry",
         "enableEveEnergyHistory",
