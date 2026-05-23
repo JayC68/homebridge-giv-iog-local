@@ -12,8 +12,8 @@ try {
 }
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
-const PLATFORM_NAME = 'GivHome';
-const BUILD_VERSION = '3.4.6-beta-3b.13';
+const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
+const BUILD_VERSION = '3.6.0-beta.3';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -99,6 +99,29 @@ class GivTcpMqttPlatform {
     this.staleSeconds = Number.isFinite(this.config.staleSeconds) ? this.config.staleSeconds : 180;
 
     this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
+
+    this.enableExcessEnergyExport = Boolean(this.config.enableExcessEnergyExport);
+    this.excessExportBatteryCapacityKwh = Number.isFinite(this.config.batteryCapacityKwh) && this.config.batteryCapacityKwh > 0
+      ? this.config.batteryCapacityKwh
+      : null;
+    this.excessExportStart = this.config.excessExportStartTime || this.config.excessExportStart || '19:30';
+    this.excessExportReserveSoc = Number.isFinite(this.config.excessExportReserveSoc)
+      ? this.clamp(this.config.excessExportReserveSoc, 5, 95)
+      : 20;
+    this.excessExportDischargeKw = Number.isFinite(this.config.maxExportPowerKw) && this.config.maxExportPowerKw > 0
+      ? this.config.maxExportPowerKw
+      : (Number.isFinite(this.config.excessExportDischargeKw) && this.config.excessExportDischargeKw > 0 ? this.config.excessExportDischargeKw : 5);
+    this.excessExportSlotMinutes = Number.isFinite(this.config.excessExportSlotMinutes)
+      ? this.clamp(Math.round(this.config.excessExportSlotMinutes), 15, 60)
+      : 30;
+    this.excessExportTriggerMarginSoc = Number.isFinite(this.config.excessExportMarginSoc)
+      ? this.clamp(this.config.excessExportMarginSoc, 0, 20)
+      : (Number.isFinite(this.config.excessExportTriggerMarginSoc) ? this.clamp(this.config.excessExportTriggerMarginSoc, 0, 20) : 2);
+    this.serveOvernightLoadFromBattery = Boolean(this.config.serveOvernightLoadFromBattery);
+    this.excessEnergyExportActive = false;
+    this.lastExcessExportDecisionSignature = '';
+    this.lastExcessExportDecisionLogMs = 0;
+
     this.eveEnergyHistoryServices = new Map();
     this.lastEveEnergyHistoryEntryMs = 0;
     this.eveEnergyHistorySampleMinutes = 5;
@@ -136,6 +159,16 @@ class GivTcpMqttPlatform {
 
     this.lastAutomationSignature = '';
     this.lastStatusSignature = '';
+
+    if (this.enableExcessEnergyExport) {
+      if (this.excessExportBatteryCapacityKwh) {
+        this.log.info(`Excess Energy Export enabled | strategy=evening-sell-off | start=${this.excessExportStart} | cheapStart=${this.cheapStart} | reserve=${this.excessExportReserveSoc}% | battery=${this.excessExportBatteryCapacityKwh}kWh | discharge=${this.excessExportDischargeKw}kW | slot=${this.excessExportSlotMinutes}m | serveOvernightLoadFromBattery=${this.serveOvernightLoadFromBattery}`);
+      } else {
+        this.log.warn('Excess Energy Export configured but Battery Capacity is missing or invalid; automation will stay idle.');
+      }
+    } else {
+      this.log.info('Excess Energy Export disabled');
+    }
 
     this.coreObservationKinds = [
       'smartWindow',
@@ -476,19 +509,22 @@ class GivTcpMqttPlatform {
   getEveEnergyHistoryMeta(kind) {
     const meta = {
       solarEnergyHistory: {
-        displayName: `${this.platformName} Solar Generated`,
+        displayName: 'Eve Solar History',
+        legacyDisplayNames: [`${this.platformName} Solar Generated`],
         valueKey: 'pvPower',
-        description: 'PV generation history',
+        description: 'Eve solar history',
       },
       gridImportEnergyHistory: {
-        displayName: `${this.platformName} Grid Import History`,
+        displayName: 'Eve Import History',
+        legacyDisplayNames: [`${this.platformName} Grid Import History`],
         valueKey: 'importPower',
-        description: 'Grid import history',
+        description: 'Eve import history',
       },
       gridExportEnergyHistory: {
-        displayName: `${this.platformName} Grid Export History`,
+        displayName: 'Eve Export History',
+        legacyDisplayNames: [`${this.platformName} Grid Export History`],
         valueKey: 'exportPower',
-        description: 'Grid export history',
+        description: 'Eve export history',
       },
     };
 
@@ -780,7 +816,8 @@ class GivTcpMqttPlatform {
         continue;
       }
 
-      const candidates = files.filter((file) => file.includes(meta.displayName) && file.endsWith('_persist.json'));
+      const displayNames = [meta.displayName, ...(meta.legacyDisplayNames || [])];
+      const candidates = files.filter((file) => displayNames.some((name) => file.includes(name)) && file.endsWith('_persist.json'));
       for (const file of candidates) {
         const candidatePath = path.join(storagePath, file);
         try {
@@ -842,12 +879,14 @@ class GivTcpMqttPlatform {
 
     this.prepareEveEnergyOutletService(service);
 
+    // Eve History accessories are data collectors, not live controls.
+    // Keep their HomeKit outlet state inactive while still publishing Eve Energy measurements/history.
     service.getCharacteristic(this.Characteristic.On)
-      .onGet(() => this.getEveEnergyHistoryPower(kind) > 0)
+      .onGet(() => false)
       .onSet(async () => {});
 
     service.getCharacteristic(this.Characteristic.OutletInUse)
-      .onGet(() => this.getEveEnergyHistoryPower(kind) > 0);
+      .onGet(() => false);
 
     this.ensureEveEnergyCharacteristics(service, kind);
     this.seedEveEnergyCharacteristics(service, kind);
@@ -1007,9 +1046,9 @@ class GivTcpMqttPlatform {
       }
 
       const power = this.getEveEnergyHistoryPower(kind, snap);
-      const active = power > 0;
-      service.updateCharacteristic(this.Characteristic.On, active);
-      service.updateCharacteristic(this.Characteristic.OutletInUse, active);
+      // Suppress active-state flicker for Eve History accessories. Graphs still receive real values below.
+      service.updateCharacteristic(this.Characteristic.On, false);
+      service.updateCharacteristic(this.Characteristic.OutletInUse, false);
       if (this.EveEnergyCharacteristic) {
         const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
         service.updateCharacteristic(Consumption, Math.max(0, Number(power.toFixed ? power.toFixed(1) : power)));
@@ -1994,6 +2033,129 @@ class GivTcpMqttPlatform {
     return this.isManualFamilyActive('forceCharge') || this.isManualFamilyActive('forceExport');
   }
 
+  getNextClockTime(timeText, now = new Date()) {
+    const minutes = this.parseTimeToMinutes(timeText);
+    if (minutes === null) {
+      return null;
+    }
+
+    const d = new Date(now);
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    if (d <= now) {
+      d.setDate(d.getDate() + 1);
+    }
+    return d;
+  }
+
+  getSameDayClockTime(timeText, now = new Date()) {
+    const minutes = this.parseTimeToMinutes(timeText);
+    if (minutes === null) {
+      return null;
+    }
+
+    const d = new Date(now);
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    return d;
+  }
+
+  logExcessExportDecision(message, force = false) {
+    const now = Date.now();
+    if (!force && message === this.lastExcessExportDecisionSignature && (now - this.lastExcessExportDecisionLogMs) < 10 * 60 * 1000) {
+      return;
+    }
+
+    this.lastExcessExportDecisionSignature = message;
+    this.lastExcessExportDecisionLogMs = now;
+    this.log.info(`[Excess Energy Export] ${message}`);
+  }
+
+  evaluateExcessEnergyExport(snap, now = new Date()) {
+    if (!this.enableExcessEnergyExport) {
+      return null;
+    }
+
+    if (!this.excessExportBatteryCapacityKwh) {
+      this.logExcessExportDecision('idle: Battery Capacity is missing or invalid');
+      return null;
+    }
+
+    if (!snap.online) {
+      this.logExcessExportDecision('idle: inverter telemetry is offline/stale');
+      return null;
+    }
+
+    if (!Number.isFinite(snap.soc)) {
+      this.logExcessExportDecision('idle: SOC unavailable');
+      return null;
+    }
+
+    if (snap.cheapActive || snap.smartActive || snap.graceActive) {
+      this.logExcessExportDecision(`idle: protected Octopus window active cheap=${snap.cheapActive} smart=${snap.smartActive} grace=${snap.graceActive}`);
+      return null;
+    }
+
+    if (snap.charging || snap.chargePower > this.chargePowerActiveThreshold) {
+      this.logExcessExportDecision(`idle: battery is currently charging (${Math.round(snap.chargePower)}W)`);
+      return null;
+    }
+
+    const cheapStart = this.getNextClockTime(this.cheapStart, now);
+    const eveningStart = this.getSameDayClockTime(this.excessExportStart, now);
+    if (!cheapStart || !eveningStart) {
+      this.logExcessExportDecision('idle: invalid Excess Energy Export time configuration');
+      return null;
+    }
+
+    // If cheapStart rolled to tomorrow but the evening start has not happened today yet, use today's cheapStart.
+    const todayCheapStart = this.getSameDayClockTime(this.cheapStart, now);
+    const effectiveCheapStart = todayCheapStart && todayCheapStart > now ? todayCheapStart : cheapStart;
+
+    if (now < eveningStart || now >= effectiveCheapStart) {
+      this.logExcessExportDecision(`idle: outside evening sell-off window ${this.excessExportStart}-${this.cheapStart}`);
+      return null;
+    }
+
+    const minutesUntilCheap = Math.max(0, Math.floor((effectiveCheapStart.getTime() - now.getTime()) / 60000));
+    if (minutesUntilCheap < 5) {
+      this.logExcessExportDecision('idle: too close to cheap window start');
+      return null;
+    }
+
+    const slotMinutes = Math.min(this.excessExportSlotMinutes, minutesUntilCheap);
+    const kwhPerSlot = this.excessExportDischargeKw * (this.excessExportSlotMinutes / 60);
+    const socDropPerSlot = (kwhPerSlot / this.excessExportBatteryCapacityKwh) * 100;
+    const slotsRemaining = Math.max(1, Math.ceil(minutesUntilCheap / this.excessExportSlotMinutes));
+    const minSocTarget = this.excessExportReserveSoc + ((slotsRemaining - 1) * socDropPerSlot);
+    const triggerSoc = minSocTarget + this.excessExportTriggerMarginSoc;
+
+    if (minSocTarget >= 100) {
+      this.logExcessExportDecision(`idle: ladder reserve above 100% this early in window target=${minSocTarget.toFixed(1)}% minsUntilCheap=${minutesUntilCheap}`);
+      return null;
+    }
+
+    if (snap.soc <= triggerSoc) {
+      this.logExcessExportDecision(`idle: SOC ${snap.soc.toFixed(1)}% <= trigger ${triggerSoc.toFixed(1)}% (reserve ladder ${minSocTarget.toFixed(1)}%)`);
+      return null;
+    }
+
+    const end = new Date(now.getTime() + (slotMinutes * 60000));
+    if (end > effectiveCheapStart) {
+      end.setTime(effectiveCheapStart.getTime());
+    }
+
+    return {
+      mode: 'excess_export',
+      start: now,
+      end,
+      forceMinutes: slotMinutes,
+      minSocTarget,
+      triggerSoc,
+      socDropPerSlot,
+      slotsRemaining,
+      minutesUntilCheap,
+    };
+  }
+
   applyAutomation() {
     if (!this.client || !this.client.connected || !this.activeSerial) {
       return;
@@ -2015,15 +2177,23 @@ class GivTcpMqttPlatform {
     if (snap.online && snap.cheapActive && Number.isFinite(snap.soc) && snap.soc < this.targetSoc && snap.cheapWindowEnd) {
       const remainingMinutes = Math.max(1, Math.ceil((snap.cheapWindowEnd.getTime() - Date.now()) / 60000));
 
-      let chargePct = 100;
-      let smooth = false;
-
       desired = {
         mode: 'charge',
-        chargePct,
+        chargePct: 100,
         forceMinutes: remainingMinutes,
-        smooth,
+        smooth: false,
       };
+    } else {
+      const excessExport = this.evaluateExcessEnergyExport(snap);
+      if (excessExport) {
+        desired = {
+          mode: 'excess_export',
+          chargePct: 100,
+          forceMinutes: excessExport.forceMinutes,
+          smooth: false,
+          excessExport,
+        };
+      }
     }
 
     const bucketedMinutes = desired.forceMinutes > 0 ? Math.ceil(desired.forceMinutes / 5) * 5 : 0;
@@ -2032,6 +2202,9 @@ class GivTcpMqttPlatform {
       chargePct: desired.chargePct,
       forceMinutes: bucketedMinutes,
       smooth: desired.smooth,
+      excessStart: desired.excessExport ? this.formatSlotTime(desired.excessExport.start) : null,
+      excessEnd: desired.excessExport ? this.formatSlotTime(desired.excessExport.end) : null,
+      excessReserve: desired.excessExport ? Math.round(desired.excessExport.minSocTarget) : null,
     });
 
     if (signature === this.lastAutomationSignature) {
@@ -2042,11 +2215,30 @@ class GivTcpMqttPlatform {
 
     if (desired.mode === 'charge') {
       const end = new Date(Date.now() + (Math.max(1, bucketedMinutes) * 60000));
-      this.enqueueAutomationSequence('Automation CHARGE', this.buildTimedSlotSteps('Automation CHARGE', 'charge', new Date(), end, this.targetSoc));
+      const steps = [];
+      if (this.excessEnergyExportActive) {
+        steps.push(...this.buildNeutralizeSlotSteps('Automation CHARGE', 'discharge'));
+        this.excessEnergyExportActive = false;
+      }
+      steps.push(...this.buildTimedSlotSteps('Automation CHARGE', 'charge', new Date(), end, this.targetSoc));
+      this.enqueueAutomationSequence('Automation CHARGE', steps);
       this.log.info(`Automation -> CHARGE | pct=${desired.chargePct} | mins=${bucketedMinutes} | smooth=${desired.smooth}`);
-    } else {
-      this.enqueueAutomationSequence('Automation ECO', this.buildNeutralizeSlotSteps('Automation ECO', 'charge'));
-      this.log.info('Automation -> ECO');
+      return;
     }
-  }
-}
+
+    if (desired.mode === 'excess_export') {
+      const info = desired.excessExport;
+      const steps = this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end);
+      this.excessEnergyExportActive = true;
+      this.enqueueAutomationSequence('Automation EXCESS EXPORT', steps);
+      this.log.info(`Automation -> EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
+      return;
+    }
+
+    const steps = this.excessEnergyExportActive
+      ? this.buildNeutralizeSlotSteps('Automation ECO', 'discharge')
+      : this.buildNeutralizeSlotSteps('Automation ECO', 'charge');
+    this.excessEnergyExportActive = false;
+    this.enqueueAutomationSequence('Automation ECO', steps);
+    this.log.info('Automation -> ECO');
+  }}

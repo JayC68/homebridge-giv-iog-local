@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.6.0-beta.4
+
+- Exposes all Excess Energy Export evening sell-off controls in the Homebridge config UI.
+- Renames beta config keys to clearer user-facing names: Evening Export Start Time, Max Export Power, and SOC Safety Margin.
+- Keeps backwards tolerance for beta.3 config keys.
+- No intended change to existing IOG, Eve History, platform identity, or accessory identity behaviour.
+
+## 3.6.0-beta.3
+
+- Adds the first local Excess Energy Export evening sell-off automation.
+- Uses a MrMessy/WonderWatt-style SOC reserve ladder to export unused battery energy after normal evening household demand and before the cheap overnight window.
+- Keeps the feature disabled by default and opt-in through the Homebridge UI.
+- Adds configurable battery capacity, evening start time, reserve SOC, discharge rate, slot size and trigger margin.
+- Keeps existing Intelligent Octopus Go charging, manual tiles, Eve history and HomeKit accessory identity unchanged.
+- Does not attempt unsupported local battery-pause behaviour; daytime PV continues to follow the inverter's native charge-first/export-overflow behaviour.
+
 ## 3.5.1-beta.2
 
 - Verification metadata test build.

@@ -189,6 +189,64 @@
         "type": "boolean",
         "default": false,
         "description": "Optional beta. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
+      },
+      "enableExcessEnergyExport": {
+        "title": "Excess Energy Export",
+        "type": "boolean",
+        "default": false,
+        "description": "Optional beta. Enables local evening sell-off of unused battery energy before the cheap overnight window. Disabled by default. Concept inspired by MrMessy's WonderWatt discharge ladder."
+      },
+      "batteryCapacityKwh": {
+        "title": "Battery Capacity (kWh)",
+        "type": "number",
+        "default": 13.5,
+        "minimum": 1,
+        "maximum": 40,
+        "description": "Nominal battery capacity used to calculate the evening export reserve ladder."
+      },
+      "excessExportStartTime": {
+        "title": "Evening Export Start Time",
+        "type": "string",
+        "default": "19:30",
+        "description": "Earliest time GivHome may start evening sell-off. Keep this after normal cooking/hot-water evening usage, for example 19:30 or 20:00."
+      },
+      "excessExportReserveSoc": {
+        "title": "Excess Export Reserve SOC (%)",
+        "type": "number",
+        "default": 20,
+        "minimum": 5,
+        "maximum": 95,
+        "description": "Minimum SOC to retain at the cheap-rate start. This protects evening TV/lights and leaves a safety reserve."
+      },
+      "maxExportPowerKw": {
+        "title": "Max Export Power (kW)",
+        "type": "number",
+        "default": 5,
+        "minimum": 0.5,
+        "maximum": 12,
+        "description": "Expected discharge/export rate used for the MrMessy-style SOC ladder calculation."
+      },
+      "excessExportSlotMinutes": {
+        "title": "Excess Export Slot Size (minutes)",
+        "type": "number",
+        "default": 30,
+        "minimum": 15,
+        "maximum": 60,
+        "description": "How long each automated evening export slot should run before GivHome re-evaluates SOC and household conditions."
+      },
+      "excessExportMarginSoc": {
+        "title": "SOC Safety Margin (%)",
+        "type": "number",
+        "default": 2,
+        "minimum": 0,
+        "maximum": 20,
+        "description": "Extra SOC above the calculated reserve ladder required before export starts. Higher values are more conservative."
+      },
+      "serveOvernightLoadFromBattery": {
+        "title": "Serve Overnight Load From Battery",
+        "type": "boolean",
+        "default": false,
+        "description": "Advanced beta option for future behaviour. Default off assumes overnight load after cheap-rate start is served by cheap grid import, not preserved battery."
       }
     },
     "required": [
@@ -220,6 +278,23 @@
         "cheapStart",
         "cheapEnd",
         "graceMinutes"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Excess Energy Export (Beta)",
+      "expandable": true,
+      "expanded": false,
+      "description": "Optional local evening sell-off automation. Uses a MrMessy-style SOC ladder to export unused cheap overnight energy after normal evening use, while retaining a reserve until the next cheap window. Disabled by default.",
+      "items": [
+        "enableExcessEnergyExport",
+        "batteryCapacityKwh",
+        "excessExportStartTime",
+        "excessExportReserveSoc",
+        "maxExportPowerKw",
+        "excessExportSlotMinutes",
+        "excessExportMarginSoc",
+        "serveOvernightLoadFromBattery"
       ]
     },
     {
