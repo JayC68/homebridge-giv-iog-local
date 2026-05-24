@@ -13,9 +13,9 @@
       --text: #1f2633;
       --muted: #5f6877;
       --border: #dfe4ec;
-      --primary: #4f46e5;
-      --primary-dark: #352a83;
-      --accent: #f2a65a;
+      --primary: #2D5C48;
+      --primary-dark: #1F4636;
+      --accent: #B8E640;
       --success: #3bb273;
       --danger: #b84a4a;
       --radius: 18px;
@@ -36,8 +36,8 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(79, 70, 229, 0.10), transparent 34rem),
-        radial-gradient(circle at top right, rgba(242, 166, 90, 0.14), transparent 28rem),
+        radial-gradient(circle at top left, rgba(45, 92, 72, 0.10), transparent 34rem),
+        radial-gradient(circle at top right, rgba(184, 230, 64, 0.16), transparent 28rem),
         var(--bg);
       line-height: 1.5;
     }
@@ -50,7 +50,7 @@
 
     .hero { padding: 16px 4px 24px; text-align: center; }
     .brand { display: flex; justify-content: center; margin-bottom: 14px; }
-    .brand img { width: 62px; height: 62px; border-radius: 18px; box-shadow: 0 10px 24px rgba(79, 70, 229, 0.24); display: block; }
+    .brand img { width: 62px; height: 62px; border-radius: 18px; box-shadow: 0 10px 24px rgba(45, 92, 72, 0.24); display: block; }
 
     .eyebrow {
       display: inline-flex;
@@ -58,7 +58,7 @@
       gap: 8px;
       margin-bottom: 14px;
       padding: 7px 12px;
-      border: 1px solid rgba(79, 70, 229, 0.16);
+      border: 1px solid rgba(45, 92, 72, 0.18);
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.76);
       color: var(--primary-dark);
@@ -79,7 +79,7 @@
     .steps { display: grid; gap: 0; }
     .step { display: grid; grid-template-columns: 42px 1fr; gap: 14px; padding: 22px; border-bottom: 1px solid var(--border); }
     .step:last-child { border-bottom: none; }
-    .step-number { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: rgba(79,70,229,0.10); color: var(--primary-dark); font-weight: 800; }
+    .step-number { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: rgba(45,92,72,0.10); color: var(--primary-dark); font-weight: 800; }
     .step h3 { margin: 2px 0 8px; font-size: 1.08rem; letter-spacing: -0.01em; }
     .step p, .step li { color: var(--muted); }
     .step p { margin: 0 0 10px; }
@@ -95,15 +95,15 @@
     label { display: block; margin-bottom: 7px; font-weight: 750; color: var(--text); }
     .hint { margin-top: 7px; color: var(--muted); font-size: 0.9rem; }
     input { width: 100%; min-height: 48px; padding: 12px 13px; border: 1px solid #cfd6e2; border-radius: 12px; background: #fff; color: var(--text); font: inherit; outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-    input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(79,70,229,0.13); }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(45,92,72,0.13); }
 
     .skip-note, .maintenance-note, .save-note, .status-note {
       margin: 14px 0 0;
       padding: 12px 14px;
       border-left: 4px solid var(--accent);
       border-radius: 12px;
-      background: rgba(242,166,90,0.12);
-      color: #6f4a1f;
+      background: rgba(184,230,64,0.14);
+      color: #36573b;
     }
     .save-note, .status-note.success { border-left-color: var(--success); background: rgba(59,178,115,0.10); color: #245f42; }
     .status-note.error { border-left-color: var(--danger); background: rgba(184,74,74,0.10); color: #7a3030; }
@@ -128,7 +128,7 @@
       font: inherit;
       font-weight: 800;
       cursor: pointer;
-      box-shadow: 0 12px 28px rgba(79,70,229,0.22);
+      box-shadow: 0 12px 28px rgba(45,92,72,0.22);
     }
     .save-button:hover { background: var(--primary-dark); }
     .save-button:disabled { opacity: 0.72; cursor: wait; }
@@ -149,13 +149,13 @@
       <div class="brand"><img src="logo-512.png" alt="GivHome logo"></div>
       <div class="eyebrow"><span class="dot" aria-hidden="true"></span> GivHome setup</div>
       <h1 id="page-title">GivHome</h1>
-      <p class="tagline">Intelligent Octopus Go smart charging for your GivEnergy battery — automatically, locally, and beautifully inside Apple Home.</p>
+      <p class="tagline">Local GivEnergy battery control, Intelligent Octopus Go automation and Apple Home visibility — automatically, locally and clearly.</p>
     </section>
 
     <section class="card" aria-labelledby="setup-title">
       <div class="card-header">
         <h2 id="setup-title">Welcome</h2>
-        <p>Set up local battery control for Apple Home and Intelligent Octopus Go.</p>
+        <p>Set up local battery control for Apple Home, Intelligent Octopus Go and optional Excess Energy Export.</p>
       </div>
 
       <div class="steps">
@@ -195,12 +195,19 @@
         </div></article>
 
         <article class="step"><div class="step-number">5</div><div>
+          <h3>Optional: Excess Energy Export</h3>
+          <p>After setup, you can enable Excess Energy Export from the normal GivHome plugin config if you want GivHome to sell surplus battery energy later in the evening while keeping a configurable reserve before cheap charging resumes.</p>
+          <div class="path">Plugins → GivHome → Plugin Config → Excess Energy Export</div>
+          <div class="skip-note">Leave this disabled unless you want automated evening export behaviour. It is opt-in and uses local GivTCP controls only.</div>
+        </div></article>
+
+        <article class="step"><div class="step-number">6</div><div>
           <h3>Save settings</h3>
           <p>Press the <strong>Save settings</strong> button below to complete setup.</p>
           <div class="save-note"><strong>After saving:</strong> GivHome will save your settings into Homebridge. If Homebridge asks to restart, allow it to restart so your Apple Home tiles update.</div>
         </div></article>
 
-        <article class="step"><div class="step-number">6</div><div>
+        <article class="step"><div class="step-number">7</div><div>
           <h3>Occasional maintenance</h3>
           <p>GivHome is designed to run quietly in the background. Occasionally, Homebridge may show updates for the operating system, Node.js or GivHome itself.</p>
           <div class="maintenance-note">Applying updates every few months is recommended and usually takes only a few minutes. GivHome also shows an <strong>Update Available</strong> tile in Apple Home when a newer plugin release is detected on npm.</div>

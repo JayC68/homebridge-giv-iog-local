@@ -312,16 +312,75 @@ GivHome is an independent community project and is not affiliated with:
 
 Use at your own discretion.
 
+## Excess Energy Export
 
-## Excess Energy Export beta
+GivHome 3.6.0 adds optional automated Excess Energy Export.
 
-`3.6.0-beta.3` introduces an optional local Excess Energy Export beta. It is disabled by default. When enabled, GivHome can run an evening sell-off of unused battery energy after normal evening household demand and before the next cheap overnight window.
+It is disabled by default. When enabled, GivHome can export surplus battery energy later in the evening, after normal household demand has usually finished and before the next cheap overnight charging window begins.
 
-The logic uses a MrMessy/WonderWatt-style SOC ladder: the closer the system gets to the cheap-rate start, the lower the required reserve can be. This is intended for Intelligent Octopus Go users with fixed export where the battery was filled cheaply overnight and still has surplus energy after cooking, hot water and normal evening use.
+This is intended for homes where the battery may have been filled cheaply overnight, but still has useful excess energy remaining after cooking, hot water, heating, TV and normal evening use.
 
-GivHome does not currently attempt to pause the battery during the day using local REST controls. Daytime solar therefore continues to follow normal inverter behaviour: house load first, then battery charging, then export overflow once the battery is full. Future builds may probe for additional local REST options if they prove safe.
+### What it does
 
+Excess Energy Export can:
 
-## 3.6.0-beta.4 Excess Energy Export beta
+- start from a configurable evening time, such as 19:30 or 20:00
+- check the current battery state of charge before exporting
+- create a temporary local discharge/export slot through GivTCP
+- export only while the battery remains above the calculated reserve
+- stop before the cheap overnight window begins
+- return the system to normal ECO behaviour afterwards
 
-This beta exposes the full local evening sell-off control set in the Homebridge UI: Enable Excess Energy Export, Battery Capacity, Evening Export Start Time, Max Export Power, Reserve SOC, SOC Safety Margin, Slot Duration, and Serve Overnight Load From Battery. The feature remains opt-in and is designed to use local GivTCP controls only.
+It is designed to replace stacks of manual Apple Home export automations such as separate 20:30, 21:00, 21:30 and 22:00 export rules.
+
+### How the reserve works
+
+The feature uses a MrMessy/WonderWatt-style SOC ladder.
+
+In plain English: the earlier it is in the evening, the more battery GivHome expects you may still need to keep. As the night gets closer to the cheap-rate start, the required reserve can fall because there is less household time left to cover before cheap electricity returns.
+
+The calculation uses:
+
+- Battery Capacity
+- Evening Export Start Time
+- Max Export Power
+- Reserve SOC
+- SOC Safety Margin
+- Slot Duration
+- Off-Peak Start
+
+GivHome re-evaluates the position regularly rather than blindly running a fixed export schedule.
+
+### Safety and behaviour
+
+Excess Energy Export will not run when:
+
+- it is disabled in the Homebridge UI
+- battery SOC is unavailable
+- inverter telemetry is stale/offline
+- an Octopus cheap, smart or grace window is active
+- the battery is currently charging
+- the current time is outside the configured evening export window
+- SOC is already at or below the calculated reserve plus safety margin
+
+The feature uses local GivTCP REST controls only. It does not require the GivEnergy cloud.
+
+### Solar behaviour
+
+GivHome does not currently attempt to pause or freeze the battery during the day using local REST controls.
+
+Daytime solar therefore continues to follow normal inverter behaviour: house load first, then battery charging, then export overflow once the battery is full.
+
+Future builds may probe for additional safe local REST options if they become available.
+
+### Suggested starting point
+
+For many Intelligent Octopus Go users, sensible first settings are:
+
+- Evening Export Start Time: 19:30 or 20:00
+- Reserve SOC: 20%
+- SOC Safety Margin: 2%
+- Slot Duration: 30 minutes
+- Serve Overnight Load From Battery: off
+
+Treat this as a starting point and adjust for your home, battery size and evening use.

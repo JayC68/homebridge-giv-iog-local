@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.6.0
+
+### Added
+
+- Adds Excess Energy Export: optional local evening sell-off automation for unused battery energy before the cheap overnight window.
+- Adds full Homebridge UI controls for Battery Capacity, Evening Export Start Time, Max Export Power, Reserve SOC, SOC Safety Margin, Slot Duration and Serve Overnight Load From Battery.
+- Adds local SOC-ladder behaviour inspired by MrMessy/WonderWatt-style evening export planning.
+
+### Changed
+
+- Promotes the soak-tested v3.6.0-beta.4 Excess Energy Export implementation to the public v3.6.0 release.
+- Keeps Excess Energy Export disabled by default and opt-in through the Homebridge UI.
+- Preserves existing Intelligent Octopus Go charging, manual tiles, Eve History, platform identity and HomeKit accessory identity behaviour.
+
+### Notes
+
+- Excess Energy Export uses local GivTCP REST controls only.
+- No GivEnergy cloud dependency is required for the new automation.
+- Daytime PV behaviour is unchanged; local battery-pause/freeze behaviour is not attempted in this release.
+
 ## 3.6.0-beta.4
 
 - Exposes all Excess Energy Export evening sell-off controls in the Homebridge config UI.

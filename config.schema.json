@@ -188,13 +188,13 @@
         "title": "Energy History in the Eve App",
         "type": "boolean",
         "default": false,
-        "description": "Optional beta. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
+        "description": "Optional. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
       },
       "enableExcessEnergyExport": {
         "title": "Excess Energy Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional beta. Enables local evening sell-off of unused battery energy before the cheap overnight window. Disabled by default. Concept inspired by MrMessy's WonderWatt discharge ladder."
+        "description": "Optional. Enables local evening sell-off of unused battery energy before the cheap overnight window. Disabled by default. Concept inspired by MrMessy's WonderWatt discharge ladder."
       },
       "batteryCapacityKwh": {
         "title": "Battery Capacity (kWh)",
@@ -246,7 +246,7 @@
         "title": "Serve Overnight Load From Battery",
         "type": "boolean",
         "default": false,
-        "description": "Advanced beta option for future behaviour. Default off assumes overnight load after cheap-rate start is served by cheap grid import, not preserved battery."
+        "description": "Advanced option. Default off assumes overnight load after cheap-rate start is served by cheap grid import, not preserved battery."
       }
     },
     "required": [
@@ -282,10 +282,10 @@
     },
     {
       "type": "fieldset",
-      "title": "Excess Energy Export (Beta)",
+      "title": "Excess Energy Export",
       "expandable": true,
       "expanded": false,
-      "description": "Optional local evening sell-off automation. Uses a MrMessy-style SOC ladder to export unused cheap overnight energy after normal evening use, while retaining a reserve until the next cheap window. Disabled by default.",
+      "description": "Optional local evening sell-off automation. Uses a MrMessy-style SOC ladder to export unused cheap overnight energy after normal evening use, while retaining a configurable reserve until the next cheap window. Disabled by default.",
       "items": [
         "enableExcessEnergyExport",
         "batteryCapacityKwh",
