@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.2-beta.2';
+const BUILD_VERSION = '3.6.2-beta.3';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -2379,7 +2379,9 @@ class GivTcpMqttPlatform {
         steps.push(...this.buildNeutralizeSlotSteps('Automation CHARGE', 'discharge'));
         this.excessEnergyExportActive = false;
       }
-      steps.push(this.buildChargeRateStep('Automation CHARGE', desired.smooth ? desired.chargePct : 100));
+      if (desired.smooth) {
+        steps.push(this.buildChargeRateStep('Automation CHARGE', desired.chargePct));
+      }
       steps.push(...this.buildTimedSlotSteps('Automation CHARGE', 'charge', new Date(), end, this.targetSoc));
       this.enqueueAutomationSequence('Automation CHARGE', steps);
 
@@ -2390,7 +2392,7 @@ class GivTcpMqttPlatform {
         this.log.info(`Automation -> CHARGE | pct=${desired.smoothPlan.chargeRate}${kwText} | mins=${bucketedMinutes} | smooth=true | mode=${desired.smoothPlan.careMode} | energyNeeded=${desired.smoothPlan.energyNeededKwh.toFixed(2)}kWh | avgNeeded=${desired.smoothPlan.requiredAverageKw.toFixed(2)}kW | max=${desired.smoothPlan.maxBatteryChargePowerKw}kW | scope=overnight-cheap-slot`);
       } else {
         this.clearSmoothChargeTimers('standard charge');
-        this.log.info(`Automation -> CHARGE | pct=100 | mins=${bucketedMinutes} | smooth=false`);
+        this.log.info(`Automation -> CHARGE | mins=${bucketedMinutes} | smooth=false | chargeRate=untouched`);
       }
       return;
     }

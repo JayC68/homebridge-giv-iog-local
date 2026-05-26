@@ -449,3 +449,15 @@ For many Intelligent Octopus Go users, sensible first settings are:
 - Serve Overnight Load From Battery: off
 
 Treat this as a starting point and adjust for your home, battery size and evening use.
+
+## Battery Care Smooth Charging Beta
+
+GivHome 3.6.2-beta.3 includes a narrow Battery Care Smooth Charging beta for the main overnight cheap slot.
+
+This build deliberately isolates Battery Care from normal charging and Excess Energy Export:
+
+- Battery Care uses local `/setChargeRate` percentage writes only when Battery Care is actively running.
+- Standard automatic charging does not write `/setChargeRate 100`.
+- Excess Energy Export remains slot-based and should behave as it did in v3.6.0.
+
+Maximum Battery Charge Power must be supplied by the user when Battery Care is enabled because 100% charge rate maps to different kW values on different systems.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.2-beta.3
+
+### Fixed
+
+- Fixes a Smooth Charging beta regression where ordinary non-Smooth automatic charging sent `/setChargeRate 100`.
+- Standard charging now leaves the charge-rate actuator untouched, matching the v3.6.0 control model.
+- Excess Energy Export is isolated again from Battery Care charge-rate writes.
+
+### Notes
+
+- Battery Care/Smooth Charging still uses `/setChargeRate` only when Battery Care is actively selected for the overnight cheap slot.
+- Short windows, smart dispatch extensions, manual charging and normal ECO behaviour do not write charge-rate percentages.
+
+
 ## 3.6.2-beta.2
 
 ### Changed
