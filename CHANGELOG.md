@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.6.2-beta.2
+
+### Changed
+
+- Reworks Smooth Charging beta into Battery Care Charging.
+- Limits Smooth/Battery Care Charging to the main overnight cheap-rate slot only. Extra IOG dispatches, manual smart windows, grace periods and short windows continue to use standard charging.
+- Replaces exposed ramp mechanics with a simpler Battery Care Mode: Gentle, Balanced or Strong.
+- Calculates the requested `setChargeRate` percentage from SOC, target SOC, battery capacity, maximum charge power and remaining overnight cheap-window time.
+- Re-evaluates during the overnight window instead of pre-queuing a fixed ramp.
+
+### Notes
+
+- Maximum Battery Charge Power remains user-defined because 100% charge rate represents different kW on different systems.
+- This beta is deliberately narrow so overnight behaviour can be tested safely before expanding Smooth Charging to other smart slots.
+
 ## 3.6.2-beta.1
 
 ### Added

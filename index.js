@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.2-beta.1';
+const BUILD_VERSION = '3.6.2-beta.2';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -71,23 +71,13 @@ class GivTcpMqttPlatform {
     this.maxBatteryChargePowerKw = Number.isFinite(this.config.maxBatteryChargePowerKw) && this.config.maxBatteryChargePowerKw > 0
       ? this.config.maxBatteryChargePowerKw
       : null;
+    this.smoothChargingMode = ['gentle', 'balanced', 'strong'].includes(String(this.config.smoothChargingMode || '').toLowerCase())
+      ? String(this.config.smoothChargingMode).toLowerCase()
+      : 'balanced';
     this.smoothChargingWindowMinimumMinutes = Number.isFinite(this.config.smoothChargingWindowMinimumMinutes)
-      ? this.clamp(Math.round(this.config.smoothChargingWindowMinimumMinutes), 30, 240)
+      ? this.clamp(Math.round(this.config.smoothChargingWindowMinimumMinutes), 60, 360)
       : 90;
-    this.smoothChargingUpdateIntervalMinutes = Number.isFinite(this.config.smoothChargingUpdateIntervalMinutes)
-      ? this.clamp(Math.round(this.config.smoothChargingUpdateIntervalMinutes), 5, 60)
-      : 15;
-    this.smoothChargingMinRatePercent = Number.isFinite(this.config.smoothChargingMinRatePercent)
-      ? this.clamp(Math.round(this.config.smoothChargingMinRatePercent), 1, 100)
-      : 20;
-    this.smoothChargingMaxRatePercent = Number.isFinite(this.config.smoothChargingMaxRatePercent)
-      ? this.clamp(Math.round(this.config.smoothChargingMaxRatePercent), 1, 100)
-      : 100;
-    if (this.smoothChargingMinRatePercent > this.smoothChargingMaxRatePercent) {
-      const previousMin = this.smoothChargingMinRatePercent;
-      this.smoothChargingMinRatePercent = this.smoothChargingMaxRatePercent;
-      this.smoothChargingMaxRatePercent = previousMin;
-    }
+    this.smoothChargingUpdateIntervalMinutes = 15;
     this.smoothChargeTimers = [];
     this.lastSmoothChargePlanSignature = '';
     this.lastSmoothChargeRatePercent = null;
@@ -1476,12 +1466,50 @@ class GivTcpMqttPlatform {
     }
   }
 
-  shouldUseSmoothCharging(snap, remainingMinutes) {
+  getSmoothChargingProfile() {
+    const profiles = {
+      gentle: { reservePercent: 18, minimumRatePercent: 15, maximumRatePercent: 75 },
+      balanced: { reservePercent: 25, minimumRatePercent: 20, maximumRatePercent: 90 },
+      strong: { reservePercent: 35, minimumRatePercent: 25, maximumRatePercent: 100 },
+    };
+    return profiles[this.smoothChargingMode] || profiles.balanced;
+  }
+
+  isMainOvernightCheapWindow(snap, now = new Date()) {
+    if (!snap?.cheapActive || !snap?.cheapWindowEnd) {
+      return false;
+    }
+
+    const fallback = this.getClockWindow(now, this.cheapStart, this.cheapEnd);
+    if (!fallback.active) {
+      return false;
+    }
+
+    const source = String(snap.cheapSource || '');
+    if (source && !source.includes('off-peak-hours')) {
+      return false;
+    }
+
+    // Stay deliberately narrow for this beta: Smooth Charging is only for the
+    // configured overnight cheap block. Extra IOG dispatches, grace periods and
+    // manual smart windows use standard charging until the battery-care model is proven.
+    return true;
+  }
+
+  shouldUseSmoothCharging(snap, remainingMinutes, now = new Date()) {
     if (!this.smoothChargingEnabled) {
       return false;
     }
 
     if (!this.maxBatteryChargePowerKw) {
+      return false;
+    }
+
+    if (!this.excessExportBatteryCapacityKwh) {
+      return false;
+    }
+
+    if (!this.isMainOvernightCheapWindow(snap, now)) {
       return false;
     }
 
@@ -1498,66 +1526,35 @@ class GivTcpMqttPlatform {
 
   buildSmoothChargePlan(snap, now, endDate) {
     const remainingMinutes = Math.max(1, Math.ceil((endDate.getTime() - now.getTime()) / 60000));
-    const interval = Math.max(5, this.smoothChargingUpdateIntervalMinutes);
-    const numberOfUpdates = Math.max(1, Math.ceil(remainingMinutes / interval));
-    const minRate = this.smoothChargingMinRatePercent;
-    const maxRate = this.smoothChargingMaxRatePercent;
-    const updates = [];
-
-    for (let n = 0; n < numberOfUpdates; n += 1) {
-      const progressionFraction = numberOfUpdates === 1 ? 1 : (n / (numberOfUpdates - 1));
-      const targetRate = minRate + (progressionFraction * (maxRate - minRate));
-      const chargeRate = this.clamp(Math.round(targetRate), 0, 100);
-      const executeAt = new Date(now.getTime() + (n * interval * 60000));
-      if (executeAt > endDate) {
-        executeAt.setTime(endDate.getTime());
-      }
-      updates.push({
-        updateNumber: n + 1,
-        numberOfUpdates,
-        chargeRate,
-        executeAt,
-        estimatedKw: this.estimateChargeRateKw(chargeRate),
-      });
-    }
+    const remainingHours = remainingMinutes / 60;
+    const batteryCapacityKwh = this.excessExportBatteryCapacityKwh;
+    const socGap = this.clamp(this.targetSoc - snap.soc, 0, 100);
+    const energyNeededKwh = (socGap / 100) * batteryCapacityKwh;
+    const requiredAverageKw = remainingHours > 0 ? energyNeededKwh / remainingHours : this.maxBatteryChargePowerKw;
+    const profile = this.getSmoothChargingProfile();
+    const rawRatePercent = (requiredAverageKw / this.maxBatteryChargePowerKw) * 100;
+    const requestedRatePercent = this.clamp(
+      Math.ceil(rawRatePercent + profile.reservePercent),
+      profile.minimumRatePercent,
+      profile.maximumRatePercent,
+    );
+    const estimatedKw = this.estimateChargeRateKw(requestedRatePercent);
 
     return {
-      mode: 'smooth',
+      mode: 'smooth-night-cheap-slot',
       remainingMinutes,
-      numberOfUpdates,
-      minRate,
-      maxRate,
+      batteryCapacityKwh,
       maxBatteryChargePowerKw: this.maxBatteryChargePowerKw,
-      updates,
+      soc: snap.soc,
+      targetSoc: this.targetSoc,
+      socGap,
+      energyNeededKwh,
+      requiredAverageKw,
+      chargeRate: requestedRatePercent,
+      estimatedKw,
+      careMode: this.smoothChargingMode,
+      nextRecheckMinutes: this.smoothChargingUpdateIntervalMinutes,
     };
-  }
-
-  scheduleSmoothChargePlan(plan, signature) {
-    if (!plan || !Array.isArray(plan.updates) || plan.updates.length === 0) {
-      return;
-    }
-
-    if (signature && signature === this.lastSmoothChargePlanSignature) {
-      return;
-    }
-
-    this.clearSmoothChargeTimers('new smooth plan');
-    this.lastSmoothChargePlanSignature = signature || '';
-
-    const now = Date.now();
-    for (const update of plan.updates) {
-      const delayMs = Math.max(0, update.executeAt.getTime() - now);
-      const timer = setTimeout(() => {
-        this.enqueueAutomationSequence(
-          `Smooth Charge Rate ${update.updateNumber}/${update.numberOfUpdates}`,
-          [this.buildChargeRateStep('Smooth Charge', update.chargeRate)],
-        );
-        this.lastSmoothChargeRatePercent = update.chargeRate;
-        const kwText = Number.isFinite(update.estimatedKw) ? ` ≈ ${update.estimatedKw.toFixed(2)}kW` : '';
-        this.log.info(`[Smooth Charging] rate update ${update.updateNumber}/${update.numberOfUpdates} -> ${update.chargeRate}%${kwText}`);
-      }, delayMs);
-      this.smoothChargeTimers.push(timer);
-    }
   }
 
   buildNeutralizeSlotSteps(prefix, kind) {
@@ -2327,9 +2324,9 @@ class GivTcpMqttPlatform {
     if (snap.online && snap.cheapActive && Number.isFinite(snap.soc) && snap.soc < this.targetSoc && snap.cheapWindowEnd) {
       const now = new Date();
       const remainingMinutes = Math.max(1, Math.ceil((snap.cheapWindowEnd.getTime() - now.getTime()) / 60000));
-      const smooth = this.shouldUseSmoothCharging(snap, remainingMinutes);
+      const smooth = this.shouldUseSmoothCharging(snap, remainingMinutes, now);
       const smoothPlan = smooth ? this.buildSmoothChargePlan(snap, now, snap.cheapWindowEnd) : null;
-      const initialRate = smoothPlan?.updates?.[0]?.chargeRate ?? 100;
+      const initialRate = smoothPlan?.chargeRate ?? 100;
 
       desired = {
         mode: 'charge',
@@ -2358,11 +2355,12 @@ class GivTcpMqttPlatform {
       chargePct: desired.chargePct,
       forceMinutes: bucketedMinutes,
       smooth: desired.smooth,
-      smoothMin: desired.smoothPlan ? desired.smoothPlan.minRate : null,
-      smoothMax: desired.smoothPlan ? desired.smoothPlan.maxRate : null,
-      smoothUpdates: desired.smoothPlan ? desired.smoothPlan.numberOfUpdates : null,
+      smoothRate: desired.smoothPlan ? desired.smoothPlan.chargeRate : null,
+      smoothMode: desired.smoothPlan ? desired.smoothPlan.careMode : null,
+      smoothEnergyNeededKwh: desired.smoothPlan ? Number(desired.smoothPlan.energyNeededKwh.toFixed(2)) : null,
       maxBatteryChargePowerKw: desired.smoothPlan ? desired.smoothPlan.maxBatteryChargePowerKw : null,
       cheapWindowEnd: snap.cheapWindowEnd ? snap.cheapWindowEnd.toISOString() : null,
+      smoothBucket: desired.smoothPlan ? Math.floor(Date.now() / (this.smoothChargingUpdateIntervalMinutes * 60 * 1000)) : null,
       excessStart: desired.excessExport ? this.formatSlotTime(desired.excessExport.start) : null,
       excessEnd: desired.excessExport ? this.formatSlotTime(desired.excessExport.end) : null,
       excessReserve: desired.excessExport ? Math.round(desired.excessExport.minSocTarget) : null,
@@ -2386,10 +2384,10 @@ class GivTcpMqttPlatform {
       this.enqueueAutomationSequence('Automation CHARGE', steps);
 
       if (desired.smooth && desired.smoothPlan) {
-        this.scheduleSmoothChargePlan(desired.smoothPlan, signature);
-        const firstKw = this.estimateChargeRateKw(desired.chargePct);
-        const firstKwText = Number.isFinite(firstKw) ? ` ≈ ${firstKw.toFixed(2)}kW` : '';
-        this.log.info(`Automation -> CHARGE | pct=${desired.chargePct}${firstKwText} | mins=${bucketedMinutes} | smooth=true | updates=${desired.smoothPlan.numberOfUpdates} | range=${desired.smoothPlan.minRate}-${desired.smoothPlan.maxRate}% | max=${desired.smoothPlan.maxBatteryChargePowerKw}kW`);
+        this.clearSmoothChargeTimers('smooth adaptive recheck');
+        this.lastSmoothChargeRatePercent = desired.smoothPlan.chargeRate;
+        const kwText = Number.isFinite(desired.smoothPlan.estimatedKw) ? ` ≈ ${desired.smoothPlan.estimatedKw.toFixed(2)}kW` : '';
+        this.log.info(`Automation -> CHARGE | pct=${desired.smoothPlan.chargeRate}${kwText} | mins=${bucketedMinutes} | smooth=true | mode=${desired.smoothPlan.careMode} | energyNeeded=${desired.smoothPlan.energyNeededKwh.toFixed(2)}kWh | avgNeeded=${desired.smoothPlan.requiredAverageKw.toFixed(2)}kW | max=${desired.smoothPlan.maxBatteryChargePowerKw}kW | scope=overnight-cheap-slot`);
       } else {
         this.clearSmoothChargeTimers('standard charge');
         this.log.info(`Automation -> CHARGE | pct=100 | mins=${bucketedMinutes} | smooth=false`);

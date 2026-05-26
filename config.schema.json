@@ -202,7 +202,7 @@
         "default": 13.5,
         "minimum": 1,
         "maximum": 40,
-        "description": "Nominal battery capacity used to calculate the evening export reserve ladder."
+        "description": "Nominal battery capacity used by Excess Energy Export and Battery Care Charging calculations."
       },
       "excessExportStartTime": {
         "title": "Evening Export Start Time",
@@ -249,50 +249,51 @@
         "description": "Advanced option. Default off assumes overnight load after cheap-rate start is served by cheap grid import, not preserved battery."
       },
       "smoothChargingEnabled": {
-        "title": "Smooth Charging",
+        "title": "Battery Care Charging",
         "type": "boolean",
         "default": false,
-        "description": "Beta. Enables battery-care charging during long cheap windows by progressively adjusting the local GivTCP charge-rate percentage. Disabled by default."
+        "description": "Beta. Enables kinder overnight charging during the main cheap-rate slot only. GivHome calculates the local charge-rate percentage from SOC, target, battery capacity, remaining cheap-window time and your configured maximum charge power. Disabled by default."
       },
       "maxBatteryChargePowerKw": {
         "title": "Maximum Battery Charge Power (kW)",
         "type": "number",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 30,
-        "description": "Required for Smooth Charging. Enter the real maximum battery charge power for this system, or your deliberately permitted maximum. GivHome uses this to interpret charge-rate percentages. No default is assumed because systems vary widely."
+        "minimum": 0.5,
+        "maximum": 20,
+        "description": "Required for Battery Care Charging. Enter the real maximum battery charge power for this system, or your deliberately permitted maximum. No default is assumed because 100% charge rate means different kW on different systems."
       },
       "smoothChargingWindowMinimumMinutes": {
-        "title": "Minimum Smooth Window Length (minutes)",
+        "title": "Minimum Overnight Time Remaining (minutes)",
         "type": "integer",
         "default": 90,
-        "minimum": 30,
-        "maximum": 240,
-        "description": "Smooth Charging only auto-activates when the remaining merged cheap window is at least this long. Shorter windows use standard 100% charging."
+        "minimum": 60,
+        "maximum": 360,
+        "description": "Battery Care Charging only runs during the main overnight cheap slot when at least this much time remains. Shorter windows use standard 100% charging."
       },
-      "smoothChargingUpdateIntervalMinutes": {
-        "title": "Smooth Rate Update Interval (minutes)",
-        "type": "integer",
-        "default": 15,
-        "minimum": 5,
-        "maximum": 60,
-        "description": "How often GivHome sends a new local setChargeRate command during a Smooth Charging window."
-      },
-      "smoothChargingMinRatePercent": {
-        "title": "Smooth Starting Rate (%)",
-        "type": "integer",
-        "default": 20,
-        "minimum": 1,
-        "maximum": 100,
-        "description": "Starting charge-rate percentage for Smooth Charging. This is a percentage of the configured maximum battery charge power."
-      },
-      "smoothChargingMaxRatePercent": {
-        "title": "Smooth Maximum Rate (%)",
-        "type": "integer",
-        "default": 100,
-        "minimum": 1,
-        "maximum": 100,
-        "description": "Highest charge-rate percentage Smooth Charging may request. Usually 100 unless you want Smooth Charging to cap below your configured maximum."
+      "smoothChargingMode": {
+        "title": "Battery Care Mode",
+        "type": "string",
+        "default": "balanced",
+        "oneOf": [
+          {
+            "title": "Gentle - lowest overnight charge rate where practical",
+            "enum": [
+              "gentle"
+            ]
+          },
+          {
+            "title": "Balanced - recommended starting point",
+            "enum": [
+              "balanced"
+            ]
+          },
+          {
+            "title": "Strong - more headroom to reach target",
+            "enum": [
+              "strong"
+            ]
+          }
+        ],
+        "description": "Controls how much headroom GivHome adds above the calculated minimum overnight charge rate. Start with Balanced."
       }
     },
     "required": [
@@ -328,17 +329,16 @@
     },
     {
       "type": "fieldset",
-      "title": "Smooth Charging Beta",
+      "title": "Battery Care Charging",
       "expandable": true,
       "expanded": false,
-      "description": "Optional beta battery-care charging. Smooth Charging uses local /setChargeRate percentage writes during long cheap windows. You must enter your own Maximum Battery Charge Power because 100% means different kW on different systems.",
+      "description": "Optional beta overnight-only smoother charging. During the main cheap slot, GivHome calculates the kindest practical charge-rate percentage from SOC, target, battery capacity and time remaining. Extra IOG dispatches and short windows continue to use standard charging.",
       "items": [
         "smoothChargingEnabled",
         "maxBatteryChargePowerKw",
-        "smoothChargingWindowMinimumMinutes",
-        "smoothChargingUpdateIntervalMinutes",
-        "smoothChargingMinRatePercent",
-        "smoothChargingMaxRatePercent"
+        "batteryCapacityKwh",
+        "smoothChargingMode",
+        "smoothChargingWindowMinimumMinutes"
       ]
     },
     {

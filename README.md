@@ -342,6 +342,41 @@ GivHome is an independent community project and is not affiliated with:
 
 Use at your own discretion.
 
+
+## Battery Care Charging Beta
+
+GivHome 3.6.2-beta.2 includes an optional Battery Care Charging beta.
+
+This is a deliberately narrow first version of Smooth Charging. It only runs during the configured main overnight cheap-rate window, for example 23:30-05:30 on Intelligent Octopus Go. Short windows, daytime smart dispatches, grace periods and manual smart windows continue to use standard charging.
+
+When enabled, GivHome calculates a kinder local charge-rate percentage from:
+
+- current battery SOC
+- target SOC
+- battery capacity
+- maximum battery charge power
+- remaining overnight cheap-window time
+- selected Battery Care Mode
+
+It then writes the calculated percentage locally using GivTCP's `/setChargeRate` endpoint.
+
+### Required maximum charge power
+
+You must enter the system's real maximum battery charge power, or your deliberately permitted maximum. GivHome does not assume a default because 100% charge rate can mean different kW on different systems.
+
+For example:
+
+- on a 6kW system, 50% is approximately 3kW
+- on a 2.6kW system, 50% is approximately 1.3kW
+
+### Battery Care Modes
+
+- Gentle: lower rates where practical
+- Balanced: recommended starting point
+- Strong: more headroom to reach target
+
+The aim is not to charge slowly at all costs. The aim is to charge as kindly as practical while still aiming to reach the configured target by the end of the overnight cheap window.
+
 ## Excess Energy Export
 
 GivHome 3.6.0 adds optional automated Excess Energy Export.
