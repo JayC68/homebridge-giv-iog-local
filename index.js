@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.2-beta.3';
+const BUILD_VERSION = '3.6.2-beta.4';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -134,6 +134,7 @@ class GivTcpMqttPlatform {
       : (Number.isFinite(this.config.excessExportTriggerMarginSoc) ? this.clamp(this.config.excessExportTriggerMarginSoc, 0, 20) : 2);
     this.serveOvernightLoadFromBattery = Boolean(this.config.serveOvernightLoadFromBattery);
     this.excessEnergyExportActive = false;
+    this.activeExcessExportSlot = null;
     this.lastExcessExportDecisionSignature = '';
     this.lastExcessExportDecisionLogMs = 0;
 
@@ -2267,6 +2268,21 @@ class GivTcpMqttPlatform {
     }
 
     const slotMinutes = Math.min(this.excessExportSlotMinutes, minutesUntilCheap);
+
+    if (this.activeExcessExportSlot
+      && this.activeExcessExportSlot.start instanceof Date
+      && this.activeExcessExportSlot.end instanceof Date
+      && now >= this.activeExcessExportSlot.start
+      && now < this.activeExcessExportSlot.end
+      && this.activeExcessExportSlot.end <= effectiveCheapStart) {
+      return {
+        ...this.activeExcessExportSlot,
+        mode: 'excess_export',
+        activeSlotReused: true,
+        minutesUntilCheap,
+      };
+    }
+
     const kwhPerSlot = this.excessExportDischargeKw * (this.excessExportSlotMinutes / 60);
     const socDropPerSlot = (kwhPerSlot / this.excessExportBatteryCapacityKwh) * 100;
     const slotsRemaining = Math.max(1, Math.ceil(minutesUntilCheap / this.excessExportSlotMinutes));
@@ -2283,14 +2299,16 @@ class GivTcpMqttPlatform {
       return null;
     }
 
-    const end = new Date(now.getTime() + (slotMinutes * 60000));
+    const start = new Date(now);
+    start.setSeconds(0, 0);
+    const end = new Date(start.getTime() + (slotMinutes * 60000));
     if (end > effectiveCheapStart) {
       end.setTime(effectiveCheapStart.getTime());
     }
 
     return {
       mode: 'excess_export',
-      start: now,
+      start,
       end,
       forceMinutes: slotMinutes,
       minSocTarget,
@@ -2378,6 +2396,7 @@ class GivTcpMqttPlatform {
       if (this.excessEnergyExportActive) {
         steps.push(...this.buildNeutralizeSlotSteps('Automation CHARGE', 'discharge'));
         this.excessEnergyExportActive = false;
+        this.activeExcessExportSlot = null;
       }
       if (desired.smooth) {
         steps.push(this.buildChargeRateStep('Automation CHARGE', desired.chargePct));
@@ -2400,8 +2419,15 @@ class GivTcpMqttPlatform {
     if (desired.mode === 'excess_export') {
       this.clearSmoothChargeTimers('excess export');
       const info = desired.excessExport;
-      const steps = this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end);
       this.excessEnergyExportActive = true;
+
+      if (info.activeSlotReused) {
+        this.log.info(`Automation -> EXCESS_EXPORT | active slot retained ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | soc=${snap.soc.toFixed(1)}% | minsUntilCheap=${info.minutesUntilCheap}`);
+        return;
+      }
+
+      const steps = this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end);
+      this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
       this.enqueueAutomationSequence('Automation EXCESS EXPORT', steps);
       this.log.info(`Automation -> EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
       return;
@@ -2412,6 +2438,7 @@ class GivTcpMqttPlatform {
       ? this.buildNeutralizeSlotSteps('Automation ECO', 'discharge')
       : this.buildNeutralizeSlotSteps('Automation ECO', 'charge');
     this.excessEnergyExportActive = false;
+    this.activeExcessExportSlot = null;
     this.enqueueAutomationSequence('Automation ECO', steps);
     this.log.info('Automation -> ECO');
   }

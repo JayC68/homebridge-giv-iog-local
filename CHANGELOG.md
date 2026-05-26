@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.2-beta.4
+
+### Fixed
+
+- Fixes Excess Energy Export slot churn introduced during the Battery Care beta series.
+- Keeps an active evening export slot stable until it expires instead of sliding the slot forward on every automation pass.
+- Preserves the v3.6.2-beta.3 fix so standard charging does not write `/setChargeRate 100`.
+
 ## 3.6.2-beta.3
 
 ### Fixed
