@@ -247,6 +247,52 @@
         "type": "boolean",
         "default": false,
         "description": "Advanced option. Default off assumes overnight load after cheap-rate start is served by cheap grid import, not preserved battery."
+      },
+      "smoothChargingEnabled": {
+        "title": "Smooth Charging",
+        "type": "boolean",
+        "default": false,
+        "description": "Beta. Enables battery-care charging during long cheap windows by progressively adjusting the local GivTCP charge-rate percentage. Disabled by default."
+      },
+      "maxBatteryChargePowerKw": {
+        "title": "Maximum Battery Charge Power (kW)",
+        "type": "number",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 30,
+        "description": "Required for Smooth Charging. Enter the real maximum battery charge power for this system, or your deliberately permitted maximum. GivHome uses this to interpret charge-rate percentages. No default is assumed because systems vary widely."
+      },
+      "smoothChargingWindowMinimumMinutes": {
+        "title": "Minimum Smooth Window Length (minutes)",
+        "type": "integer",
+        "default": 90,
+        "minimum": 30,
+        "maximum": 240,
+        "description": "Smooth Charging only auto-activates when the remaining merged cheap window is at least this long. Shorter windows use standard 100% charging."
+      },
+      "smoothChargingUpdateIntervalMinutes": {
+        "title": "Smooth Rate Update Interval (minutes)",
+        "type": "integer",
+        "default": 15,
+        "minimum": 5,
+        "maximum": 60,
+        "description": "How often GivHome sends a new local setChargeRate command during a Smooth Charging window."
+      },
+      "smoothChargingMinRatePercent": {
+        "title": "Smooth Starting Rate (%)",
+        "type": "integer",
+        "default": 20,
+        "minimum": 1,
+        "maximum": 100,
+        "description": "Starting charge-rate percentage for Smooth Charging. This is a percentage of the configured maximum battery charge power."
+      },
+      "smoothChargingMaxRatePercent": {
+        "title": "Smooth Maximum Rate (%)",
+        "type": "integer",
+        "default": 100,
+        "minimum": 1,
+        "maximum": 100,
+        "description": "Highest charge-rate percentage Smooth Charging may request. Usually 100 unless you want Smooth Charging to cap below your configured maximum."
       }
     },
     "required": [
@@ -278,6 +324,21 @@
         "cheapStart",
         "cheapEnd",
         "graceMinutes"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Smooth Charging Beta",
+      "expandable": true,
+      "expanded": false,
+      "description": "Optional beta battery-care charging. Smooth Charging uses local /setChargeRate percentage writes during long cheap windows. You must enter your own Maximum Battery Charge Power because 100% means different kW on different systems.",
+      "items": [
+        "smoothChargingEnabled",
+        "maxBatteryChargePowerKw",
+        "smoothChargingWindowMinimumMinutes",
+        "smoothChargingUpdateIntervalMinutes",
+        "smoothChargingMinRatePercent",
+        "smoothChargingMaxRatePercent"
       ]
     },
     {

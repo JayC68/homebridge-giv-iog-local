@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.6.2-beta.1
+
+### Added
+
+- Adds Smooth Charging beta behind an opt-in Homebridge config switch.
+- Adds local `/setChargeRate` percentage control before and during automatic charge windows.
+- Adds required user-defined Maximum Battery Charge Power (kW) for Smooth Charging so GivHome does not assume one inverter's 100% rate applies to every system.
+- Adds configurable Smooth Charging minimum window length, update interval, starting rate and maximum rate.
+
+### Changed
+
+- Long cheap windows can now use progressive charge-rate updates when Smooth Charging is enabled and correctly configured.
+- Short charge windows continue to use standard 100% charge-rate behaviour.
+- Excess Energy Export, manual charge/export tiles, Eve history and HomeKit accessory identity are preserved.
+
+### Notes
+
+- Smooth Charging is disabled by default.
+- Smooth Charging will not run if Maximum Battery Charge Power (kW) is missing or invalid.
+- This beta is battery-care focused; Pro load-sensitive control is intentionally left for a later build.
+
 ## 3.6.0
 
 ### Added

@@ -59,6 +59,36 @@ Automatically responds to:
 
 while maintaining stable overnight charging behaviour.
 
+
+### Smooth Charging Beta
+
+GivHome 3.6.2-beta.1 adds an optional Smooth Charging beta focused on battery-care charging during long cheap windows.
+
+Instead of always charging at the system maximum, Smooth Charging can progressively adjust the local GivTCP charge-rate percentage using:
+
+```text
+POST /setChargeRate
+{ "chargeRate": "20" }
+```
+
+The charge rate is a percentage, not a fixed wattage. Because different GivEnergy systems have different maximum charge powers, users must define their own **Maximum Battery Charge Power (kW)** before Smooth Charging will run.
+
+Examples:
+
+- 100% on a 6kW system means approximately 6kW
+- 50% on a 6kW system means approximately 3kW
+- 100% on a 2.6kW system means approximately 2.6kW
+
+Smooth Charging only auto-activates when the remaining cheap window is long enough. The beta default is 90 minutes. Shorter windows continue to use standard 100% charge-rate behaviour so the battery is not undercharged.
+
+The first beta is deliberately conservative:
+
+- disabled by default
+- requires user-defined maximum battery charge power
+- short windows fall back to standard charge
+- Excess Energy Export is left untouched
+- future Pro load-sensitive control is not included yet
+
 ### Manual Charge and Export controls
 
 Simple HomeKit switches for:
