@@ -1,4 +1,32 @@
 # Changelog
+
+## 3.6.3 - 2026-05-27
+
+### User-facing improvements
+
+- Refreshes the README, public website wording, Homebridge config descriptions and release notes around the current GivHome feature set.
+- Repositions GivHome around the clearer promise: “Your battery quietly does the right thing, automatically.”
+- Explains Battery Care Charging in plain English as kinder overnight charging during the main cheap-rate window.
+- Explains Excess Energy Export as local evening export management that keeps enough charge to get the home to the next cheap window.
+- Clarifies that Excess Energy Export is not Agile price automation.
+- Improves wording for non-technical users who want useful battery automation without day-to-day battery management.
+
+### Battery-care and asset-protection wording
+
+- Adds clearer guidance that Battery Care Charging is intended to reduce unnecessary high-stress charging when there is enough cheap-window time to be gentler.
+- Frames battery care as useful for owners who want to look after an expensive battery asset over the long term, regardless of manufacturer support or warranty circumstances.
+
+### Configuration wording
+
+- Reviews Homebridge UI wording for Battery Care Charging and Excess Energy Export.
+- Keeps existing config keys, defaults and behaviour intact.
+- Keeps Maximum Battery Charge Power user-defined, because 100% charge rate means different kW values on different systems.
+
+### Technical notes
+
+- No intended backend automation changes from v3.6.2-beta.6.
+- Standard charging, Battery Care Charging, Excess Energy Export, Eve History and manual tiles are intended to behave as in the validated 3.6.2 beta line.
+
 ## 3.6.2-beta.6 - 2026-05-27
 
 - Suppressed the very large Fakegato startup `read data from ...` history dumps at normal log level.
