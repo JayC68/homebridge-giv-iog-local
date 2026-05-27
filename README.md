@@ -462,6 +462,6 @@ This build deliberately isolates Battery Care from normal charging and Excess En
 
 Maximum Battery Charge Power must be supplied by the user when Battery Care is enabled because 100% charge rate maps to different kW values on different systems.
 
-### 3.6.2-beta.4 Excess Export stability note
+### 3.6.2-beta.5 Excess Export stability note
 
 This beta keeps Battery Care Charging isolated from standard charging and stabilises Excess Energy Export slot handling. When an evening export slot is active, GivHome now retains that slot until it expires instead of moving the start/end time forward on every automation pass.

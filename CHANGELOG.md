@@ -1,11 +1,12 @@
 # Changelog
 
-## 3.6.2-beta.4
+## 3.6.2-beta.5
 
 ### Fixed
 
-- Fixes Excess Energy Export slot churn introduced during the Battery Care beta series.
-- Keeps an active evening export slot stable until it expires instead of sliding the slot forward on every automation pass.
+- Fixes Excess Energy Export restart recovery during the Battery Care beta series.
+- Recovers an already-active inverter discharge slot after Homebridge/plugin restart and preserves it instead of creating a new sliding export slot from the current minute.
+- Keeps active evening export slots stable until they expire, whether held in memory or recovered from live inverter schedule telemetry.
 - Preserves the v3.6.2-beta.3 fix so standard charging does not write `/setChargeRate 100`.
 
 ## 3.6.2-beta.3

@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.2-beta.4';
+const BUILD_VERSION = '3.6.2-beta.5';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -2269,6 +2269,24 @@ class GivTcpMqttPlatform {
 
     const slotMinutes = Math.min(this.excessExportSlotMinutes, minutesUntilCheap);
 
+    const liveDischargeSlot = this.getLiveSlotState('discharge');
+    if (liveDischargeSlot?.active
+      && liveDischargeSlot.start instanceof Date
+      && liveDischargeSlot.end instanceof Date
+      && now >= liveDischargeSlot.start
+      && now < liveDischargeSlot.end
+      && liveDischargeSlot.end <= effectiveCheapStart) {
+      return {
+        mode: 'excess_export',
+        start: liveDischargeSlot.start,
+        end: liveDischargeSlot.end,
+        forceMinutes: Math.max(1, Math.round((liveDischargeSlot.end.getTime() - liveDischargeSlot.start.getTime()) / 60000)),
+        activeSlotReused: true,
+        recoveredFromInverter: true,
+        minutesUntilCheap,
+      };
+    }
+
     if (this.activeExcessExportSlot
       && this.activeExcessExportSlot.start instanceof Date
       && this.activeExcessExportSlot.end instanceof Date
@@ -2279,6 +2297,7 @@ class GivTcpMqttPlatform {
         ...this.activeExcessExportSlot,
         mode: 'excess_export',
         activeSlotReused: true,
+        recoveredFromInverter: false,
         minutesUntilCheap,
       };
     }
@@ -2422,7 +2441,9 @@ class GivTcpMqttPlatform {
       this.excessEnergyExportActive = true;
 
       if (info.activeSlotReused) {
-        this.log.info(`Automation -> EXCESS_EXPORT | active slot retained ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | soc=${snap.soc.toFixed(1)}% | minsUntilCheap=${info.minutesUntilCheap}`);
+        this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
+        const source = info.recoveredFromInverter ? 'inverter truth' : 'memory';
+        this.log.info(`Automation -> EXCESS_EXPORT | active slot retained ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | source=${source} | soc=${snap.soc.toFixed(1)}% | minsUntilCheap=${info.minutesUntilCheap}`);
         return;
       }
 
