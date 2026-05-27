@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.2-beta.5';
+const BUILD_VERSION = '3.6.2-beta.6';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -1014,7 +1014,8 @@ class GivTcpMqttPlatform {
       return this.eveEnergyHistoryServices.get(kind);
     }
 
-    accessory.log = this.log;
+    const fakeGatoLog = this.createFilteredFakeGatoLogger();
+    accessory.log = fakeGatoLog;
     const service = accessory.getServiceById(this.Service.Outlet, kind);
     if (service) {
       this.prepareEveEnergyOutletService(service);
@@ -1025,7 +1026,7 @@ class GivTcpMqttPlatform {
       size: this.eveEnergyHistorySize,
       storage: 'fs',
       disableRepeatLastData: false,
-      log: this.log,
+      log: fakeGatoLog,
     });
     if (!history) {
       this.log.error(`[EveHistory] failed to create history service for ${kind}`);
@@ -1034,6 +1035,35 @@ class GivTcpMqttPlatform {
     this.eveEnergyHistoryServices.set(kind, history);
     this.log.info(`Eve Energy history enabled for ${accessory.displayName || kind}`);
     return history;
+  }
+
+  createFilteredFakeGatoLogger() {
+    if (this.filteredFakeGatoLogger) {
+      return this.filteredFakeGatoLogger;
+    }
+
+    const shouldSuppress = (args) => {
+      const first = args && args.length ? String(args[0]) : '';
+      return /\*\*\s*Fakegato-history\s+read data from/i.test(first);
+    };
+
+    const wrap = (level) => (...args) => {
+      if (shouldSuppress(args)) {
+        return;
+      }
+      const target = typeof this.log[level] === 'function' ? this.log[level] : this.log.info;
+      return target.apply(this.log, args);
+    };
+
+    this.filteredFakeGatoLogger = {
+      info: wrap('info'),
+      warn: wrap('warn'),
+      error: wrap('error'),
+      debug: wrap('debug'),
+      log: wrap('info'),
+    };
+
+    return this.filteredFakeGatoLogger;
   }
 
   getEveEnergyHistoryPower(kind, snap = null) {

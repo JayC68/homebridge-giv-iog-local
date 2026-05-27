@@ -1,4 +1,10 @@
 # Changelog
+## 3.6.2-beta.6 - 2026-05-27
+
+- Suppressed the very large Fakegato startup `read data from ...` history dumps at normal log level.
+- Eve/Fakegato history persistence is unchanged; this is a targeted log hygiene fix only.
+- Battery Care Charging, Standard Charging and Excess Energy Export logic are unchanged from beta.5.
+
 
 ## 3.6.2-beta.5
 

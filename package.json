@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.6.2-beta.5",
+  "version": "3.6.2-beta.6",
   "description": "GivHome brings local GivEnergy battery control into Apple Home with Intelligent Octopus Go automation, manual charge/export controls, Eve energy history and optional Excess Energy Export",
   "main": "index.js",
   "license": "Apache-2.0",
