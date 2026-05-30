@@ -224,7 +224,7 @@
         "default": 5,
         "minimum": 0.5,
         "maximum": 12,
-        "description": "Expected export/discharge power used to estimate how much energy a short evening export slot may release. Use a realistic value for your system."
+        "description": "Requested evening export/discharge power. GivHome uses this both for the SOC ladder calculation and, in v3.6.4-beta.1+, writes it to GivTCP via /setDischargeRate before starting an automated export slot."
       },
       "excessExportSlotMinutes": {
         "title": "Excess Export Slot Size (minutes)",
@@ -294,6 +294,14 @@
           }
         ],
         "description": "Controls how cautious Battery Care Charging should be. Balanced is the recommended starting point."
+      },
+      "normalDischargePowerW": {
+        "title": "Normal Discharge Power After Export (W)",
+        "type": "number",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 12000,
+        "description": "Optional safety/compatibility setting. Leave at 0 to avoid changing your normal discharge-rate setting after Excess Energy Export. If you know your system needs a specific normal discharge power restored after export, enter it in watts."
       }
     },
     "required": [
@@ -346,13 +354,14 @@
       "title": "Excess Energy Export",
       "expandable": true,
       "expanded": false,
-      "description": "Optional local evening export. GivHome can export spare battery energy after normal evening use while keeping enough reserve for the home to reach the next cheap overnight window. Disabled by default.",
+      "description": "Optional local evening sell-off automation. GivHome now explicitly sets the requested discharge power through GivTCP before creating each export slot, while retaining the configured reserve until the next cheap window. Disabled by default.",
       "items": [
         "enableExcessEnergyExport",
         "batteryCapacityKwh",
         "excessExportStartTime",
         "excessExportReserveSoc",
         "maxExportPowerKw",
+        "normalDischargePowerW",
         "excessExportSlotMinutes",
         "excessExportMarginSoc",
         "serveOvernightLoadFromBattery"

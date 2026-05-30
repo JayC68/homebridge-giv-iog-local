@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.6.4-beta.1 - 2026-05-30
+
+### Fixed
+
+- Fixes Excess Energy Export scheduling without setting discharge power.
+- Automated evening export now writes `/setDischargeRate` using the configured Max Export Power before enabling the discharge schedule and setting the discharge slot.
+- Aligns `BUILD_VERSION` with the package version so HomeKit firmware metadata reflects the installed beta.
+
+### Added
+
+- Adds optional Normal Discharge Power After Export (W). Leave at 0 to avoid restoring/changing normal discharge-rate behaviour after EEE; set a known value only if the system needs one.
+
+### Notes
+
+- This beta uses GivTCP REST abstractions, not raw inverter registers, because GivEnergy systems differ in register mapping and scaling.
+- EEE still remains opt-in and reserve-led.
+
 ## 3.6.3 - 2026-05-27
 
 ### User-facing improvements

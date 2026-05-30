@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.2-beta.6';
+const BUILD_VERSION = '3.6.4-beta.1';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -126,6 +126,9 @@ class GivTcpMqttPlatform {
     this.excessExportDischargeKw = Number.isFinite(this.config.maxExportPowerKw) && this.config.maxExportPowerKw > 0
       ? this.config.maxExportPowerKw
       : (Number.isFinite(this.config.excessExportDischargeKw) && this.config.excessExportDischargeKw > 0 ? this.config.excessExportDischargeKw : 5);
+    this.normalDischargePowerW = Number.isFinite(this.config.normalDischargePowerW) && this.config.normalDischargePowerW > 0
+      ? this.clamp(Math.round(this.config.normalDischargePowerW), 1, 12000)
+      : 0;
     this.excessExportSlotMinutes = Number.isFinite(this.config.excessExportSlotMinutes)
       ? this.clamp(Math.round(this.config.excessExportSlotMinutes), 15, 60)
       : 30;
@@ -1473,6 +1476,29 @@ class GivTcpMqttPlatform {
     };
   }
 
+  buildDischargeRateStep(prefix, dischargeKw) {
+    const requestedKw = Number(dischargeKw);
+    const watts = this.clamp(Math.round((Number.isFinite(requestedKw) && requestedKw > 0 ? requestedKw : this.excessExportDischargeKw) * 1000), 1, 12000);
+    return {
+      restPath: '/setDischargeRate',
+      restBody: { dischargeRate: String(watts) },
+      note: `${prefix} -> REST setDischargeRate ${watts}W`,
+    };
+  }
+
+  buildRestoreDischargeRateStep(prefix) {
+    if (!Number.isFinite(this.normalDischargePowerW) || this.normalDischargePowerW <= 0) {
+      return null;
+    }
+
+    const watts = this.clamp(Math.round(this.normalDischargePowerW), 1, 12000);
+    return {
+      restPath: '/setDischargeRate',
+      restBody: { dischargeRate: String(watts) },
+      note: `${prefix} -> REST setDischargeRate restore ${watts}W`,
+    };
+  }
+
   estimateChargeRateKw(ratePercent) {
     if (!this.maxBatteryChargePowerKw) {
       return null;
@@ -1597,10 +1623,17 @@ class GivTcpMqttPlatform {
     }
 
     if (kind === 'discharge') {
-      return [
+      const steps = [
         { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable` },
         { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00` },
       ];
+
+      const restoreStep = this.buildRestoreDischargeRateStep(prefix);
+      if (restoreStep) {
+        steps.push(restoreStep);
+      }
+
+      return steps;
     }
 
     return [];
@@ -2477,10 +2510,14 @@ class GivTcpMqttPlatform {
         return;
       }
 
-      const steps = this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end);
+      const steps = [
+        this.buildDischargeRateStep('Automation EXCESS EXPORT', this.excessExportDischargeKw),
+        ...this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end),
+      ];
       this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
       this.enqueueAutomationSequence('Automation EXCESS EXPORT', steps);
-      this.log.info(`Automation -> EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
+      const dischargeWatts = Math.round(this.excessExportDischargeKw * 1000);
+      this.log.info(`Automation -> EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | dischargeRate=${dischargeWatts}W | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
       return;
     }
 

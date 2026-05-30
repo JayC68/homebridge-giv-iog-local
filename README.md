@@ -97,6 +97,9 @@ Start with **Balanced** unless you have a clear reason to do otherwise.
 
 Excess Energy Export is optional and disabled by default.
 
+From v3.6.4-beta.1, automated evening export also sets the requested discharge power through GivTCP before creating the export slot. This matters because some GivEnergy systems will not export meaningfully from a timed discharge slot unless a discharge rate is explicitly set. GivHome uses the public GivTCP `/setDischargeRate` REST abstraction rather than writing raw inverter registers directly.
+
+
 It is designed for homes that sometimes reach the evening with more battery energy than they need before the next cheap charging window.
 
 When enabled, GivHome can create a short local export slot later in the evening, after normal household demand has usually settled, while keeping enough charge for your home to get you to the cheap overnight window.
