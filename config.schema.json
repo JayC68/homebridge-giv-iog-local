@@ -194,7 +194,7 @@
         "title": "Excess Energy Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Lets GivHome export spare battery energy later in the evening while keeping enough charge for your home to reach the next cheap overnight window. Disabled by default."
+        "description": "Temporarily disabled in 3.6.5-beta.1 while IOG reliability validation is completed. Leave off."
       },
       "batteryCapacityKwh": {
         "title": "Battery Capacity (kWh)",
@@ -224,7 +224,7 @@
         "default": 5,
         "minimum": 0.5,
         "maximum": 12,
-        "description": "Requested evening export/discharge power. GivHome uses this both for the SOC ladder calculation and, in v3.6.4-beta.1+, writes it to GivTCP via /setDischargeRate before starting an automated export slot."
+        "description": "Expected export/discharge power used to estimate how much energy a short evening export slot may release. Use a realistic value for your system."
       },
       "excessExportSlotMinutes": {
         "title": "Excess Export Slot Size (minutes)",
@@ -252,7 +252,7 @@
         "title": "Battery Care Charging",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Enables Battery Care Charging during the main overnight cheap slot only. When there is enough time, GivHome can use a kinder local charge-rate percentage instead of always charging at the system maximum. Disabled by default."
+        "description": "Temporarily disabled in 3.6.5-beta.1 while AIO charge-rate behaviour is validated. Leave off."
       },
       "maxBatteryChargePowerKw": {
         "title": "Maximum Battery Charge Power (kW)",
@@ -294,14 +294,6 @@
           }
         ],
         "description": "Controls how cautious Battery Care Charging should be. Balanced is the recommended starting point."
-      },
-      "normalDischargePowerW": {
-        "title": "Normal Discharge Power After Export (W)",
-        "type": "number",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 12000,
-        "description": "Optional safety/compatibility setting. Leave at 0 to avoid changing your normal discharge-rate setting after Excess Energy Export. If you know your system needs a specific normal discharge power restored after export, enter it in watts."
       }
     },
     "required": [
@@ -354,14 +346,13 @@
       "title": "Excess Energy Export",
       "expandable": true,
       "expanded": false,
-      "description": "Optional local evening sell-off automation. GivHome now explicitly sets the requested discharge power through GivTCP before creating each export slot, while retaining the configured reserve until the next cheap window. Disabled by default.",
+      "description": "Optional local evening export. GivHome can export spare battery energy after normal evening use while keeping enough reserve for the home to reach the next cheap overnight window. Disabled by default.",
       "items": [
         "enableExcessEnergyExport",
         "batteryCapacityKwh",
         "excessExportStartTime",
         "excessExportReserveSoc",
         "maxExportPowerKw",
-        "normalDischargePowerW",
         "excessExportSlotMinutes",
         "excessExportMarginSoc",
         "serveOvernightLoadFromBattery"
