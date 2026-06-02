@@ -2,7 +2,7 @@
   "pluginAlias": "GivEnergy Local + Intelligent Octopus Go",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "GivHome brings local GivEnergy battery automation into Apple Home \u2014 calm, practical and built around Intelligent Octopus Go.",
+  "headerDisplay": "GivHome brings Intelligent Octopus Go smart charging to your GivEnergy battery \u2014 automatically, locally, and beautifully inside Apple Home.",
   "schema": {
     "type": "object",
     "properties": {
@@ -188,112 +188,43 @@
         "title": "Energy History in the Eve App",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
+        "description": "Optional beta. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
       },
       "enableExcessEnergyExport": {
-        "title": "Excess Energy Export",
+        "title": "Excess Energy Export (temporarily disabled)",
         "type": "boolean",
         "default": false,
-        "description": "Temporarily disabled in 3.6.5-beta.1 while IOG reliability validation is completed. Leave off."
+        "description": "Experimental beta. Automatically exports surplus evening battery energy before the off-peak recharge window using a conservative reserve ladder. Disabled by default. Inspired by MrMessy's WonderWatt scheduling sheet."
       },
       "batteryCapacityKwh": {
         "title": "Battery Capacity (kWh)",
         "type": "number",
         "default": 13.5,
         "minimum": 1,
-        "maximum": 40,
-        "description": "Nominal battery capacity used by Excess Energy Export and Battery Care Charging. Enter the usable size of your system as closely as practical."
+        "maximum": 100,
+        "description": "Required only when Excess Energy Export (temporarily disabled) is enabled. Used to calculate the reserve ladder. Example: 13.5 for a GivEnergy All in One."
       },
-      "excessExportStartTime": {
-        "title": "Evening Export Start Time",
-        "type": "string",
-        "default": "19:30",
-        "description": "Earliest time GivHome may begin evening export. Choose a time after normal cooking, hot water and evening household use, for example 19:30 or 20:00."
-      },
-      "excessExportReserveSoc": {
-        "title": "Evening Reserve SOC (%)",
-        "type": "number",
-        "default": 20,
-        "minimum": 5,
-        "maximum": 95,
-        "description": "Minimum battery level to keep before the cheap overnight window. GivHome will not intentionally export below this reserve."
-      },
-      "maxExportPowerKw": {
-        "title": "Max Export Power (kW)",
+      "excessExportMaxDischargeKw": {
+        "title": "Excess Export Max Discharge (kW)",
         "type": "number",
         "default": 5,
         "minimum": 0.5,
-        "maximum": 12,
-        "description": "Expected export/discharge power used to estimate how much energy a short evening export slot may release. Use a realistic value for your system."
-      },
-      "excessExportSlotMinutes": {
-        "title": "Excess Export Slot Size (minutes)",
-        "type": "number",
-        "default": 30,
-        "minimum": 15,
-        "maximum": 60,
-        "description": "How long each evening export attempt should run before GivHome checks again. 30 minutes is a sensible starting point."
-      },
-      "excessExportMarginSoc": {
-        "title": "SOC Safety Margin (%)",
-        "type": "number",
-        "default": 2,
-        "minimum": 0,
         "maximum": 20,
-        "description": "Extra battery percentage above the calculated reserve required before GivHome starts exporting. Higher values are more cautious."
+        "description": "Experimental beta. Maximum discharge/export power used for the Excess Energy Export (temporarily disabled) reserve calculation. Leave at 5 unless your inverter differs."
+      },
+      "excessExportReserveSoc": {
+        "title": "Excess Export Reserve SOC %",
+        "type": "integer",
+        "default": 15,
+        "minimum": 5,
+        "maximum": 80,
+        "description": "Experimental beta. Minimum SOC preserved by Excess Energy Export (temporarily disabled). The reserve ladder is calculated above this floor."
       },
       "serveOvernightLoadFromBattery": {
         "title": "Serve Overnight Load From Battery",
         "type": "boolean",
         "default": false,
-        "description": "Advanced. Leave off for most Intelligent Octopus Go homes. Off assumes household load after 23:30 can be served by cheap grid electricity rather than preserved battery."
-      },
-      "smoothChargingEnabled": {
-        "title": "Battery Care Charging",
-        "type": "boolean",
-        "default": false,
-        "description": "Temporarily disabled in 3.6.5-beta.1 while AIO charge-rate behaviour is validated. Leave off."
-      },
-      "maxBatteryChargePowerKw": {
-        "title": "Maximum Battery Charge Power (kW)",
-        "type": "number",
-        "minimum": 0.5,
-        "maximum": 20,
-        "description": "Required if Battery Care Charging is enabled. Enter your system's real maximum battery charge power, or the lower limit you deliberately want GivHome to treat as 100%. No default is assumed because systems vary."
-      },
-      "smoothChargingWindowMinimumMinutes": {
-        "title": "Minimum Overnight Time Remaining (minutes)",
-        "type": "integer",
-        "default": 90,
-        "minimum": 60,
-        "maximum": 360,
-        "description": "Battery Care Charging only runs during the main overnight cheap slot when at least this much time remains. If there is not enough time to be gentle, GivHome uses standard charging."
-      },
-      "smoothChargingMode": {
-        "title": "Battery Care Mode",
-        "type": "string",
-        "default": "balanced",
-        "oneOf": [
-          {
-            "title": "Gentle - kindest charging where time allows",
-            "enum": [
-              "gentle"
-            ]
-          },
-          {
-            "title": "Balanced - recommended starting point",
-            "enum": [
-              "balanced"
-            ]
-          },
-          {
-            "title": "Strong - more headroom to reach target",
-            "enum": [
-              "strong"
-            ]
-          }
-        ],
-        "description": "Controls how cautious Battery Care Charging should be. Balanced is the recommended starting point."
+        "description": "Advanced beta option. Disabled by default so overnight household load during the cheap window is served by cheap grid import rather than draining the battery. Enable only if you deliberately want battery-first overnight behaviour."
       }
     },
     "required": [
@@ -329,44 +260,18 @@
     },
     {
       "type": "fieldset",
-      "title": "Battery Care Charging",
-      "expandable": true,
-      "expanded": false,
-      "description": "Optional overnight-only battery-care charging. During the main cheap slot, GivHome can choose a kinder charge-rate percentage from SOC, target, battery capacity, time remaining and your configured maximum charge power. Extra IOG dispatches and short windows continue to use standard charging.",
-      "items": [
-        "smoothChargingEnabled",
-        "maxBatteryChargePowerKw",
-        "batteryCapacityKwh",
-        "smoothChargingMode",
-        "smoothChargingWindowMinimumMinutes"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Excess Energy Export",
-      "expandable": true,
-      "expanded": false,
-      "description": "Optional local evening export. GivHome can export spare battery energy after normal evening use while keeping enough reserve for the home to reach the next cheap overnight window. Disabled by default.",
-      "items": [
-        "enableExcessEnergyExport",
-        "batteryCapacityKwh",
-        "excessExportStartTime",
-        "excessExportReserveSoc",
-        "maxExportPowerKw",
-        "excessExportSlotMinutes",
-        "excessExportMarginSoc",
-        "serveOvernightLoadFromBattery"
-      ]
-    },
-    {
-      "type": "fieldset",
       "title": "Personal Preference Settings",
       "expandable": true,
       "expanded": false,
-      "description": "Optional settings for extra Apple Home tiles, Eve energy history, manual tile tolerance, and observation thresholds. Smart Window shows as \u2018On\u2019 when Intelligent Octopus smart charging is active. For cleaner Apple Home use, set non-daily GivHome tiles to Exclude from Home View.",
+      "description": "Optional settings for extra Apple Home tiles, Eve energy history, Excess Energy Export (temporarily disabled), manual tile tolerance, and observation thresholds. Smart Window shows as On when Intelligent Octopus smart charging is active. For cleaner Apple Home use, set non-daily GivHome tiles to Exclude from Home View.",
       "items": [
         "exposeAdvancedTelemetry",
         "enableEveEnergyHistory",
+        "enableExcessEnergyExport",
+        "batteryCapacityKwh",
+        "excessExportMaxDischargeKw",
+        "excessExportReserveSoc",
+        "serveOvernightLoadFromBattery",
         "slotToleranceMinutes",
         "chargePowerActiveThreshold",
         "dischargePowerActiveThreshold",

@@ -1,7 +1,7 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.6.5-beta.1",
-  "description": "GivHome emergency IOG reliability beta for local GivEnergy battery automation in Apple Home.",
+  "version": "3.6.5-beta.2",
+  "description": "GivHome emergency reliability build restoring the last known-good Intelligent Octopus Go charge path for local GivEnergy control in Apple Home",
   "main": "index.js",
   "license": "Apache-2.0",
   "keywords": [
@@ -16,16 +16,7 @@
     "intelligent-octopus-go",
     "eve",
     "energy-history",
-    "local-control",
-    "excess-energy-export",
-    "battery-export",
-    "energy-automation",
-    "smooth-charging",
-    "battery-health",
-    "battery-care",
-    "local-battery-automation",
-    "apple-home-energy",
-    "battery-care-charging"
+    "local-control"
   ],
   "engines": {
     "homebridge": "^1.8.0 || ^2.0.0-beta.0 || ^2.0.0",
@@ -49,9 +40,7 @@
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
-    "homebridge-ui",
-    "RELEASE_NOTES_3.6.3.md",
-    "RELEASE_NOTES_3.6.5-beta.1.md"
+    "homebridge-ui"
   ],
   "icon": "homebridge-ui/public/logo.svg"
 }

@@ -1,141 +1,24 @@
 # Changelog
 
-## 3.6.5-beta.1
+## 3.6.5-beta.2 - Emergency IOG reliability rollback
 
-- Emergency IOG reliability beta.
-- Reasserts safe charge state before every automatic cheap/smart charge slot.
-- Hard-disables Battery Care / Smooth Charging while AIO charge-rate behaviour is validated.
-- Hard-disables Excess Energy Export while IOG reliability validation is completed.
-- Stops automatic use of the non-AC `/setChargeRate` path.
+This beta intentionally restores the last known-good v3.6.0-beta.2 charge-control model while keeping the package version current.
 
-## 3.6.3 - 2026-05-27
-
-### User-facing improvements
-
-- Refreshes the README, public website wording, Homebridge config descriptions and release notes around the current GivHome feature set.
-- Repositions GivHome around the clearer promise: “Your battery quietly does the right thing, automatically.”
-- Explains Battery Care Charging in plain English as kinder overnight charging during the main cheap-rate window.
-- Explains Excess Energy Export as local evening export management that keeps enough charge to get the home to the next cheap window.
-- Clarifies that Excess Energy Export is not Agile price automation.
-- Improves wording for non-technical users who want useful battery automation without day-to-day battery management.
-
-### Battery-care and asset-protection wording
-
-- Adds clearer guidance that Battery Care Charging is intended to reduce unnecessary high-stress charging when there is enough cheap-window time to be gentler.
-- Frames battery care as useful for owners who want to look after an expensive battery asset over the long term, regardless of manufacturer support or warranty circumstances.
-
-### Configuration wording
-
-- Reviews Homebridge UI wording for Battery Care Charging and Excess Energy Export.
-- Keeps existing config keys, defaults and behaviour intact.
-- Keeps Maximum Battery Charge Power user-defined, because 100% charge rate means different kW values on different systems.
-
-### Technical notes
-
-- No intended backend automation changes from v3.6.2-beta.6.
-- Standard charging, Battery Care Charging, Excess Energy Export, Eve History and manual tiles are intended to behave as in the validated 3.6.2 beta line.
-
-## 3.6.2-beta.6 - 2026-05-27
-
-- Suppressed the very large Fakegato startup `read data from ...` history dumps at normal log level.
-- Eve/Fakegato history persistence is unchanged; this is a targeted log hygiene fix only.
-- Battery Care Charging, Standard Charging and Excess Energy Export logic are unchanged from beta.5.
+- Reverts the IOG/manual charge path to the proven two-step schedule flow: enable charge schedule, then set charge slot.
+- Removes the v3.6.5-beta.1 experimental charge-state repair sequence from the active path.
+- Keeps Smooth/Battery Care absent from this build.
+- Temporarily hard-disables Excess Energy Export in code for safety while the IOG charging regression is isolated.
+- No automatic `/setChargeRate` or `/setChargeRateAC` writes are made by this build.
 
 
-## 3.6.2-beta.5
+## 3.6.0-beta.2
 
-### Fixed
-
-- Fixes Excess Energy Export restart recovery during the Battery Care beta series.
-- Recovers an already-active inverter discharge slot after Homebridge/plugin restart and preserves it instead of creating a new sliding export slot from the current minute.
-- Keeps active evening export slots stable until they expire, whether held in memory or recovered from live inverter schedule telemetry.
-- Preserves the v3.6.2-beta.3 fix so standard charging does not write `/setChargeRate 100`.
-
-## 3.6.2-beta.3
-
-### Fixed
-
-- Fixes a Smooth Charging beta regression where ordinary non-Smooth automatic charging sent `/setChargeRate 100`.
-- Standard charging now leaves the charge-rate actuator untouched, matching the v3.6.0 control model.
-- Excess Energy Export is isolated again from Battery Care charge-rate writes.
-
-### Notes
-
-- Battery Care/Smooth Charging still uses `/setChargeRate` only when Battery Care is actively selected for the overnight cheap slot.
-- Short windows, smart dispatch extensions, manual charging and normal ECO behaviour do not write charge-rate percentages.
-
-
-## 3.6.2-beta.2
-
-### Changed
-
-- Reworks Smooth Charging beta into Battery Care Charging.
-- Limits Smooth/Battery Care Charging to the main overnight cheap-rate slot only. Extra IOG dispatches, manual smart windows, grace periods and short windows continue to use standard charging.
-- Replaces exposed ramp mechanics with a simpler Battery Care Mode: Gentle, Balanced or Strong.
-- Calculates the requested `setChargeRate` percentage from SOC, target SOC, battery capacity, maximum charge power and remaining overnight cheap-window time.
-- Re-evaluates during the overnight window instead of pre-queuing a fixed ramp.
-
-### Notes
-
-- Maximum Battery Charge Power remains user-defined because 100% charge rate represents different kW on different systems.
-- This beta is deliberately narrow so overnight behaviour can be tested safely before expanding Smooth Charging to other smart slots.
-
-## 3.6.2-beta.1
-
-### Added
-
-- Adds Smooth Charging beta behind an opt-in Homebridge config switch.
-- Adds local `/setChargeRate` percentage control before and during automatic charge windows.
-- Adds required user-defined Maximum Battery Charge Power (kW) for Smooth Charging so GivHome does not assume one inverter's 100% rate applies to every system.
-- Adds configurable Smooth Charging minimum window length, update interval, starting rate and maximum rate.
-
-### Changed
-
-- Long cheap windows can now use progressive charge-rate updates when Smooth Charging is enabled and correctly configured.
-- Short charge windows continue to use standard 100% charge-rate behaviour.
-- Excess Energy Export, manual charge/export tiles, Eve history and HomeKit accessory identity are preserved.
-
-### Notes
-
-- Smooth Charging is disabled by default.
-- Smooth Charging will not run if Maximum Battery Charge Power (kW) is missing or invalid.
-- This beta is battery-care focused; Pro load-sensitive control is intentionally left for a later build.
-
-## 3.6.0
-
-### Added
-
-- Adds Excess Energy Export: optional local evening sell-off automation for unused battery energy before the cheap overnight window.
-- Adds full Homebridge UI controls for Battery Capacity, Evening Export Start Time, Max Export Power, Reserve SOC, SOC Safety Margin, Slot Duration and Serve Overnight Load From Battery.
-- Adds local SOC-ladder behaviour inspired by MrMessy/WonderWatt-style evening export planning.
-
-### Changed
-
-- Promotes the soak-tested v3.6.0-beta.4 Excess Energy Export implementation to the public v3.6.0 release.
-- Keeps Excess Energy Export disabled by default and opt-in through the Homebridge UI.
-- Preserves existing Intelligent Octopus Go charging, manual tiles, Eve History, platform identity and HomeKit accessory identity behaviour.
-
-### Notes
-
-- Excess Energy Export uses local GivTCP REST controls only.
-- No GivEnergy cloud dependency is required for the new automation.
-- Daytime PV behaviour is unchanged; local battery-pause/freeze behaviour is not attempted in this release.
-
-## 3.6.0-beta.4
-
-- Exposes all Excess Energy Export evening sell-off controls in the Homebridge config UI.
-- Renames beta config keys to clearer user-facing names: Evening Export Start Time, Max Export Power, and SOC Safety Margin.
-- Keeps backwards tolerance for beta.3 config keys.
-- No intended change to existing IOG, Eve History, platform identity, or accessory identity behaviour.
-
-## 3.6.0-beta.3
-
-- Adds the first local Excess Energy Export evening sell-off automation.
-- Uses a MrMessy/WonderWatt-style SOC reserve ladder to export unused battery energy after normal evening household demand and before the cheap overnight window.
-- Keeps the feature disabled by default and opt-in through the Homebridge UI.
-- Adds configurable battery capacity, evening start time, reserve SOC, discharge rate, slot size and trigger margin.
-- Keeps existing Intelligent Octopus Go charging, manual tiles, Eve history and HomeKit accessory identity unchanged.
-- Does not attempt unsupported local battery-pause behaviour; daytime PV continues to follow the inverter's native charge-first/export-overflow behaviour.
+- Adds UI-configured, opt-in Excess Energy Export beta settings.
+- Captures Battery Capacity for reserve-ladder calculations.
+- Adds conservative default behaviour: overnight load remains served by cheap grid import unless the user explicitly opts into battery-first overnight behaviour.
+- Adds local-only excess export decision logging and conservative 30-minute discharge windows.
+- Credits MrMessy for the original WonderWatt scheduling sheet concept.
+- Preserves existing platform identity, child bridge compatibility, manual controls, Intelligent Octopus Go charging, and Eve History behaviour.
 
 ## 3.5.1-beta.2
 
