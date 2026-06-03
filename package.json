@@ -1,7 +1,7 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.6.5-beta.4",
-  "description": "GivHome reliability beta fixing AIO AC rate recovery guards and manual duration tile persistence",
+  "version": "3.6.5",
+  "description": "GivHome brings local GivEnergy battery automation into Apple Home with Intelligent Octopus Go, manual charge/export controls and Eve energy history.",
   "main": "index.js",
   "license": "Apache-2.0",
   "keywords": [

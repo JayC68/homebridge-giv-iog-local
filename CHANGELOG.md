@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.6.5 - 2026-06-03
+
+Stable release of the v3.6.5 reliability phase.
+
+### Fixed
+- Improved manual Force Charge reliability for 30, 60, 90 and 120 minute tiles.
+- Improved manual Force Export reliability for 30, 60, 90 and 120 minute tiles.
+- Manual duration tiles now remain ON for their intended duration and can be switched OFF to cancel early.
+- Manual charge/export cleanup now disables the relevant schedule, clears the active slot, and restores the validated AC rate guard.
+
+### Improved
+- AIO/Gateway charge and discharge recovery now uses the verified AC percentage control path.
+- GivHome no longer treats AIO watt-rate cache fields staying at 0 as a failure when the corresponding AC percentage fields are valid.
+- Release notes now document known GivTCP REST response text quirks where response wording can lag behind actual inverter/cache state.
+
+### Notes
+- On GivEnergy AIO/Gateway systems, `Battery_Charge_Rate_AC` and `Battery_Discharge_Rate_AC` are the authoritative percentage controls for this release path.
+- `Battery_Charge_Rate` and `Battery_Discharge_Rate` may remain at 0 in cache on some AIO systems even when AC percentage controls are correctly set and the inverter physically responds.
+- Evening Excess Export remains unchanged and will be re-tested separately in the v3.6.6 beta line.
+- Smooth Charging remains out of this release and will return in the v3.6.7 beta line.
+
 ## 3.6.5-beta.4 - AIO AC rate guards and manual control reliability
 
 - Uses the validated AC charge/discharge rate endpoints for AIO/Gateway recovery guards.
