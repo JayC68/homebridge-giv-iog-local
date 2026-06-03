@@ -1381,7 +1381,7 @@ class GivTcpMqttPlatform {
     if (kind === 'charge') {
       const body = { slot: '1', start, finish, chargeToPercent: String(Math.max(1, Math.min(100, Math.round(chargeToPercent ?? this.targetSoc)))) };
       return [
-        { restPath: '/setChargeRate', restBody: { chargeRate: 100 }, note: `${prefix} -> REST setChargeRate 100%` },
+        { restPath: '/setChargeRateAC', restBody: { chargeRate: 100 }, note: `${prefix} -> REST setChargeRateAC 100%` },
         { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable` },
         { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}` },
       ];
@@ -1389,6 +1389,7 @@ class GivTcpMqttPlatform {
 
     if (kind === 'discharge') {
       return [
+        { restPath: '/setDischargeRateAC', restBody: { dischargeRate: 100 }, note: `${prefix} -> REST setDischargeRateAC 100%` },
         { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable` },
         { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}` },
       ];
@@ -1402,6 +1403,7 @@ class GivTcpMqttPlatform {
       return [
         { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable` },
         { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00` },
+        { restPath: '/setChargeRateAC', restBody: { chargeRate: 100 }, note: `${prefix} -> REST setChargeRateAC 100% restore` },
       ];
     }
 
@@ -1409,6 +1411,7 @@ class GivTcpMqttPlatform {
       return [
         { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable` },
         { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00` },
+        { restPath: '/setDischargeRateAC', restBody: { dischargeRate: 100 }, note: `${prefix} -> REST setDischargeRateAC 100% restore` },
       ];
     }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.5-beta.4 - AIO AC rate guards and manual control reliability
+
+- Uses the validated AC charge/discharge rate endpoints for AIO/Gateway recovery guards.
+- Restores charge and discharge AC limits to 100% before CHARGE/EXPORT actions.
+- Restores AC limits on neutralise/stop paths so manual stop/ECO does not strand power limits at zero.
+- Preserves persistent 30/60/90/120 minute manual Charge/Export tile state.
+- Keeps Smooth absent and leaves Evening Excess Export unchanged while reliability testing continues.
+
+
 ## 3.6.5-beta.2 - Emergency IOG reliability rollback
 
 This beta intentionally restores the last known-good v3.6.0-beta.2 charge-control model while keeping the package version current.
