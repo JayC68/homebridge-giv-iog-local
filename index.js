@@ -114,7 +114,7 @@ class GivTcpMqttPlatform {
     this.serveOvernightLoadFromBattery = Boolean(this.config.serveOvernightLoadFromBattery);
     this.log.info(this.enableExcessEnergyExport
       ? `Excess Energy Export enabled | battery=${this.batteryCapacityKwh || 'unset'}kWh | maxDischarge=${this.excessExportMaxDischargeKw}kW | reserve=${this.excessExportReserveSoc}% | overnightLoad=${this.serveOvernightLoadFromBattery ? 'battery' : 'cheap-grid'}`
-      : 'Excess Energy Export disabled for v3.6.5-beta.2 safety build');
+      : 'Excess Energy Export disabled for v3.6.5-beta.3 safety build');
 
     this.eveEnergyHistoryServices = new Map();
     this.lastEveEnergyHistoryEntryMs = 0;
@@ -1127,7 +1127,7 @@ class GivTcpMqttPlatform {
       const end = new Date(Date.now() + (meta.minutes * 60000));
       const label = `Manual ${meta.displayAction} ${meta.minutes}m`;
       this.enqueueManualSequence(label, this.buildTimedSlotSteps(label, meta.slotKind, start, end, meta.slotKind === 'charge' ? this.targetSoc : null));
-      this.setCommandState(kind, true, 2);
+      this.setCommandState(kind, true, meta.minutes);
       this.clearSiblingManualIntents(kind, meta.family);
     } else {
       this.cleanupTimedManualAction(meta.family, 'manual off');
@@ -1381,6 +1381,7 @@ class GivTcpMqttPlatform {
     if (kind === 'charge') {
       const body = { slot: '1', start, finish, chargeToPercent: String(Math.max(1, Math.min(100, Math.round(chargeToPercent ?? this.targetSoc)))) };
       return [
+        { restPath: '/setChargeRate', restBody: { chargeRate: 100 }, note: `${prefix} -> REST setChargeRate 100%` },
         { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable` },
         { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}` },
       ];

@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140">
-  <rect width="140" height="140" rx="28" fill="#2D5C48"/>
+  <rect width="140" height="140" rx="28" fill="#5856d6"/>
   <polygon points="70,12 132,55 120,55 120,130 20,130 20,55 8,55" fill="rgba(255,255,255,0.10)"/>
   <polygon points="70,31.5 116.5,63.75 107.5,63.75 107.5,120 32.5,120 32.5,63.75 23.5,63.75" fill="rgba(255,255,255,0.17)"/>
   <polygon points="70,51 101,72.5 95,72.5 95,110 45,110 45,72.5 39,72.5" fill="rgba(255,255,255,0.26)"/>
-  <text x="70" y="87.74" dominant-baseline="central" text-anchor="middle" font-family="DejaVu Sans,sans-serif" font-size="53" font-weight="bold" fill="#B8E640">G</text>
+  <text x="70" y="87.74" dominant-baseline="central" text-anchor="middle"
+        font-family="DejaVu Sans,sans-serif" font-size="53" font-weight="bold" fill="white">G</text>
 </svg>

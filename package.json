@@ -1,7 +1,7 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.6.5-beta.2",
-  "description": "GivHome emergency reliability build restoring the last known-good Intelligent Octopus Go charge path for local GivEnergy control in Apple Home",
+  "version": "3.6.5-beta.3",
+  "description": "GivHome reliability beta restoring IOG charging, guarding battery charge power, and preserving manual duration tile state",
   "main": "index.js",
   "license": "Apache-2.0",
   "keywords": [
