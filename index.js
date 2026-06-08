@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.0-beta.3';
+const BUILD_VERSION = '3.7.0-beta.4';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -133,9 +133,15 @@ class GivTcpMqttPlatform {
     this.writeVerificationDelaySeconds = Number.isFinite(this.config.writeVerificationDelaySeconds)
       ? this.clamp(Math.round(this.config.writeVerificationDelaySeconds), 2, 60)
       : 8;
-    this.writeVerificationRetries = Number.isFinite(this.config.writeVerificationRetries)
-      ? this.clamp(Math.round(this.config.writeVerificationRetries), 1, 3)
-      : 2;
+    // Start verification is deliberately patient: users trigger Charge/Export because they need energy or space.
+    // Cleanup verification remains stricter because persistent schedules are dangerous.
+    this.writeVerificationStartRetries = Number.isFinite(this.config.writeVerificationStartRetries)
+      ? this.clamp(Math.round(this.config.writeVerificationStartRetries), 1, 12)
+      : 10;
+    this.writeVerificationClearRetries = Number.isFinite(this.config.writeVerificationClearRetries)
+      ? this.clamp(Math.round(this.config.writeVerificationClearRetries), 1, 6)
+      : (Number.isFinite(this.config.writeVerificationRetries) ? this.clamp(Math.round(this.config.writeVerificationRetries), 1, 6) : 3);
+    this.writeVerificationRetries = this.writeVerificationClearRetries;
 
     this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
 
@@ -1751,14 +1757,17 @@ class GivTcpMqttPlatform {
     return slots.map((slot) => `${slot.slot}:${slot.start}-${slot.end}`).join(', ');
   }
 
-  async verifyTimedActionState(label, kind, expectedState) {
+  async verifyTimedActionState(label, kind, expectedState, options = {}) {
     if (!this.enableWriteVerification) {
       this.log.info(`[WriteVerify] ${label} skipped: write verification disabled`);
       return false;
     }
 
     const delayMs = Math.max(2, this.writeVerificationDelaySeconds) * 1000;
-    const retries = Math.max(1, this.writeVerificationRetries);
+    const defaultRetries = expectedState === 'active'
+      ? this.writeVerificationStartRetries
+      : this.writeVerificationClearRetries;
+    const retries = Math.max(1, options.retries ?? defaultRetries);
 
     for (let attempt = 1; attempt <= retries; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -1800,11 +1809,53 @@ class GivTcpMqttPlatform {
   }
 
   async verifyTimedActionActive(label, kind) {
-    return this.verifyTimedActionState(label, kind, 'active');
+    return this.verifyTimedActionState(label, kind, 'active', { retries: this.writeVerificationStartRetries });
   }
 
   async verifyTimedActionCleared(label, kind) {
-    return this.verifyTimedActionState(label, kind, 'cleared');
+    return this.verifyTimedActionState(label, kind, 'cleared', { retries: this.writeVerificationClearRetries });
+  }
+
+  resetManualTimedActionStateForKind(kind) {
+    const family = kind === 'charge' ? 'forceCharge' : kind === 'discharge' ? 'forceExport' : null;
+    if (!family) {
+      return;
+    }
+
+    for (const switchKind of this.switchKinds) {
+      const meta = this.getManualSwitchMeta(switchKind);
+      if (meta?.family !== family) {
+        continue;
+      }
+
+      this.commandStates[switchKind] = false;
+      if (this.commandTimers.has(switchKind)) {
+        clearTimeout(this.commandTimers.get(switchKind));
+        this.commandTimers.delete(switchKind);
+      }
+
+      const accessory = this.accessories.get(switchKind);
+      const service = accessory?.getService(this.Service.Switch);
+      service?.updateCharacteristic(this.Characteristic.On, false);
+    }
+  }
+
+  async runFailedStartCleanup(label, kind) {
+    const cleanupLabel = `${label} Failed Start Cleanup`;
+    this.log.warn(`[WriteVerify] ${label} start verification failed; issuing fail-safe ${kind} cleanup`);
+
+    this.resetManualTimedActionStateForKind(kind);
+
+    const steps = this.buildNeutralizeSlotSteps(cleanupLabel, kind, { verifyCleared: true });
+    for (let i = 0; i < steps.length; i += 1) {
+      await this.postRestControl(steps[i].restPath, steps[i].restBody, `${cleanupLabel} step ${i + 1}/${steps.length}: ${steps[i].note}`);
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+    }
+
+    const cleared = await this.verifyTimedActionCleared(cleanupLabel, kind);
+    if (!cleared) {
+      this.log.warn(`[WriteVerify] ${cleanupLabel} failed; ${kind} schedule may still require manual inspection`);
+    }
   }
 
   formatSlotTime(date) {
@@ -2032,7 +2083,10 @@ class GivTcpMqttPlatform {
     }
 
     if (verifyActiveKind) {
-      await this.verifyTimedActionActive(label, verifyActiveKind);
+      const activeVerified = await this.verifyTimedActionActive(label, verifyActiveKind);
+      if (!activeVerified) {
+        await this.runFailedStartCleanup(label, verifyActiveKind);
+      }
     }
 
     if (verifyClearedKind) {

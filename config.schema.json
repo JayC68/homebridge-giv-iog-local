@@ -337,15 +337,31 @@
         "default": 8,
         "minimum": 2,
         "maximum": 60,
-        "description": "How long GivHome waits after a clear write before reading GivTCP cache to verify the timed action cleared. Default 8 seconds."
+        "description": "How long GivHome waits between existing GivTCP cache readbacks after timed action writes. Default 8 seconds. This does not add background polling or Modbus reads."
+      },
+      "writeVerificationStartRetries": {
+        "title": "Write Verification Start Attempts",
+        "type": "integer",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 12,
+        "description": "How many patient readback attempts GivHome may make to prove a timed Charge or Export start became active. Default 10, roughly 80 seconds with the default delay. Applies to manual actions, IOG/fallback cheap-window charging, and EEE export starts."
+      },
+      "writeVerificationClearRetries": {
+        "title": "Write Verification Clear Attempts",
+        "type": "integer",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 6,
+        "description": "How many strict readback attempts GivHome may make to prove a timed Charge or Export cleanup cleared all slots 1-10 and disabled the relevant schedule. Default 3."
       },
       "writeVerificationRetries": {
-        "title": "Write Verification Attempts",
+        "title": "Legacy Write Verification Attempts",
         "type": "integer",
-        "default": 2,
+        "default": 3,
         "minimum": 1,
-        "maximum": 3,
-        "description": "How many gentle readback attempts GivHome may make after a clear write. Default 2. This only runs after manual timed actions end or are switched off."
+        "maximum": 6,
+        "description": "Legacy compatibility setting now used as the clear-attempt value when Write Verification Clear Attempts is not set. New installs should use the separate Start and Clear attempt settings."
       }
     },
     "required": [
@@ -445,6 +461,8 @@
         "telemetryOfflineSeconds",
         "enableWriteVerification",
         "writeVerificationDelaySeconds",
+        "writeVerificationStartRetries",
+        "writeVerificationClearRetries",
         "writeVerificationRetries",
         "staleSeconds",
         "name"

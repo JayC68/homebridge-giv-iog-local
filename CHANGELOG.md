@@ -1,3 +1,12 @@
+## 3.7.0-beta.4 - 2026-06-08
+
+- Extends start verification patience for timed Charge and Export starts to 10 readback attempts by default, roughly 80 seconds with the default delay.
+- Applies patient start verification to manual Charge/Export, Intelligent Octopus Go smart-window charging, fallback 23:30-05:30 cheap-window charging, and Evening Excess Export starts when enabled.
+- Keeps cleanup verification stricter and separate, defaulting to 3 attempts while still checking schedule disabled plus slots 1-10 clear.
+- If a start cannot be verified, GivHome now performs fail-safe cleanup, verifies the cleanup, and turns manual timed action tiles back off where applicable.
+- Keeps REST success text as weak evidence only; GivTCP readback remains the source of truth.
+- Does not add background polling, Modbus polling, GivTCP restart logic, platform renaming, or EEE decision changes.
+
 ## 3.7.0-beta.3 - 2026-06-08
 
 - Extends write/readback/verify lifecycle checks to timed charge starts as well as cleanup.
