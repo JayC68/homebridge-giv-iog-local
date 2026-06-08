@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.0-beta.2';
+const BUILD_VERSION = '3.7.0-beta.3';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -80,6 +80,7 @@ class GivTcpMqttPlatform {
     this.smoothChargingUpdateIntervalMinutes = 15;
     this.smoothChargeTimers = [];
     this.lastSmoothChargePlanSignature = '';
+    this.lastSmoothChargeClearSignature = '';
     this.lastSmoothChargeRatePercent = null;
 
     this.maxPvKw = Number.isFinite(this.config.maxPvKw) && this.config.maxPvKw > 0
@@ -126,8 +127,8 @@ class GivTcpMqttPlatform {
     this.lastTelemetryFreshnessStateSignature = '';
     this.lastTelemetryAutomationBlockSignature = '';
 
-    // Gentle post-write verification for manual timed Charge/Export cleanup.
-    // This reads GivTCP's existing REST cache only after a cleanup write; it does not poll the inverter.
+    // Gentle post-write verification for timed Charge/Export lifecycle transitions.
+    // This reads GivTCP's existing REST cache only after command writes; it does not poll the inverter.
     this.enableWriteVerification = this.config.enableWriteVerification !== false;
     this.writeVerificationDelaySeconds = Number.isFinite(this.config.writeVerificationDelaySeconds)
       ? this.clamp(Math.round(this.config.writeVerificationDelaySeconds), 2, 60)
@@ -1601,55 +1602,156 @@ class GivTcpMqttPlatform {
     return normalised === '00:00';
   }
 
-  getSlotClearReadback(data, kind) {
+  findFirstNestedKey(obj, wanted) {
+    if (!obj || typeof obj !== 'object') {
+      return undefined;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(obj, wanted)) {
+      return obj[wanted];
+    }
+
+    for (const value of Object.values(obj)) {
+      const found = this.findFirstNestedKey(value, wanted);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+
+    return undefined;
+  }
+
+  normalizeReadbackSwitchState(value) {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+
+    if (typeof value === 'object') {
+      if (value.name !== undefined) {
+        return this.normalizeReadbackSwitchState(value.name);
+      }
+      if (value.value !== undefined) {
+        return this.normalizeReadbackSwitchState(value.value);
+      }
+      return null;
+    }
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value !== 0;
+    }
+
+    const text = String(value).trim().toLowerCase();
+    if (['enable', 'enabled', 'on', 'true', '1', 'active'].includes(text)) {
+      return true;
+    }
+    if (['disable', 'disabled', 'off', 'false', '0', 'inactive', 'normal'].includes(text)) {
+      return false;
+    }
+
+    return null;
+  }
+
+  getTimedScheduleReadback(data, kind) {
     const isCharge = kind === 'charge';
-    const rawSlot = this.getNestedValue(data, ['raw', 'invertor', isCharge ? 'charge_slot_1' : 'discharge_slot_1']);
+    const publicKey = isCharge ? 'Enable_Charge_Schedule' : 'Enable_Discharge_Schedule';
+    const rawKey = isCharge ? 'enable_charge_schedule' : 'enable_discharge_schedule';
+    const rawLegacyKey = isCharge ? 'enable_charge' : 'enable_discharge';
+
+    const value = this.firstNestedValue(data, [
+      ['decoded', 'Timeslots', publicKey],
+      ['decoded', 'Invertor', publicKey],
+      ['Power', 'Power', publicKey],
+      ['Stats', publicKey],
+      ['raw', 'invertor', rawKey],
+      ['raw', 'invertor', rawLegacyKey],
+    ]) ?? this.findFirstNestedKey(data, publicKey);
+
+    return this.normalizeReadbackSwitchState(value);
+  }
+
+  getSlotReadback(data, kind, slotNumber) {
+    const isCharge = kind === 'charge';
+    const prefix = isCharge ? 'Charge' : 'Discharge';
+    const rawPrefix = isCharge ? 'charge' : 'discharge';
+    const startKey = `${prefix}_start_time_slot_${slotNumber}`;
+    const endKey = `${prefix}_end_time_slot_${slotNumber}`;
+    const rawSlot = this.getNestedValue(data, ['raw', 'invertor', `${rawPrefix}_slot_${slotNumber}`]);
+
     const start = rawSlot && typeof rawSlot === 'object' && rawSlot.start !== undefined
       ? rawSlot.start
-      : this.firstNestedValue(data, isCharge ? [
-        ['decoded', 'Timeslots', 'Charge_start_time_slot_1'],
-        ['raw', 'invertor', 'charge_slot_1_start'],
-      ] : [
-        ['decoded', 'Timeslots', 'Discharge_start_time_slot_1'],
-        ['raw', 'invertor', 'discharge_slot_1_start'],
-      ]);
+      : this.firstNestedValue(data, [
+        ['decoded', 'Timeslots', startKey],
+        ['decoded', 'Invertor', startKey],
+        ['Power', 'Power', startKey],
+        ['raw', 'invertor', `${rawPrefix}_slot_${slotNumber}_start`],
+      ]) ?? this.findFirstNestedKey(data, startKey);
+
     const end = rawSlot && typeof rawSlot === 'object' && rawSlot.end !== undefined
       ? rawSlot.end
-      : this.firstNestedValue(data, isCharge ? [
-        ['decoded', 'Timeslots', 'Charge_end_time_slot_1'],
-        ['raw', 'invertor', 'charge_slot_1_end'],
-      ] : [
-        ['decoded', 'Timeslots', 'Discharge_end_time_slot_1'],
-        ['raw', 'invertor', 'discharge_slot_1_end'],
-      ]);
+      : this.firstNestedValue(data, [
+        ['decoded', 'Timeslots', endKey],
+        ['decoded', 'Invertor', endKey],
+        ['Power', 'Power', endKey],
+        ['raw', 'invertor', `${rawPrefix}_slot_${slotNumber}_end`],
+      ]) ?? this.findFirstNestedKey(data, endKey);
 
     const startText = this.normalizeReadbackTime(start);
     const endText = this.normalizeReadbackTime(end);
     const hasSlotEvidence = startText !== null && endText !== null;
-    const slotCleared = hasSlotEvidence && this.isClearedReadbackTime(start) && this.isClearedReadbackTime(end);
-
-    const enableDischarge = isCharge ? undefined : this.getNestedValue(data, ['raw', 'invertor', 'enable_discharge']);
-    let dischargeDisabled = null;
-    if (enableDischarge && typeof enableDischarge === 'object') {
-      const name = String(enableDischarge.name || '').toUpperCase();
-      const numeric = Number(enableDischarge.value);
-      if (name) {
-        dischargeDisabled = name.includes('DISABLE');
-      } else if (Number.isFinite(numeric)) {
-        dischargeDisabled = numeric === 0;
-      }
-    }
+    const cleared = hasSlotEvidence && this.isClearedReadbackTime(start) && this.isClearedReadbackTime(end);
+    const active = hasSlotEvidence && !cleared;
 
     return {
+      slot: slotNumber,
       hasSlotEvidence,
-      cleared: slotCleared,
+      cleared,
+      active,
       start: startText ?? 'unknown',
       end: endText ?? 'unknown',
-      dischargeDisabled,
     };
   }
 
-  async verifyTimedActionCleared(label, kind) {
+  getTimedActionReadback(data, kind) {
+    const scheduleEnabled = this.getTimedScheduleReadback(data, kind);
+    const slots = [];
+
+    for (let slot = 1; slot <= 10; slot += 1) {
+      slots.push(this.getSlotReadback(data, kind, slot));
+    }
+
+    const slotsWithEvidence = slots.filter((slot) => slot.hasSlotEvidence);
+    const activeSlots = slotsWithEvidence.filter((slot) => slot.active);
+    const unclearedSlots = slotsWithEvidence.filter((slot) => !slot.cleared);
+    const slot1 = slots.find((slot) => slot.slot === 1);
+    const allObservedSlotsCleared = slotsWithEvidence.length > 0 && unclearedSlots.length === 0;
+    const cleared = allObservedSlotsCleared && scheduleEnabled !== true;
+    const active = Boolean(slot1?.active) && scheduleEnabled !== false;
+
+    return {
+      scheduleEnabled,
+      slots,
+      slotsWithEvidence,
+      activeSlots,
+      unclearedSlots,
+      slot1,
+      active,
+      cleared,
+    };
+  }
+
+  formatSlotList(slots) {
+    if (!Array.isArray(slots) || slots.length === 0) {
+      return 'none';
+    }
+
+    return slots.map((slot) => `${slot.slot}:${slot.start}-${slot.end}`).join(', ');
+  }
+
+  async verifyTimedActionState(label, kind, expectedState) {
     if (!this.enableWriteVerification) {
       this.log.info(`[WriteVerify] ${label} skipped: write verification disabled`);
       return false;
@@ -1662,21 +1764,30 @@ class GivTcpMqttPlatform {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       try {
         const { path: sourcePath, data } = await this.readGivTcpCacheForVerification();
-        const result = this.getSlotClearReadback(data, kind);
-        const disableText = result.dischargeDisabled === null ? '' : ` | dischargeEnableDisabled=${result.dischargeDisabled}`;
-        if (result.cleared) {
-          this.log.info(`[WriteVerify] ${label} cleared | ${kind} slot 1 ${result.start}-${result.end} | source=${sourcePath}${disableText}`);
+        const result = this.getTimedActionReadback(data, kind);
+        const scheduleText = result.scheduleEnabled === null ? 'unknown' : result.scheduleEnabled ? 'enabled' : 'disabled';
+
+        if (expectedState === 'active' && result.active) {
+          this.log.info(`[WriteVerify] ${label} active | ${kind} slot 1 ${result.slot1.start}-${result.slot1.end} | schedule=${scheduleText} | source=${sourcePath}`);
           return true;
         }
 
-        const message = `[WriteVerify] ${label} not yet cleared | ${kind} slot 1 ${result.start}-${result.end} | attempt=${attempt}/${retries} | source=${sourcePath}${disableText}`;
+        if (expectedState === 'cleared' && result.cleared) {
+          this.log.info(`[WriteVerify] ${label} cleared | ${kind} slots 1-10 clear | schedule=${scheduleText} | source=${sourcePath}`);
+          return true;
+        }
+
+        const detail = expectedState === 'active'
+          ? `${kind} slot 1 ${result.slot1?.start ?? 'unknown'}-${result.slot1?.end ?? 'unknown'}`
+          : `${kind} uncleared slots ${this.formatSlotList(result.unclearedSlots)}`;
+        const message = `[WriteVerify] ${label} not ${expectedState} | ${detail} | schedule=${scheduleText} | attempt=${attempt}/${retries} | source=${sourcePath}`;
         if (attempt < retries) {
           this.log.info(message);
         } else {
           this.log.warn(message);
         }
       } catch (err) {
-        const message = `[WriteVerify] ${label} readback failed | attempt=${attempt}/${retries}: ${err.message}`;
+        const message = `[WriteVerify] ${label} readback failed | expected=${expectedState} | attempt=${attempt}/${retries}: ${err.message}`;
         if (attempt < retries) {
           this.log.info(message);
         } else {
@@ -1686,6 +1797,14 @@ class GivTcpMqttPlatform {
     }
 
     return false;
+  }
+
+  async verifyTimedActionActive(label, kind) {
+    return this.verifyTimedActionState(label, kind, 'active');
+  }
+
+  async verifyTimedActionCleared(label, kind) {
+    return this.verifyTimedActionState(label, kind, 'cleared');
   }
 
   formatSlotTime(date) {
@@ -1702,14 +1821,14 @@ class GivTcpMqttPlatform {
       const body = { slot: '1', start, finish, chargeToPercent: String(Math.max(1, Math.min(100, Math.round(chargeToPercent ?? this.targetSoc)))) };
       return [
         { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable` },
-        { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}` },
+        { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'charge' },
       ];
     }
 
     if (kind === 'discharge') {
       return [
         { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable` },
-        { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}` },
+        { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'discharge' },
       ];
     }
 
@@ -1768,7 +1887,15 @@ class GivTcpMqttPlatform {
     this.smoothChargeTimers = [];
     this.lastSmoothChargePlanSignature = '';
 
-    if (reason) {
+    // Smooth Charging is parked/disabled by default. Do not emit legacy Smooth logs while inactive.
+    if (!this.smoothChargingEnabled || !reason) {
+      this.lastSmoothChargeClearSignature = '';
+      return;
+    }
+
+    const signature = String(reason);
+    if (signature !== this.lastSmoothChargeClearSignature) {
+      this.lastSmoothChargeClearSignature = signature;
       this.log.debug?.(`[Smooth Charging] cleared timers: ${reason}`);
     }
   }
@@ -1891,13 +2018,21 @@ class GivTcpMqttPlatform {
 
   async runRestStepQueue(label, steps) {
     this.log.info(`${label} -> queued ${steps.length} step(s)`);
+    let verifyActiveKind = null;
     let verifyClearedKind = null;
     for (let i = 0; i < steps.length; i += 1) {
       await this.postRestControl(steps[i].restPath, steps[i].restBody, `${label} step ${i + 1}/${steps.length}: ${steps[i].note}`);
+      if (steps[i].verifyActiveKind) {
+        verifyActiveKind = steps[i].verifyActiveKind;
+      }
       if (steps[i].verifyClearedKind) {
         verifyClearedKind = steps[i].verifyClearedKind;
       }
       await new Promise((resolve) => setTimeout(resolve, 2200));
+    }
+
+    if (verifyActiveKind) {
+      await this.verifyTimedActionActive(label, verifyActiveKind);
     }
 
     if (verifyClearedKind) {
@@ -2883,7 +3018,7 @@ class GivTcpMqttPlatform {
       const end = new Date(Date.now() + (Math.max(1, bucketedMinutes) * 60000));
       const steps = [];
       if (this.excessEnergyExportActive) {
-        steps.push(...this.buildNeutralizeSlotSteps('Automation CHARGE', 'discharge'));
+        steps.push(...this.buildNeutralizeSlotSteps('Automation CHARGE', 'discharge', { verifyCleared: true }));
         this.excessEnergyExportActive = false;
         this.activeExcessExportSlot = null;
       }
@@ -2930,8 +3065,8 @@ class GivTcpMqttPlatform {
 
     this.clearSmoothChargeTimers('eco');
     const steps = this.excessEnergyExportActive
-      ? this.buildNeutralizeSlotSteps('Automation ECO', 'discharge')
-      : this.buildNeutralizeSlotSteps('Automation ECO', 'charge');
+      ? this.buildNeutralizeSlotSteps('Automation ECO', 'discharge', { verifyCleared: true })
+      : this.buildNeutralizeSlotSteps('Automation ECO', 'charge', { verifyCleared: true });
     this.excessEnergyExportActive = false;
     this.activeExcessExportSlot = null;
     this.enqueueAutomationSequence('Automation ECO', steps);

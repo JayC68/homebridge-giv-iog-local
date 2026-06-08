@@ -1,3 +1,12 @@
+## 3.7.0-beta.3 - 2026-06-08
+
+- Extends write/readback/verify lifecycle checks to timed charge starts as well as cleanup.
+- Automatic IOG smart-window charging and the fallback 23:30-05:30 cheap window now use the same post-write readback verification path as manual timed actions.
+- Verification now inspects charge/discharge slots 1-10 so hidden slot persistence is detected rather than missed.
+- Treats GivTCP cache readback as the source of truth; REST success text remains logged but is not trusted as proof of state.
+- Silences parked Smooth Charging timer-clear logging when Smooth Charging is disabled, with dedupe retained as a safety net if Smooth is re-enabled.
+- No background polling, ping checks, port checks, GivTCP restart logic, EEE behaviour changes or platform naming changes.
+
 # Changelog
 
 ## 3.7.0-beta.2 - 2026-06-08

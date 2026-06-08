@@ -168,7 +168,7 @@ GivHome creates simple Apple Home controls for common manual actions:
 
 The manual tiles are truth-based: they reflect live inverter schedule state rather than only remembering what the plugin last requested.
 
-From v3.7.0-beta.2, manual timed Charge and Export actions also include a gentle cleanup verification step. When a timed action ends, or when you switch it off manually, GivHome writes the normal clear command, reads back the existing GivTCP cache, and checks that slot 1 has returned to 00:00-00:00. This is designed to make unwanted persistent charge/export state less likely without adding background polling or extra Modbus traffic.
+From v3.7.0-beta.3, timed Charge and Export actions include a gentle write/readback/verify lifecycle. This applies to manual timed Charge/Export actions, Intelligent Octopus Go smart-window charging, and the fallback 23:30-05:30 cheap charging window. After GivHome writes a start or clear command, it reads back the existing GivTCP cache and verifies the observed inverter schedule state. Clear verification checks charge/discharge slots 1-10 so hidden slot persistence is detected rather than missed. This is designed to make unwanted persistent charge/export state less likely without adding background polling or extra Modbus traffic.
 
 ### Apple Home visibility
 
