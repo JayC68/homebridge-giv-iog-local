@@ -168,6 +168,8 @@ GivHome creates simple Apple Home controls for common manual actions:
 
 The manual tiles are truth-based: they reflect live inverter schedule state rather than only remembering what the plugin last requested.
 
+From v3.7.0-beta.2, manual timed Charge and Export actions also include a gentle cleanup verification step. When a timed action ends, or when you switch it off manually, GivHome writes the normal clear command, reads back the existing GivTCP cache, and checks that slot 1 has returned to 00:00-00:00. This is designed to make unwanted persistent charge/export state less likely without adding background polling or extra Modbus traffic.
+
 ### Apple Home visibility
 
 GivHome brings useful battery information into Apple Home, including:
@@ -294,6 +296,18 @@ Recommended starting values:
 - Offline Threshold: 600 seconds
 
 These settings add no inverter traffic. They only inspect freshness information already supplied by GivTCP.
+
+### Timed Action Write Verification
+
+Leave this enabled unless diagnosing an unusual GivTCP installation. GivHome uses it only after a manual timed Charge or Export cleanup write.
+
+Recommended starting values:
+
+- Verify Timed Action Clears: on
+- Write Verification Delay: 8 seconds
+- Write Verification Attempts: 2
+
+The verification reads GivTCP's existing cache after the clear command. It does not poll the inverter continuously and does not add a new Modbus loop.
 
 ---
 

@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.0-beta.1';
+const BUILD_VERSION = '3.7.0-beta.2';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -126,6 +126,16 @@ class GivTcpMqttPlatform {
     this.lastTelemetryFreshnessStateSignature = '';
     this.lastTelemetryAutomationBlockSignature = '';
 
+    // Gentle post-write verification for manual timed Charge/Export cleanup.
+    // This reads GivTCP's existing REST cache only after a cleanup write; it does not poll the inverter.
+    this.enableWriteVerification = this.config.enableWriteVerification !== false;
+    this.writeVerificationDelaySeconds = Number.isFinite(this.config.writeVerificationDelaySeconds)
+      ? this.clamp(Math.round(this.config.writeVerificationDelaySeconds), 2, 60)
+      : 8;
+    this.writeVerificationRetries = Number.isFinite(this.config.writeVerificationRetries)
+      ? this.clamp(Math.round(this.config.writeVerificationRetries), 1, 3)
+      : 2;
+
     this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
 
     this.enableExcessEnergyExport = Boolean(this.config.enableExcessEnergyExport);
@@ -174,6 +184,7 @@ class GivTcpMqttPlatform {
     this.commandStates = {};
 
     this.commandTimers = new Map();
+    this.manualCleanupTimers = new Map();
     this.smoothChargeTimers = this.smoothChargeTimers || [];
     this.manualQueue = Promise.resolve();
     this.automationQueue = Promise.resolve();
@@ -1237,6 +1248,7 @@ class GivTcpMqttPlatform {
       const label = `Manual ${meta.displayAction} ${meta.minutes}m`;
       this.enqueueManualSequence(label, this.buildTimedSlotSteps(label, meta.slotKind, start, end, meta.slotKind === 'charge' ? this.targetSoc : null));
       this.setCommandState(kind, true, 2);
+      this.scheduleTimedManualCleanup(kind, meta);
       this.clearSiblingManualIntents(kind, meta.family);
     } else {
       this.cleanupTimedManualAction(meta.family, 'manual off');
@@ -1278,7 +1290,29 @@ class GivTcpMqttPlatform {
         clearTimeout(this.commandTimers.get(kind));
         this.commandTimers.delete(kind);
       }
+      if (this.manualCleanupTimers.has(kind)) {
+        clearTimeout(this.manualCleanupTimers.get(kind));
+        this.manualCleanupTimers.delete(kind);
+      }
     }
+  }
+
+  scheduleTimedManualCleanup(kind, meta) {
+    if (!meta?.family || !meta?.slotKind || !Number.isFinite(meta.minutes) || meta.minutes <= 0) {
+      return;
+    }
+
+    if (this.manualCleanupTimers.has(kind)) {
+      clearTimeout(this.manualCleanupTimers.get(kind));
+      this.manualCleanupTimers.delete(kind);
+    }
+
+    const timeoutMs = Math.max(1, meta.minutes) * 60 * 1000 + 5000;
+    const timer = setTimeout(() => {
+      this.manualCleanupTimers.delete(kind);
+      this.cleanupTimedManualAction(meta.family, `timed ${meta.minutes}m ended`);
+    }, timeoutMs);
+    this.manualCleanupTimers.set(kind, timer);
   }
 
   normalizeSwitchText(value) {
@@ -1477,6 +1511,183 @@ class GivTcpMqttPlatform {
     this.log.info(`REST control -> ${path} = ${JSON.stringify(body)} :: ${text}`);
   }
 
+
+  async getRestJson(path) {
+    const url = `${this.givTcpRestUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    const response = await fetch(url, { method: 'GET' });
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`REST ${path} failed (${response.status}): ${text}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new Error(`REST ${path} returned non-JSON: ${err.message}`);
+    }
+  }
+
+  async readGivTcpCacheForVerification() {
+    let lastError = null;
+    for (const path of ['/readData', '/getCache']) {
+      try {
+        const data = await this.getRestJson(path);
+        if (data && typeof data === 'object' && !data.Result) {
+          return { path, data };
+        }
+        lastError = new Error(`${path} returned ${JSON.stringify(data).slice(0, 120)}`);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error('No GivTCP cache endpoint returned data');
+  }
+
+  getNestedValue(obj, pathParts) {
+    let current = obj;
+    for (const part of pathParts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return undefined;
+      }
+      current = current[part];
+    }
+    return current;
+  }
+
+  firstNestedValue(obj, candidatePaths) {
+    for (const candidate of candidatePaths) {
+      const value = this.getNestedValue(obj, candidate);
+      if (value !== undefined && value !== null && value !== '') {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  normalizeReadbackTime(value) {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+
+    if (typeof value === 'object') {
+      return null;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const n = Math.max(0, Math.round(value));
+      const hours = Math.floor(n / 100);
+      const minutes = n % 100;
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+
+    const text = String(value).trim();
+    const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (match) {
+      return `${String(Number(match[1])).padStart(2, '0')}:${match[2]}`;
+    }
+
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) {
+      return this.normalizeReadbackTime(numeric);
+    }
+
+    return text;
+  }
+
+  isClearedReadbackTime(value) {
+    const normalised = this.normalizeReadbackTime(value);
+    return normalised === '00:00';
+  }
+
+  getSlotClearReadback(data, kind) {
+    const isCharge = kind === 'charge';
+    const rawSlot = this.getNestedValue(data, ['raw', 'invertor', isCharge ? 'charge_slot_1' : 'discharge_slot_1']);
+    const start = rawSlot && typeof rawSlot === 'object' && rawSlot.start !== undefined
+      ? rawSlot.start
+      : this.firstNestedValue(data, isCharge ? [
+        ['decoded', 'Timeslots', 'Charge_start_time_slot_1'],
+        ['raw', 'invertor', 'charge_slot_1_start'],
+      ] : [
+        ['decoded', 'Timeslots', 'Discharge_start_time_slot_1'],
+        ['raw', 'invertor', 'discharge_slot_1_start'],
+      ]);
+    const end = rawSlot && typeof rawSlot === 'object' && rawSlot.end !== undefined
+      ? rawSlot.end
+      : this.firstNestedValue(data, isCharge ? [
+        ['decoded', 'Timeslots', 'Charge_end_time_slot_1'],
+        ['raw', 'invertor', 'charge_slot_1_end'],
+      ] : [
+        ['decoded', 'Timeslots', 'Discharge_end_time_slot_1'],
+        ['raw', 'invertor', 'discharge_slot_1_end'],
+      ]);
+
+    const startText = this.normalizeReadbackTime(start);
+    const endText = this.normalizeReadbackTime(end);
+    const hasSlotEvidence = startText !== null && endText !== null;
+    const slotCleared = hasSlotEvidence && this.isClearedReadbackTime(start) && this.isClearedReadbackTime(end);
+
+    const enableDischarge = isCharge ? undefined : this.getNestedValue(data, ['raw', 'invertor', 'enable_discharge']);
+    let dischargeDisabled = null;
+    if (enableDischarge && typeof enableDischarge === 'object') {
+      const name = String(enableDischarge.name || '').toUpperCase();
+      const numeric = Number(enableDischarge.value);
+      if (name) {
+        dischargeDisabled = name.includes('DISABLE');
+      } else if (Number.isFinite(numeric)) {
+        dischargeDisabled = numeric === 0;
+      }
+    }
+
+    return {
+      hasSlotEvidence,
+      cleared: slotCleared,
+      start: startText ?? 'unknown',
+      end: endText ?? 'unknown',
+      dischargeDisabled,
+    };
+  }
+
+  async verifyTimedActionCleared(label, kind) {
+    if (!this.enableWriteVerification) {
+      this.log.info(`[WriteVerify] ${label} skipped: write verification disabled`);
+      return false;
+    }
+
+    const delayMs = Math.max(2, this.writeVerificationDelaySeconds) * 1000;
+    const retries = Math.max(1, this.writeVerificationRetries);
+
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      try {
+        const { path: sourcePath, data } = await this.readGivTcpCacheForVerification();
+        const result = this.getSlotClearReadback(data, kind);
+        const disableText = result.dischargeDisabled === null ? '' : ` | dischargeEnableDisabled=${result.dischargeDisabled}`;
+        if (result.cleared) {
+          this.log.info(`[WriteVerify] ${label} cleared | ${kind} slot 1 ${result.start}-${result.end} | source=${sourcePath}${disableText}`);
+          return true;
+        }
+
+        const message = `[WriteVerify] ${label} not yet cleared | ${kind} slot 1 ${result.start}-${result.end} | attempt=${attempt}/${retries} | source=${sourcePath}${disableText}`;
+        if (attempt < retries) {
+          this.log.info(message);
+        } else {
+          this.log.warn(message);
+        }
+      } catch (err) {
+        const message = `[WriteVerify] ${label} readback failed | attempt=${attempt}/${retries}: ${err.message}`;
+        if (attempt < retries) {
+          this.log.info(message);
+        } else {
+          this.log.warn(message);
+        }
+      }
+    }
+
+    return false;
+  }
+
   formatSlotTime(date) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
@@ -1653,18 +1864,18 @@ class GivTcpMqttPlatform {
     };
   }
 
-  buildNeutralizeSlotSteps(prefix, kind) {
+  buildNeutralizeSlotSteps(prefix, kind, options = {}) {
     if (kind === 'charge') {
       return [
         { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable` },
-        { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00` },
+        { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00`, verifyClearedKind: options.verifyCleared ? 'charge' : null },
       ];
     }
 
     if (kind === 'discharge') {
       const steps = [
         { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable` },
-        { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00` },
+        { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00`, verifyClearedKind: options.verifyCleared ? 'discharge' : null },
       ];
 
       const restoreStep = this.buildRestoreDischargeRateStep(prefix);
@@ -1680,9 +1891,17 @@ class GivTcpMqttPlatform {
 
   async runRestStepQueue(label, steps) {
     this.log.info(`${label} -> queued ${steps.length} step(s)`);
+    let verifyClearedKind = null;
     for (let i = 0; i < steps.length; i += 1) {
       await this.postRestControl(steps[i].restPath, steps[i].restBody, `${label} step ${i + 1}/${steps.length}: ${steps[i].note}`);
+      if (steps[i].verifyClearedKind) {
+        verifyClearedKind = steps[i].verifyClearedKind;
+      }
       await new Promise((resolve) => setTimeout(resolve, 2200));
+    }
+
+    if (verifyClearedKind) {
+      await this.verifyTimedActionCleared(label, verifyClearedKind);
     }
   }
 
@@ -1719,9 +1938,13 @@ class GivTcpMqttPlatform {
         clearTimeout(this.commandTimers.get(kind));
         this.commandTimers.delete(kind);
       }
+      if (this.manualCleanupTimers.has(kind)) {
+        clearTimeout(this.manualCleanupTimers.get(kind));
+        this.manualCleanupTimers.delete(kind);
+      }
     }
 
-    this.enqueueManualSequence(`Manual ${label} Cleanup`, this.buildNeutralizeSlotSteps(`Manual ${label} Cleanup (${reason})`, slotKind));
+    this.enqueueManualSequence(`Manual ${label} Cleanup`, this.buildNeutralizeSlotSteps(`Manual ${label} Cleanup (${reason})`, slotKind, { verifyCleared: true }));
     this.refreshAccessories();
   }
 

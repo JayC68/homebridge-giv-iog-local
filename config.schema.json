@@ -324,6 +324,28 @@
         "minimum": 60,
         "maximum": 7200,
         "description": "Telemetry is considered offline/critical at or above this age. Default 600 seconds. Automations are blocked while stale/offline when the guard is enabled."
+      },
+      "enableWriteVerification": {
+        "title": "Verify Timed Action Clears",
+        "type": "boolean",
+        "default": true,
+        "description": "Recommended. After a manual timed Charge or Export finishes or is manually switched off, GivHome writes the clear command, reads back the existing GivTCP cache, and verifies slot 1 has cleared. This is a gentle post-write check and does not add Modbus polling."
+      },
+      "writeVerificationDelaySeconds": {
+        "title": "Write Verification Delay (seconds)",
+        "type": "integer",
+        "default": 8,
+        "minimum": 2,
+        "maximum": 60,
+        "description": "How long GivHome waits after a clear write before reading GivTCP cache to verify the timed action cleared. Default 8 seconds."
+      },
+      "writeVerificationRetries": {
+        "title": "Write Verification Attempts",
+        "type": "integer",
+        "default": 2,
+        "minimum": 1,
+        "maximum": 3,
+        "description": "How many gentle readback attempts GivHome may make after a clear write. Default 2. This only runs after manual timed actions end or are switched off."
       }
     },
     "required": [
@@ -421,6 +443,9 @@
         "enableTelemetryFreshnessGuard",
         "telemetryFreshSeconds",
         "telemetryOfflineSeconds",
+        "enableWriteVerification",
+        "writeVerificationDelaySeconds",
+        "writeVerificationRetries",
         "staleSeconds",
         "name"
       ]

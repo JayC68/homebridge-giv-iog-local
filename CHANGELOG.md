@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.7.0-beta.2 - 2026-06-08
+
+### Added
+
+- Adds gentle write/readback/verify-cleared handling for manual timed Charge and Export actions.
+- When a manual timed action ends, or is switched off manually, GivHome writes the normal clear command and then reads back the existing GivTCP cache to confirm slot 1 has cleared to 00:00-00:00.
+- Adds optional Homebridge UI controls for write verification delay and retry count.
+
+### Safety and design notes
+
+- This verification runs only after manual timed action cleanup writes. It does not add background polling, Modbus polling, ping checks, port checks or GivTCP restart behaviour.
+- The existing automation command paths remain unchanged; this beta adds a protective cleanup confirmation path for manual timed actions.
+
 ## 3.7.0-beta.1 - 2026-06-08
 
 ### Added
