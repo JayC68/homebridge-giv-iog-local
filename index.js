@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.6.5-beta.2';
+const BUILD_VERSION = '3.7.0-beta.1';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -67,6 +67,21 @@ class GivTcpMqttPlatform {
     this.graceMinutes = Number.isFinite(this.config.graceMinutes) ? this.config.graceMinutes : 30;
     this.targetSoc = Number.isFinite(this.config.targetSoc) ? this.config.targetSoc : 100;
 
+    this.smoothChargingEnabled = Boolean(this.config.smoothChargingEnabled);
+    this.maxBatteryChargePowerKw = Number.isFinite(this.config.maxBatteryChargePowerKw) && this.config.maxBatteryChargePowerKw > 0
+      ? this.config.maxBatteryChargePowerKw
+      : null;
+    this.smoothChargingMode = ['gentle', 'balanced', 'strong'].includes(String(this.config.smoothChargingMode || '').toLowerCase())
+      ? String(this.config.smoothChargingMode).toLowerCase()
+      : 'balanced';
+    this.smoothChargingWindowMinimumMinutes = Number.isFinite(this.config.smoothChargingWindowMinimumMinutes)
+      ? this.clamp(Math.round(this.config.smoothChargingWindowMinimumMinutes), 60, 360)
+      : 90;
+    this.smoothChargingUpdateIntervalMinutes = 15;
+    this.smoothChargeTimers = [];
+    this.lastSmoothChargePlanSignature = '';
+    this.lastSmoothChargeRatePercent = null;
+
     this.maxPvKw = Number.isFinite(this.config.maxPvKw) && this.config.maxPvKw > 0
       ? this.config.maxPvKw
       : null;
@@ -98,23 +113,46 @@ class GivTcpMqttPlatform {
       : (legacyPowerActiveThreshold ?? 50);
     this.staleSeconds = Number.isFinite(this.config.staleSeconds) ? this.config.staleSeconds : 180;
 
+    // Passive telemetry freshness guard. This does not poll the inverter and does not add Modbus traffic.
+    // It only watches the freshness timestamp already published by GivTCP/MQTT.
+    this.enableTelemetryFreshnessGuard = this.config.enableTelemetryFreshnessGuard !== false;
+    this.telemetryFreshSeconds = Number.isFinite(this.config.telemetryFreshSeconds)
+      ? this.clamp(Math.round(this.config.telemetryFreshSeconds), 30, 3600)
+      : 180;
+    this.telemetryOfflineSeconds = Number.isFinite(this.config.telemetryOfflineSeconds)
+      ? this.clamp(Math.round(this.config.telemetryOfflineSeconds), this.telemetryFreshSeconds + 30, 7200)
+      : 600;
+    this.lastTelemetryFreshnessSignature = '';
+    this.lastTelemetryFreshnessStateSignature = '';
+    this.lastTelemetryAutomationBlockSignature = '';
+
     this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
 
-    this.enableExcessEnergyExport = false; // emergency safety build: EEE temporarily disabled
-    this.batteryCapacityKwh = Number.isFinite(this.config.batteryCapacityKwh) && this.config.batteryCapacityKwh > 0
+    this.enableExcessEnergyExport = Boolean(this.config.enableExcessEnergyExport);
+    this.excessExportBatteryCapacityKwh = Number.isFinite(this.config.batteryCapacityKwh) && this.config.batteryCapacityKwh > 0
       ? this.config.batteryCapacityKwh
       : null;
-    this.excessExportMaxDischargeKw = Number.isFinite(this.config.excessExportMaxDischargeKw) && this.config.excessExportMaxDischargeKw > 0
-      ? this.config.excessExportMaxDischargeKw
-      : 5;
+    this.excessExportStart = this.config.excessExportStartTime || this.config.excessExportStart || '19:30';
     this.excessExportReserveSoc = Number.isFinite(this.config.excessExportReserveSoc)
-      ? this.clamp(this.config.excessExportReserveSoc, 5, 80)
-      : 15;
-    this.excessExportSlotMinutes = 30;
+      ? this.clamp(this.config.excessExportReserveSoc, 5, 95)
+      : 20;
+    this.excessExportDischargeKw = Number.isFinite(this.config.maxExportPowerKw) && this.config.maxExportPowerKw > 0
+      ? this.config.maxExportPowerKw
+      : (Number.isFinite(this.config.excessExportDischargeKw) && this.config.excessExportDischargeKw > 0 ? this.config.excessExportDischargeKw : 5);
+    this.normalDischargePowerW = Number.isFinite(this.config.normalDischargePowerW) && this.config.normalDischargePowerW > 0
+      ? this.clamp(Math.round(this.config.normalDischargePowerW), 1, 12000)
+      : 0;
+    this.excessExportSlotMinutes = Number.isFinite(this.config.excessExportSlotMinutes)
+      ? this.clamp(Math.round(this.config.excessExportSlotMinutes), 15, 60)
+      : 30;
+    this.excessExportTriggerMarginSoc = Number.isFinite(this.config.excessExportMarginSoc)
+      ? this.clamp(this.config.excessExportMarginSoc, 0, 20)
+      : (Number.isFinite(this.config.excessExportTriggerMarginSoc) ? this.clamp(this.config.excessExportTriggerMarginSoc, 0, 20) : 2);
     this.serveOvernightLoadFromBattery = Boolean(this.config.serveOvernightLoadFromBattery);
-    this.log.info(this.enableExcessEnergyExport
-      ? `Excess Energy Export enabled | battery=${this.batteryCapacityKwh || 'unset'}kWh | maxDischarge=${this.excessExportMaxDischargeKw}kW | reserve=${this.excessExportReserveSoc}% | overnightLoad=${this.serveOvernightLoadFromBattery ? 'battery' : 'cheap-grid'}`
-      : 'Excess Energy Export disabled for v3.6.5-beta.3 safety build');
+    this.excessEnergyExportActive = false;
+    this.activeExcessExportSlot = null;
+    this.lastExcessExportDecisionSignature = '';
+    this.lastExcessExportDecisionLogMs = 0;
 
     this.eveEnergyHistoryServices = new Map();
     this.lastEveEnergyHistoryEntryMs = 0;
@@ -136,6 +174,7 @@ class GivTcpMqttPlatform {
     this.commandStates = {};
 
     this.commandTimers = new Map();
+    this.smoothChargeTimers = this.smoothChargeTimers || [];
     this.manualQueue = Promise.resolve();
     this.automationQueue = Promise.resolve();
 
@@ -153,6 +192,16 @@ class GivTcpMqttPlatform {
 
     this.lastAutomationSignature = '';
     this.lastStatusSignature = '';
+
+    if (this.enableExcessEnergyExport) {
+      if (this.excessExportBatteryCapacityKwh) {
+        this.log.info(`Excess Energy Export enabled | strategy=evening-sell-off | start=${this.excessExportStart} | cheapStart=${this.cheapStart} | reserve=${this.excessExportReserveSoc}% | battery=${this.excessExportBatteryCapacityKwh}kWh | discharge=${this.excessExportDischargeKw}kW | slot=${this.excessExportSlotMinutes}m | serveOvernightLoadFromBattery=${this.serveOvernightLoadFromBattery}`);
+      } else {
+        this.log.warn('Excess Energy Export configured but Battery Capacity is missing or invalid; automation will stay idle.');
+      }
+    } else {
+      this.log.info('Excess Energy Export disabled');
+    }
 
     this.coreObservationKinds = [
       'smartWindow',
@@ -302,6 +351,10 @@ class GivTcpMqttPlatform {
 
     if (this.mqttUrl === 'mqtt://127.0.0.1:1883') {
       warnings.push('MQTT URL is set to 127.0.0.1:1883. The standard GivHome appliance image normally uses mqtt://127.0.0.1:1884.');
+    }
+
+    if (this.smoothChargingEnabled && !this.maxBatteryChargePowerKw) {
+      warnings.push('Smooth Charging is enabled but Maximum Battery Charge Power (kW) is missing or invalid. Smooth Charging will stay disabled until this is set.');
     }
 
     for (const warning of warnings) {
@@ -474,6 +527,7 @@ class GivTcpMqttPlatform {
   desiredKinds() {
     return new Set([
       'batterySoc',
+      'telemetryStatus',
       ...(this.hasSolarPv ? ['solarPower'] : []),
       ...this.coreObservationKinds,
       ...(this.exposeAdvancedTelemetry ? this.advancedTelemetryKinds : []),
@@ -541,6 +595,7 @@ class GivTcpMqttPlatform {
     const serial = this.activeSerial || this.inverterSerial || 'pending';
 
     this.ensureAccessory('batterySoc', `${this.platformName} Battery Level`, this.Categories.WINDOW_COVERING);
+    this.ensureAccessory('telemetryStatus', `${this.platformName} Telemetry`, this.Categories.LIGHTBULB);
     if (this.hasSolarPv) {
       this.ensureAccessory('solarPower', `${this.platformName} Solar Generating`, this.Categories.LIGHTBULB);
     }
@@ -663,6 +718,24 @@ class GivTcpMqttPlatform {
 
       service.getCharacteristic(this.Characteristic.Brightness)
         .onGet(() => this.getBatteryBrightness())
+        .onSet(async () => {});
+
+      return;
+    }
+
+    if (kind === 'telemetryStatus') {
+      const service = accessory.getServiceById(this.Service.Lightbulb, 'telemetryStatus')
+        || accessory.addService(this.Service.Lightbulb, displayName, 'telemetryStatus');
+      if (shouldApplyName) {
+        service.setCharacteristic(this.Characteristic.Name, displayName);
+      }
+
+      service.getCharacteristic(this.Characteristic.On)
+        .onGet(() => this.getTelemetryStatus().safeForAutomation)
+        .onSet(async () => {});
+
+      service.getCharacteristic(this.Characteristic.Brightness)
+        .onGet(() => this.getTelemetryStatusBrightness())
         .onSet(async () => {});
 
       return;
@@ -977,7 +1050,8 @@ class GivTcpMqttPlatform {
       return this.eveEnergyHistoryServices.get(kind);
     }
 
-    accessory.log = this.log;
+    const fakeGatoLog = this.createFilteredFakeGatoLogger();
+    accessory.log = fakeGatoLog;
     const service = accessory.getServiceById(this.Service.Outlet, kind);
     if (service) {
       this.prepareEveEnergyOutletService(service);
@@ -988,7 +1062,7 @@ class GivTcpMqttPlatform {
       size: this.eveEnergyHistorySize,
       storage: 'fs',
       disableRepeatLastData: false,
-      log: this.log,
+      log: fakeGatoLog,
     });
     if (!history) {
       this.log.error(`[EveHistory] failed to create history service for ${kind}`);
@@ -997,6 +1071,35 @@ class GivTcpMqttPlatform {
     this.eveEnergyHistoryServices.set(kind, history);
     this.log.info(`Eve Energy history enabled for ${accessory.displayName || kind}`);
     return history;
+  }
+
+  createFilteredFakeGatoLogger() {
+    if (this.filteredFakeGatoLogger) {
+      return this.filteredFakeGatoLogger;
+    }
+
+    const shouldSuppress = (args) => {
+      const first = args && args.length ? String(args[0]) : '';
+      return /\*\*\s*Fakegato-history\s+read data from/i.test(first);
+    };
+
+    const wrap = (level) => (...args) => {
+      if (shouldSuppress(args)) {
+        return;
+      }
+      const target = typeof this.log[level] === 'function' ? this.log[level] : this.log.info;
+      return target.apply(this.log, args);
+    };
+
+    this.filteredFakeGatoLogger = {
+      info: wrap('info'),
+      warn: wrap('warn'),
+      error: wrap('error'),
+      debug: wrap('debug'),
+      log: wrap('info'),
+    };
+
+    return this.filteredFakeGatoLogger;
   }
 
   getEveEnergyHistoryPower(kind, snap = null) {
@@ -1123,11 +1226,17 @@ class GivTcpMqttPlatform {
     }
 
     if (value) {
+      if (!this.isTelemetrySafeForAutomation(`manual ${meta.displayAction.toLowerCase()} ${meta.minutes}m`)) {
+        this.setCommandState(kind, false);
+        this.refreshAccessories();
+        return;
+      }
+
       const start = new Date();
       const end = new Date(Date.now() + (meta.minutes * 60000));
       const label = `Manual ${meta.displayAction} ${meta.minutes}m`;
       this.enqueueManualSequence(label, this.buildTimedSlotSteps(label, meta.slotKind, start, end, meta.slotKind === 'charge' ? this.targetSoc : null));
-      this.setCommandState(kind, true, meta.minutes);
+      this.setCommandState(kind, true, 2);
       this.clearSiblingManualIntents(kind, meta.family);
     } else {
       this.cleanupTimedManualAction(meta.family, 'manual off');
@@ -1381,7 +1490,6 @@ class GivTcpMqttPlatform {
     if (kind === 'charge') {
       const body = { slot: '1', start, finish, chargeToPercent: String(Math.max(1, Math.min(100, Math.round(chargeToPercent ?? this.targetSoc)))) };
       return [
-        { restPath: '/setChargeRateAC', restBody: { chargeRate: 100 }, note: `${prefix} -> REST setChargeRateAC 100%` },
         { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable` },
         { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}` },
       ];
@@ -1389,7 +1497,6 @@ class GivTcpMqttPlatform {
 
     if (kind === 'discharge') {
       return [
-        { restPath: '/setDischargeRateAC', restBody: { dischargeRate: 100 }, note: `${prefix} -> REST setDischargeRateAC 100%` },
         { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable` },
         { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}` },
       ];
@@ -1398,21 +1505,174 @@ class GivTcpMqttPlatform {
     return [];
   }
 
+
+  buildChargeRateStep(prefix, ratePercent) {
+    const clamped = this.clamp(Math.round(Number(ratePercent) || 100), 0, 100);
+    return {
+      restPath: '/setChargeRate',
+      restBody: { chargeRate: String(clamped) },
+      note: `${prefix} -> REST setChargeRate ${clamped}%`,
+    };
+  }
+
+  buildDischargeRateStep(prefix, dischargeKw) {
+    const requestedKw = Number(dischargeKw);
+    const watts = this.clamp(Math.round((Number.isFinite(requestedKw) && requestedKw > 0 ? requestedKw : this.excessExportDischargeKw) * 1000), 1, 12000);
+    return {
+      restPath: '/setDischargeRate',
+      restBody: { dischargeRate: String(watts) },
+      note: `${prefix} -> REST setDischargeRate ${watts}W`,
+    };
+  }
+
+  buildRestoreDischargeRateStep(prefix) {
+    if (!Number.isFinite(this.normalDischargePowerW) || this.normalDischargePowerW <= 0) {
+      return null;
+    }
+
+    const watts = this.clamp(Math.round(this.normalDischargePowerW), 1, 12000);
+    return {
+      restPath: '/setDischargeRate',
+      restBody: { dischargeRate: String(watts) },
+      note: `${prefix} -> REST setDischargeRate restore ${watts}W`,
+    };
+  }
+
+  estimateChargeRateKw(ratePercent) {
+    if (!this.maxBatteryChargePowerKw) {
+      return null;
+    }
+    return (this.maxBatteryChargePowerKw * this.clamp(Number(ratePercent) || 0, 0, 100)) / 100;
+  }
+
+  clearSmoothChargeTimers(reason = '') {
+    if (!Array.isArray(this.smoothChargeTimers)) {
+      this.smoothChargeTimers = [];
+      return;
+    }
+
+    for (const timer of this.smoothChargeTimers) {
+      clearTimeout(timer);
+    }
+    this.smoothChargeTimers = [];
+    this.lastSmoothChargePlanSignature = '';
+
+    if (reason) {
+      this.log.debug?.(`[Smooth Charging] cleared timers: ${reason}`);
+    }
+  }
+
+  getSmoothChargingProfile() {
+    const profiles = {
+      gentle: { reservePercent: 18, minimumRatePercent: 15, maximumRatePercent: 75 },
+      balanced: { reservePercent: 25, minimumRatePercent: 20, maximumRatePercent: 90 },
+      strong: { reservePercent: 35, minimumRatePercent: 25, maximumRatePercent: 100 },
+    };
+    return profiles[this.smoothChargingMode] || profiles.balanced;
+  }
+
+  isMainOvernightCheapWindow(snap, now = new Date()) {
+    if (!snap?.cheapActive || !snap?.cheapWindowEnd) {
+      return false;
+    }
+
+    const fallback = this.getClockWindow(now, this.cheapStart, this.cheapEnd);
+    if (!fallback.active) {
+      return false;
+    }
+
+    const source = String(snap.cheapSource || '');
+    if (source && !source.includes('off-peak-hours')) {
+      return false;
+    }
+
+    // Stay deliberately narrow for this beta: Smooth Charging is only for the
+    // configured overnight cheap block. Extra IOG dispatches, grace periods and
+    // manual smart windows use standard charging until the battery-care model is proven.
+    return true;
+  }
+
+  shouldUseSmoothCharging(snap, remainingMinutes, now = new Date()) {
+    if (!this.smoothChargingEnabled) {
+      return false;
+    }
+
+    if (!this.maxBatteryChargePowerKw) {
+      return false;
+    }
+
+    if (!this.excessExportBatteryCapacityKwh) {
+      return false;
+    }
+
+    if (!this.isMainOvernightCheapWindow(snap, now)) {
+      return false;
+    }
+
+    if (!Number.isFinite(remainingMinutes) || remainingMinutes < this.smoothChargingWindowMinimumMinutes) {
+      return false;
+    }
+
+    if (!Number.isFinite(snap?.soc) || snap.soc >= this.targetSoc) {
+      return false;
+    }
+
+    return true;
+  }
+
+  buildSmoothChargePlan(snap, now, endDate) {
+    const remainingMinutes = Math.max(1, Math.ceil((endDate.getTime() - now.getTime()) / 60000));
+    const remainingHours = remainingMinutes / 60;
+    const batteryCapacityKwh = this.excessExportBatteryCapacityKwh;
+    const socGap = this.clamp(this.targetSoc - snap.soc, 0, 100);
+    const energyNeededKwh = (socGap / 100) * batteryCapacityKwh;
+    const requiredAverageKw = remainingHours > 0 ? energyNeededKwh / remainingHours : this.maxBatteryChargePowerKw;
+    const profile = this.getSmoothChargingProfile();
+    const rawRatePercent = (requiredAverageKw / this.maxBatteryChargePowerKw) * 100;
+    const requestedRatePercent = this.clamp(
+      Math.ceil(rawRatePercent + profile.reservePercent),
+      profile.minimumRatePercent,
+      profile.maximumRatePercent,
+    );
+    const estimatedKw = this.estimateChargeRateKw(requestedRatePercent);
+
+    return {
+      mode: 'smooth-night-cheap-slot',
+      remainingMinutes,
+      batteryCapacityKwh,
+      maxBatteryChargePowerKw: this.maxBatteryChargePowerKw,
+      soc: snap.soc,
+      targetSoc: this.targetSoc,
+      socGap,
+      energyNeededKwh,
+      requiredAverageKw,
+      chargeRate: requestedRatePercent,
+      estimatedKw,
+      careMode: this.smoothChargingMode,
+      nextRecheckMinutes: this.smoothChargingUpdateIntervalMinutes,
+    };
+  }
+
   buildNeutralizeSlotSteps(prefix, kind) {
     if (kind === 'charge') {
       return [
         { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable` },
         { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00` },
-        { restPath: '/setChargeRateAC', restBody: { chargeRate: 100 }, note: `${prefix} -> REST setChargeRateAC 100% restore` },
       ];
     }
 
     if (kind === 'discharge') {
-      return [
+      const steps = [
         { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable` },
         { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00` },
-        { restPath: '/setDischargeRateAC', restBody: { dischargeRate: 100 }, note: `${prefix} -> REST setDischargeRateAC 100% restore` },
       ];
+
+      const restoreStep = this.buildRestoreDischargeRateStep(prefix);
+      if (restoreStep) {
+        steps.push(restoreStep);
+      }
+
+      return steps;
     }
 
     return [];
@@ -1863,6 +2123,124 @@ class GivTcpMqttPlatform {
     };
   }
 
+  getTelemetrySourceTimestampMs() {
+    const candidates = [
+      this.getText(['Stats/Last_Updated_Time'], 'Last_Updated_Time'),
+      this.getText(['Stats/LastUpdatedTime'], 'LastUpdatedTime'),
+      this.getText(['Stats/Last_Update_Time'], 'Last_Update_Time'),
+      this.getText(['Stats/last_updated_time'], 'last_updated_time'),
+      this.getText(['Last_Updated_Time'], 'Last_Updated_Time'),
+    ];
+
+    for (const value of candidates) {
+      if (value === undefined || value === null || value === '') {
+        continue;
+      }
+
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value > 10_000_000_000 ? value : value * 1000;
+      }
+
+      const text = String(value).trim();
+      const numeric = Number(text);
+      if (Number.isFinite(numeric)) {
+        return numeric > 10_000_000_000 ? numeric : numeric * 1000;
+      }
+
+      const parsed = Date.parse(text);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  getTelemetryStatus() {
+    const now = Date.now();
+    const sourceTimestampMs = this.getTelemetrySourceTimestampMs();
+    const mqttAgeSeconds = this.state.updatedAt > 0
+      ? Math.max(0, (now - this.state.updatedAt) / 1000)
+      : Number.POSITIVE_INFINITY;
+
+    let sourceAgeSeconds = null;
+    let source = 'mqtt-receive-time';
+
+    if (sourceTimestampMs !== null && Number.isFinite(sourceTimestampMs)) {
+      sourceAgeSeconds = Math.max(0, (now - sourceTimestampMs) / 1000);
+      source = 'Stats.Last_Updated_Time';
+    }
+
+    // Compatibility fallback: if an older GivTCP build does not publish Last_Updated_Time,
+    // do not break otherwise working installs. This fallback cannot detect a stale GivTCP cache,
+    // but it preserves behaviour until the proper freshness metric appears.
+    const ageSeconds = sourceAgeSeconds ?? mqttAgeSeconds;
+
+    let state = 'offline';
+    if (ageSeconds < this.telemetryFreshSeconds) {
+      state = 'fresh';
+    } else if (ageSeconds < this.telemetryOfflineSeconds) {
+      state = 'stale';
+    }
+
+    const safeForAutomation = !this.enableTelemetryFreshnessGuard || state === 'fresh';
+
+    return {
+      state,
+      ageSeconds,
+      source,
+      hasSourceTimestamp: sourceTimestampMs !== null,
+      sourceTimestampMs,
+      mqttAgeSeconds,
+      safeForAutomation,
+    };
+  }
+
+  getTelemetryStatusBrightness() {
+    const status = this.getTelemetryStatus();
+    if (status.state === 'fresh') {
+      return 100;
+    }
+    if (status.state === 'stale') {
+      return 50;
+    }
+    return 1;
+  }
+
+  updateTelemetryFreshnessLog(status = this.getTelemetryStatus()) {
+    const age = Number.isFinite(status.ageSeconds) ? Math.round(status.ageSeconds) : 'unknown';
+
+    // Log state changes only. This avoids adding log noise while still making stale/fresh transitions explicit.
+    const stateSignature = `${status.state}|${status.source}|${status.hasSourceTimestamp}`;
+    if (stateSignature !== this.lastTelemetryFreshnessStateSignature) {
+      this.lastTelemetryFreshnessStateSignature = stateSignature;
+      this.lastTelemetryFreshnessSignature = stateSignature;
+      const label = status.state === 'fresh' ? 'FRESH' : status.state === 'stale' ? 'STALE' : 'OFFLINE';
+      const metric = status.hasSourceTimestamp ? 'Last_Updated_Time' : 'MQTT receive time fallback';
+      const guard = this.enableTelemetryFreshnessGuard ? 'guard=enabled' : 'guard=disabled';
+      this.log.info(`[Telemetry] ${label} | age=${age}s | source=${metric} | ${guard}`);
+    }
+  }
+
+  isTelemetrySafeForAutomation(reason = 'automation') {
+    const status = this.getTelemetryStatus();
+    this.updateTelemetryFreshnessLog(status);
+
+    if (status.safeForAutomation) {
+      this.lastTelemetryAutomationBlockSignature = '';
+      return true;
+    }
+
+    const age = Number.isFinite(status.ageSeconds) ? Math.round(status.ageSeconds) : 'unknown';
+    const signature = `${reason}|${status.state}|${age === 'unknown' ? 'unknown' : Math.floor(Number(age) / 30)}`;
+    if (signature !== this.lastTelemetryAutomationBlockSignature) {
+      this.lastTelemetryAutomationBlockSignature = signature;
+      this.log.warn(`[Telemetry] Automation blocked: ${reason} | state=${status.state} | age=${age}s | source=${status.source}`);
+    }
+
+    return false;
+  }
+
   getSnapshot() {
     const soc = this.getNumber(['Power/Power/SOC'], 'SOC');
     const pvPower = this.getNumber(['Power/Power/PV_Power'], 'PV_Power') || 0;
@@ -1872,10 +2250,13 @@ class GivTcpMqttPlatform {
     const dischargePower = this.getNumber(['Power/Power/Discharge_Power'], 'Discharge_Power') || 0;
 
     const statusText = this.getText(['Stats/status'], 'status');
-    const ageSeconds = this.state.updatedAt > 0
+    const mqttAgeSeconds = this.state.updatedAt > 0
       ? ((Date.now() - this.state.updatedAt) / 1000)
       : Number.POSITIVE_INFINITY;
-    const online = (statusText ? statusText.toLowerCase() === 'online' : true) && ageSeconds <= this.staleSeconds;
+    const telemetry = this.getTelemetryStatus();
+    const online = (statusText ? statusText.toLowerCase() === 'online' : true)
+      && mqttAgeSeconds <= this.staleSeconds
+      && telemetry.state !== 'offline';
 
     const now = new Date();
     const cheap = this.getCheapState(now);
@@ -1890,6 +2271,7 @@ class GivTcpMqttPlatform {
       chargePower,
       dischargePower,
       online,
+      telemetry,
       cheapActive: cheap.cheapActive,
       graceActive: cheap.graceActive,
       smartActive: cheap.smartActive,
@@ -1910,6 +2292,7 @@ class GivTcpMqttPlatform {
     const snap = this.getSnapshot();
 
     this.updateBatterySocAccessory(snap);
+    this.updateTelemetryStatusAccessory(snap);
     this.updateSolarAccessory(snap);
 
     this.updateBinaryAccessory('cheapRate', snap.cheapActive);
@@ -1953,6 +2336,23 @@ class GivTcpMqttPlatform {
 
     service.updateCharacteristic(this.Characteristic.On, true);
     service.updateCharacteristic(this.Characteristic.Brightness, snap.batteryBrightness);
+  }
+
+  updateTelemetryStatusAccessory(snap) {
+    const accessory = this.accessories.get('telemetryStatus');
+    if (!accessory) {
+      return;
+    }
+
+    const service = accessory.getServiceById(this.Service.Lightbulb, 'telemetryStatus');
+    if (!service) {
+      return;
+    }
+
+    const status = snap?.telemetry || this.getTelemetryStatus();
+    service.updateCharacteristic(this.Characteristic.On, status.safeForAutomation);
+    service.updateCharacteristic(this.Characteristic.Brightness, this.getTelemetryStatusBrightness());
+    this.updateTelemetryFreshnessLog(status);
   }
 
   updateSolarAccessory(snap) {
@@ -2017,89 +2417,167 @@ class GivTcpMqttPlatform {
     }
   }
 
-  getNextClockTime(timeText, from = new Date()) {
-    const parts = String(timeText || '').split(':').map(Number);
-    if (parts.length !== 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) {
-      return null;
-    }
-    if (parts[0] < 0 || parts[0] > 23 || parts[1] < 0 || parts[1] > 59) {
-      return null;
-    }
-    const next = new Date(from);
-    next.setHours(parts[0], parts[1], 0, 0);
-    if (next <= from) {
-      next.setDate(next.getDate() + 1);
-    }
-    return next;
+  isManualOverrideActive() {
+    return this.isManualFamilyActive('forceCharge') || this.isManualFamilyActive('forceExport');
   }
 
-  getExcessEnergyExportDecision(snap, now = new Date()) {
-    if (!this.enableExcessEnergyExport) {
-      return { active: false, reason: 'disabled' };
+  getNextClockTime(timeText, now = new Date()) {
+    const minutes = this.parseTimeToMinutes(timeText);
+    if (minutes === null) {
+      return null;
     }
 
-    if (!this.batteryCapacityKwh) {
-      return { active: false, reason: 'battery-capacity-not-set' };
+    const d = new Date(now);
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    if (d <= now) {
+      d.setDate(d.getDate() + 1);
+    }
+    return d;
+  }
+
+  getSameDayClockTime(timeText, now = new Date()) {
+    const minutes = this.parseTimeToMinutes(timeText);
+    if (minutes === null) {
+      return null;
+    }
+
+    const d = new Date(now);
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    return d;
+  }
+
+  logExcessExportDecision(message, force = false) {
+    const now = Date.now();
+    if (!force && message === this.lastExcessExportDecisionSignature && (now - this.lastExcessExportDecisionLogMs) < 10 * 60 * 1000) {
+      return;
+    }
+
+    this.lastExcessExportDecisionSignature = message;
+    this.lastExcessExportDecisionLogMs = now;
+    this.log.info(`[Excess Energy Export] ${message}`);
+  }
+
+  evaluateExcessEnergyExport(snap, now = new Date()) {
+    if (!this.enableExcessEnergyExport) {
+      return null;
+    }
+
+    if (!this.excessExportBatteryCapacityKwh) {
+      this.logExcessExportDecision('idle: Battery Capacity is missing or invalid');
+      return null;
     }
 
     if (!snap.online) {
-      return { active: false, reason: 'offline' };
+      this.logExcessExportDecision('idle: inverter telemetry is offline/stale');
+      return null;
     }
 
     if (!Number.isFinite(snap.soc)) {
-      return { active: false, reason: 'soc-unavailable' };
+      this.logExcessExportDecision('idle: SOC unavailable');
+      return null;
     }
 
-    if (snap.cheapActive) {
-      return { active: false, reason: 'cheap-window-active' };
+    if (snap.cheapActive || snap.smartActive || snap.graceActive) {
+      this.logExcessExportDecision(`idle: protected Octopus window active cheap=${snap.cheapActive} smart=${snap.smartActive} grace=${snap.graceActive}`);
+      return null;
     }
 
-    if (snap.smartActive || snap.graceActive) {
-      return { active: false, reason: 'smart-or-grace-active' };
+    if (snap.charging || snap.chargePower > this.chargePowerActiveThreshold) {
+      this.logExcessExportDecision(`idle: battery is currently charging (${Math.round(snap.chargePower)}W)`);
+      return null;
     }
 
     const cheapStart = this.getNextClockTime(this.cheapStart, now);
-    if (!cheapStart) {
-      return { active: false, reason: 'cheap-start-invalid' };
+    const eveningStart = this.getSameDayClockTime(this.excessExportStart, now);
+    if (!cheapStart || !eveningStart) {
+      this.logExcessExportDecision('idle: invalid Excess Energy Export time configuration');
+      return null;
     }
 
-    const minutesUntilCheap = Math.floor((cheapStart.getTime() - now.getTime()) / 60000);
-    if (minutesUntilCheap < this.excessExportSlotMinutes || minutesUntilCheap > (12 * 60)) {
-      return { active: false, reason: 'outside-evening-window' };
+    // If cheapStart rolled to tomorrow but the evening start has not happened today yet, use today's cheapStart.
+    const todayCheapStart = this.getSameDayClockTime(this.cheapStart, now);
+    const effectiveCheapStart = todayCheapStart && todayCheapStart > now ? todayCheapStart : cheapStart;
+
+    if (now < eveningStart || now >= effectiveCheapStart) {
+      this.logExcessExportDecision(`idle: outside evening sell-off window ${this.excessExportStart}-${this.cheapStart}`);
+      return null;
     }
 
-    const kwhPerSlot = this.excessExportMaxDischargeKw * (this.excessExportSlotMinutes / 60);
-    const socDropPerSlot = (kwhPerSlot / this.batteryCapacityKwh) * 100;
-    const slotsUntilCheap = Math.ceil(minutesUntilCheap / this.excessExportSlotMinutes);
-    const requiredSoc = this.clamp(this.excessExportReserveSoc + (socDropPerSlot * slotsUntilCheap), this.excessExportReserveSoc, 100);
+    const minutesUntilCheap = Math.max(0, Math.floor((effectiveCheapStart.getTime() - now.getTime()) / 60000));
+    if (minutesUntilCheap < 5) {
+      this.logExcessExportDecision('idle: too close to cheap window start');
+      return null;
+    }
 
-    if (snap.soc <= requiredSoc) {
+    const slotMinutes = Math.min(this.excessExportSlotMinutes, minutesUntilCheap);
+
+    const liveDischargeSlot = this.getLiveSlotState('discharge');
+    if (liveDischargeSlot?.active
+      && liveDischargeSlot.start instanceof Date
+      && liveDischargeSlot.end instanceof Date
+      && now >= liveDischargeSlot.start
+      && now < liveDischargeSlot.end
+      && liveDischargeSlot.end <= effectiveCheapStart) {
       return {
-        active: false,
-        reason: `soc-below-ladder ${snap.soc.toFixed(1)}<=${requiredSoc.toFixed(1)}`,
-        requiredSoc,
+        mode: 'excess_export',
+        start: liveDischargeSlot.start,
+        end: liveDischargeSlot.end,
+        forceMinutes: Math.max(1, Math.round((liveDischargeSlot.end.getTime() - liveDischargeSlot.start.getTime()) / 60000)),
+        activeSlotReused: true,
+        recoveredFromInverter: true,
         minutesUntilCheap,
       };
     }
 
+    if (this.activeExcessExportSlot
+      && this.activeExcessExportSlot.start instanceof Date
+      && this.activeExcessExportSlot.end instanceof Date
+      && now >= this.activeExcessExportSlot.start
+      && now < this.activeExcessExportSlot.end
+      && this.activeExcessExportSlot.end <= effectiveCheapStart) {
+      return {
+        ...this.activeExcessExportSlot,
+        mode: 'excess_export',
+        activeSlotReused: true,
+        recoveredFromInverter: false,
+        minutesUntilCheap,
+      };
+    }
+
+    const kwhPerSlot = this.excessExportDischargeKw * (this.excessExportSlotMinutes / 60);
+    const socDropPerSlot = (kwhPerSlot / this.excessExportBatteryCapacityKwh) * 100;
+    const slotsRemaining = Math.max(1, Math.ceil(minutesUntilCheap / this.excessExportSlotMinutes));
+    const minSocTarget = this.excessExportReserveSoc + ((slotsRemaining - 1) * socDropPerSlot);
+    const triggerSoc = minSocTarget + this.excessExportTriggerMarginSoc;
+
+    if (minSocTarget >= 100) {
+      this.logExcessExportDecision(`idle: ladder reserve above 100% this early in window target=${minSocTarget.toFixed(1)}% minsUntilCheap=${minutesUntilCheap}`);
+      return null;
+    }
+
+    if (snap.soc <= triggerSoc) {
+      this.logExcessExportDecision(`idle: SOC ${snap.soc.toFixed(1)}% <= trigger ${triggerSoc.toFixed(1)}% (reserve ladder ${minSocTarget.toFixed(1)}%)`);
+      return null;
+    }
+
     const start = new Date(now);
-    const end = new Date(Math.min(
-      start.getTime() + (this.excessExportSlotMinutes * 60000),
-      cheapStart.getTime(),
-    ));
+    start.setSeconds(0, 0);
+    const end = new Date(start.getTime() + (slotMinutes * 60000));
+    if (end > effectiveCheapStart) {
+      end.setTime(effectiveCheapStart.getTime());
+    }
 
     return {
-      active: true,
-      reason: `soc-above-ladder ${snap.soc.toFixed(1)}>${requiredSoc.toFixed(1)}`,
-      requiredSoc,
-      minutesUntilCheap,
+      mode: 'excess_export',
       start,
       end,
+      forceMinutes: slotMinutes,
+      minSocTarget,
+      triggerSoc,
+      socDropPerSlot,
+      slotsRemaining,
+      minutesUntilCheap,
     };
-  }
-
-  isManualOverrideActive() {
-    return this.isManualFamilyActive('forceCharge') || this.isManualFamilyActive('forceExport');
   }
 
   applyAutomation() {
@@ -2108,45 +2586,50 @@ class GivTcpMqttPlatform {
     }
 
     if (this.isManualOverrideActive()) {
+      this.clearSmoothChargeTimers('manual override active');
       return;
     }
 
     const snap = this.getSnapshot();
+
+    if (!this.isTelemetrySafeForAutomation('automatic control')) {
+      this.clearSmoothChargeTimers('telemetry not fresh');
+      return;
+    }
 
     let desired = {
       mode: 'eco',
       chargePct: 100,
       forceMinutes: 0,
       smooth: false,
+      smoothPlan: null,
     };
 
     if (snap.online && snap.cheapActive && Number.isFinite(snap.soc) && snap.soc < this.targetSoc && snap.cheapWindowEnd) {
-      const remainingMinutes = Math.max(1, Math.ceil((snap.cheapWindowEnd.getTime() - Date.now()) / 60000));
-
-      let chargePct = 100;
-      let smooth = false;
+      const now = new Date();
+      const remainingMinutes = Math.max(1, Math.ceil((snap.cheapWindowEnd.getTime() - now.getTime()) / 60000));
+      const smooth = this.shouldUseSmoothCharging(snap, remainingMinutes, now);
+      const smoothPlan = smooth ? this.buildSmoothChargePlan(snap, now, snap.cheapWindowEnd) : null;
+      const initialRate = smoothPlan?.chargeRate ?? 100;
 
       desired = {
         mode: 'charge',
-        chargePct,
+        chargePct: smooth ? initialRate : 100,
         forceMinutes: remainingMinutes,
         smooth,
+        smoothPlan,
       };
-    }
-
-    if (desired.mode === 'eco') {
-      const exportDecision = this.getExcessEnergyExportDecision(snap, new Date());
-      if (exportDecision.active) {
+    } else {
+      const excessExport = this.evaluateExcessEnergyExport(snap);
+      if (excessExport) {
         desired = {
-          mode: 'excess-export',
-          chargePct: 0,
-          forceMinutes: Math.max(1, Math.ceil((exportDecision.end.getTime() - Date.now()) / 60000)),
+          mode: 'excess_export',
+          chargePct: 100,
+          forceMinutes: excessExport.forceMinutes,
           smooth: false,
-          excessExport: exportDecision,
+          smoothPlan: null,
+          excessExport,
         };
-      } else if (this.enableExcessEnergyExport && this.lastExcessExportReason !== exportDecision.reason) {
-        this.lastExcessExportReason = exportDecision.reason;
-        this.log.info(`Excess Energy Export idle: ${exportDecision.reason}`);
       }
     }
 
@@ -2156,7 +2639,15 @@ class GivTcpMqttPlatform {
       chargePct: desired.chargePct,
       forceMinutes: bucketedMinutes,
       smooth: desired.smooth,
-      excessRequiredSoc: desired.excessExport ? Math.round(desired.excessExport.requiredSoc) : null,
+      smoothRate: desired.smoothPlan ? desired.smoothPlan.chargeRate : null,
+      smoothMode: desired.smoothPlan ? desired.smoothPlan.careMode : null,
+      smoothEnergyNeededKwh: desired.smoothPlan ? Number(desired.smoothPlan.energyNeededKwh.toFixed(2)) : null,
+      maxBatteryChargePowerKw: desired.smoothPlan ? desired.smoothPlan.maxBatteryChargePowerKw : null,
+      cheapWindowEnd: snap.cheapWindowEnd ? snap.cheapWindowEnd.toISOString() : null,
+      smoothBucket: desired.smoothPlan ? Math.floor(Date.now() / (this.smoothChargingUpdateIntervalMinutes * 60 * 1000)) : null,
+      excessStart: desired.excessExport ? this.formatSlotTime(desired.excessExport.start) : null,
+      excessEnd: desired.excessExport ? this.formatSlotTime(desired.excessExport.end) : null,
+      excessReserve: desired.excessExport ? Math.round(desired.excessExport.minSocTarget) : null,
     });
 
     if (signature === this.lastAutomationSignature) {
@@ -2167,21 +2658,60 @@ class GivTcpMqttPlatform {
 
     if (desired.mode === 'charge') {
       const end = new Date(Date.now() + (Math.max(1, bucketedMinutes) * 60000));
-      this.enqueueAutomationSequence('Automation CHARGE', this.buildTimedSlotSteps('Automation CHARGE', 'charge', new Date(), end, this.targetSoc));
-      this.log.info(`Automation -> CHARGE | pct=${desired.chargePct} | mins=${bucketedMinutes} | smooth=${desired.smooth}`);
-    } else if (desired.mode === 'excess-export') {
-      const decision = desired.excessExport;
-      this.enqueueAutomationSequence('Automation EXCESS EXPORT', this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', decision.start, decision.end));
-      this.log.info(`Automation -> EXCESS EXPORT | mins=${bucketedMinutes} | soc=${snap.soc.toFixed(1)} | reserveLadder=${decision.requiredSoc.toFixed(1)} | cheapStart=${this.cheapStart} | reason=${decision.reason}`);
-    } else {
-      const ecoSteps = this.enableExcessEnergyExport
-        ? [
-          ...this.buildNeutralizeSlotSteps('Automation ECO', 'charge'),
-          ...this.buildNeutralizeSlotSteps('Automation ECO', 'discharge'),
-        ]
-        : this.buildNeutralizeSlotSteps('Automation ECO', 'charge');
-      this.enqueueAutomationSequence('Automation ECO', ecoSteps);
-      this.log.info('Automation -> ECO');
+      const steps = [];
+      if (this.excessEnergyExportActive) {
+        steps.push(...this.buildNeutralizeSlotSteps('Automation CHARGE', 'discharge'));
+        this.excessEnergyExportActive = false;
+        this.activeExcessExportSlot = null;
+      }
+      if (desired.smooth) {
+        steps.push(this.buildChargeRateStep('Automation CHARGE', desired.chargePct));
+      }
+      steps.push(...this.buildTimedSlotSteps('Automation CHARGE', 'charge', new Date(), end, this.targetSoc));
+      this.enqueueAutomationSequence('Automation CHARGE', steps);
+
+      if (desired.smooth && desired.smoothPlan) {
+        this.clearSmoothChargeTimers('smooth adaptive recheck');
+        this.lastSmoothChargeRatePercent = desired.smoothPlan.chargeRate;
+        const kwText = Number.isFinite(desired.smoothPlan.estimatedKw) ? ` ≈ ${desired.smoothPlan.estimatedKw.toFixed(2)}kW` : '';
+        this.log.info(`Automation -> CHARGE | pct=${desired.smoothPlan.chargeRate}${kwText} | mins=${bucketedMinutes} | smooth=true | mode=${desired.smoothPlan.careMode} | energyNeeded=${desired.smoothPlan.energyNeededKwh.toFixed(2)}kWh | avgNeeded=${desired.smoothPlan.requiredAverageKw.toFixed(2)}kW | max=${desired.smoothPlan.maxBatteryChargePowerKw}kW | scope=overnight-cheap-slot`);
+      } else {
+        this.clearSmoothChargeTimers('standard charge');
+        this.log.info(`Automation -> CHARGE | mins=${bucketedMinutes} | smooth=false | chargeRate=untouched`);
+      }
+      return;
     }
+
+    if (desired.mode === 'excess_export') {
+      this.clearSmoothChargeTimers('excess export');
+      const info = desired.excessExport;
+      this.excessEnergyExportActive = true;
+
+      if (info.activeSlotReused) {
+        this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
+        const source = info.recoveredFromInverter ? 'inverter truth' : 'memory';
+        this.log.info(`Automation -> EXCESS_EXPORT | active slot retained ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | source=${source} | soc=${snap.soc.toFixed(1)}% | minsUntilCheap=${info.minutesUntilCheap}`);
+        return;
+      }
+
+      const steps = [
+        this.buildDischargeRateStep('Automation EXCESS EXPORT', this.excessExportDischargeKw),
+        ...this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end),
+      ];
+      this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
+      this.enqueueAutomationSequence('Automation EXCESS EXPORT', steps);
+      const dischargeWatts = Math.round(this.excessExportDischargeKw * 1000);
+      this.log.info(`Automation -> EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | dischargeRate=${dischargeWatts}W | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
+      return;
+    }
+
+    this.clearSmoothChargeTimers('eco');
+    const steps = this.excessEnergyExportActive
+      ? this.buildNeutralizeSlotSteps('Automation ECO', 'discharge')
+      : this.buildNeutralizeSlotSteps('Automation ECO', 'charge');
+    this.excessEnergyExportActive = false;
+    this.activeExcessExportSlot = null;
+    this.enqueueAutomationSequence('Automation ECO', steps);
+    this.log.info('Automation -> ECO');
   }
 }
