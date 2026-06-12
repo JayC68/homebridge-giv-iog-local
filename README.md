@@ -299,15 +299,15 @@ These settings add no inverter traffic. They only inspect freshness information 
 
 ### Timed Action Write Verification
 
-Leave this enabled unless diagnosing an unusual GivTCP installation. GivHome uses it only after a manual timed Charge or Export cleanup write.
+Leave this enabled unless diagnosing an unusual GivTCP installation. GivHome uses write verification after timed Charge and Export start commands, Intelligent Octopus Go smart-window starts, fallback cheap-window charging starts, Excess Energy Export starts, and timed-action cleanup.
 
 Recommended starting values:
 
-- Verify Timed Action Clears: on
+- Verify Timed Actions: on
 - Write Verification Delay: 8 seconds
-- Write Verification Attempts: 2
+- Write Verification Attempts: 10
 
-The verification reads GivTCP's existing cache after the clear command. It does not poll the inverter continuously and does not add a new Modbus loop.
+Start verification patiently checks the existing GivTCP cache after a write and confirms the requested schedule becomes visible. Cleanup verification confirms schedules are disabled and charge/discharge slots 1-10 have cleared. Failed start verification triggers fail-safe cleanup. The verification reads GivTCP's existing cache only; it does not poll the inverter continuously and does not add a new Modbus loop.
 
 ---
 

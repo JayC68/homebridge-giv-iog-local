@@ -326,10 +326,10 @@
         "description": "Telemetry is considered offline/critical at or above this age. Default 600 seconds. Automations are blocked while stale/offline when the guard is enabled."
       },
       "enableWriteVerification": {
-        "title": "Verify Timed Action Clears",
+        "title": "Verify Timed Actions (Start and Cleanup)",
         "type": "boolean",
         "default": true,
-        "description": "Recommended. After a manual timed Charge or Export finishes or is manually switched off, GivHome writes the clear command, reads back the existing GivTCP cache, and verifies slot 1 has cleared. This is a gentle post-write check and does not add Modbus polling."
+        "description": "Recommended. After timed Charge, Export, Intelligent Octopus Go, fallback cheap-window and Excess Energy Export writes, GivHome reads back the existing GivTCP cache and verifies the requested state. Cleanup verification confirms schedules are disabled and charge/discharge slots 1-10 are clear. This is a gentle post-write check and does not add Modbus polling."
       },
       "writeVerificationDelaySeconds": {
         "title": "Write Verification Delay (seconds)",
