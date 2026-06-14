@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.0-beta.4';
+const BUILD_VERSION = '3.7.1';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -146,6 +146,7 @@ class GivTcpMqttPlatform {
     this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
 
     this.enableExcessEnergyExport = Boolean(this.config.enableExcessEnergyExport);
+    this.eveningExcessExportArmed = this.enableExcessEnergyExport;
     this.excessExportBatteryCapacityKwh = Number.isFinite(this.config.batteryCapacityKwh) && this.config.batteryCapacityKwh > 0
       ? this.config.batteryCapacityKwh
       : null;
@@ -213,12 +214,12 @@ class GivTcpMqttPlatform {
 
     if (this.enableExcessEnergyExport) {
       if (this.excessExportBatteryCapacityKwh) {
-        this.log.info(`Excess Energy Export enabled | strategy=evening-sell-off | start=${this.excessExportStart} | cheapStart=${this.cheapStart} | reserve=${this.excessExportReserveSoc}% | battery=${this.excessExportBatteryCapacityKwh}kWh | discharge=${this.excessExportDischargeKw}kW | slot=${this.excessExportSlotMinutes}m | serveOvernightLoadFromBattery=${this.serveOvernightLoadFromBattery}`);
+        this.log.info(`Evening Excess Export enabled | strategy=evening-sell-off | start=${this.excessExportStart} | cheapStart=${this.cheapStart} | reserve=${this.excessExportReserveSoc}% | battery=${this.excessExportBatteryCapacityKwh}kWh | discharge=${this.excessExportDischargeKw}kW | slot=${this.excessExportSlotMinutes}m | serveOvernightLoadFromBattery=${this.serveOvernightLoadFromBattery}`);
       } else {
-        this.log.warn('Excess Energy Export configured but Battery Capacity is missing or invalid; automation will stay idle.');
+        this.log.warn('Evening Excess Export configured but Battery Size Used for Planning is missing or invalid; automation will stay idle.');
       }
     } else {
-      this.log.info('Excess Energy Export disabled');
+      this.log.info('Evening Excess Export disabled');
     }
 
     this.coreObservationKinds = [
@@ -256,6 +257,7 @@ class GivTcpMqttPlatform {
       'forceExport30',
       'forceExport90',
       'forceExport120',
+      'eveningExcessExport',
     ];
 
     this.loadEveEnergyRuntimeTotals();
@@ -648,6 +650,8 @@ class GivTcpMqttPlatform {
     this.ensureAccessory('forceExport30', 'Export 30m', this.Categories.SWITCH);
     this.ensureAccessory('forceExport90', 'Export 90m', this.Categories.SWITCH);
     this.ensureAccessory('forceExport120', 'Export 120m', this.Categories.SWITCH);
+
+    this.ensureAccessory('eveningExcessExport', `${this.platformName} Evening Excess Export`, this.Categories.SWITCH);
 
     this.cleanupStaleAccessories(serial);
 
@@ -1238,6 +1242,12 @@ class GivTcpMqttPlatform {
   }
 
   async handleSwitchSet(kind, value) {
+    if (kind === 'eveningExcessExport') {
+      this.setEveningExcessExportArmed(Boolean(value));
+      this.refreshAccessories();
+      return;
+    }
+
     const meta = this.getManualSwitchMeta(kind);
     if (!meta) {
       return;
@@ -1457,7 +1467,36 @@ class GivTcpMqttPlatform {
     return Math.abs(Number(actualMinutes) - Number(expectedMinutes)) <= Math.max(0, this.slotToleranceMinutes);
   }
 
+  setEveningExcessExportArmed(value) {
+    if (value && !this.enableExcessEnergyExport) {
+      this.eveningExcessExportArmed = false;
+      this.log.warn('[Evening Excess Export] cannot arm from Apple Home: enable and configure Evening Excess Export in Homebridge UI first');
+      return;
+    }
+
+    if (value && !this.excessExportBatteryCapacityKwh) {
+      this.eveningExcessExportArmed = false;
+      this.log.warn('[Evening Excess Export] cannot arm: Battery Size Used for Planning is missing or invalid');
+      return;
+    }
+
+    const wasActive = this.excessEnergyExportActive || this.activeExcessExportSlot;
+    this.eveningExcessExportArmed = Boolean(value);
+    if (!this.eveningExcessExportArmed) {
+      this.excessEnergyExportActive = false;
+      this.activeExcessExportSlot = null;
+      if (wasActive) {
+        this.enqueueAutomationSequence('Evening Excess Export Disarm', this.buildNeutralizeSlotSteps('Evening Excess Export Disarm', 'discharge', { verifyCleared: true }));
+      }
+    }
+    this.log.info(`[Evening Excess Export] ${this.eveningExcessExportArmed ? 'armed' : 'disarmed'} from Apple Home`);
+  }
+
   getSwitchState(kind) {
+    if (kind === 'eveningExcessExport') {
+      return Boolean(this.enableExcessEnergyExport && this.eveningExcessExportArmed);
+    }
+
     const meta = this.getManualSwitchMeta(kind);
     if (!meta) {
       return false;
@@ -1845,6 +1884,11 @@ class GivTcpMqttPlatform {
     this.log.warn(`[WriteVerify] ${label} start verification failed; issuing fail-safe ${kind} cleanup`);
 
     this.resetManualTimedActionStateForKind(kind);
+    if (kind === 'discharge' && String(label).includes('Evening Excess Export')) {
+      this.excessEnergyExportActive = false;
+      this.activeExcessExportSlot = null;
+      this.log.warn('[WriteVerify] cleared Evening Excess Export memory state after failed export start');
+    }
 
     const steps = this.buildNeutralizeSlotSteps(cleanupLabel, kind, { verifyCleared: true });
     for (let i = 0; i < steps.length; i += 1) {
@@ -2866,11 +2910,16 @@ class GivTcpMqttPlatform {
 
     this.lastExcessExportDecisionSignature = message;
     this.lastExcessExportDecisionLogMs = now;
-    this.log.info(`[Excess Energy Export] ${message}`);
+    this.log.info(`[Evening Excess Export] ${message}`);
   }
 
   evaluateExcessEnergyExport(snap, now = new Date()) {
     if (!this.enableExcessEnergyExport) {
+      return null;
+    }
+
+    if (!this.eveningExcessExportArmed) {
+      this.logExcessExportDecision('idle: Evening Excess Export switch is off');
       return null;
     }
 
@@ -2902,7 +2951,7 @@ class GivTcpMqttPlatform {
     const cheapStart = this.getNextClockTime(this.cheapStart, now);
     const eveningStart = this.getSameDayClockTime(this.excessExportStart, now);
     if (!cheapStart || !eveningStart) {
-      this.logExcessExportDecision('idle: invalid Excess Energy Export time configuration');
+      this.logExcessExportDecision('idle: invalid Evening Excess Export time configuration');
       return null;
     }
 
@@ -2931,7 +2980,7 @@ class GivTcpMqttPlatform {
       && now < liveDischargeSlot.end
       && liveDischargeSlot.end <= effectiveCheapStart) {
       return {
-        mode: 'excess_export',
+        mode: 'evening_excess_export',
         start: liveDischargeSlot.start,
         end: liveDischargeSlot.end,
         forceMinutes: Math.max(1, Math.round((liveDischargeSlot.end.getTime() - liveDischargeSlot.start.getTime()) / 60000)),
@@ -2949,7 +2998,7 @@ class GivTcpMqttPlatform {
       && this.activeExcessExportSlot.end <= effectiveCheapStart) {
       return {
         ...this.activeExcessExportSlot,
-        mode: 'excess_export',
+        mode: 'evening_excess_export',
         activeSlotReused: true,
         recoveredFromInverter: false,
         minutesUntilCheap,
@@ -2980,7 +3029,7 @@ class GivTcpMqttPlatform {
     }
 
     return {
-      mode: 'excess_export',
+      mode: 'evening_excess_export',
       start,
       end,
       forceMinutes: slotMinutes,
@@ -3035,7 +3084,7 @@ class GivTcpMqttPlatform {
       const excessExport = this.evaluateExcessEnergyExport(snap);
       if (excessExport) {
         desired = {
-          mode: 'excess_export',
+          mode: 'evening_excess_export',
           chargePct: 100,
           forceMinutes: excessExport.forceMinutes,
           smooth: false,
@@ -3094,26 +3143,26 @@ class GivTcpMqttPlatform {
       return;
     }
 
-    if (desired.mode === 'excess_export') {
-      this.clearSmoothChargeTimers('excess export');
+    if (desired.mode === 'evening_excess_export') {
+      this.clearSmoothChargeTimers('evening excess export');
       const info = desired.excessExport;
       this.excessEnergyExportActive = true;
 
       if (info.activeSlotReused) {
         this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
         const source = info.recoveredFromInverter ? 'inverter truth' : 'memory';
-        this.log.info(`Automation -> EXCESS_EXPORT | active slot retained ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | source=${source} | soc=${snap.soc.toFixed(1)}% | minsUntilCheap=${info.minutesUntilCheap}`);
+        this.log.info(`Automation -> EVENING_EXCESS_EXPORT | active slot retained ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | source=${source} | soc=${snap.soc.toFixed(1)}% | minsUntilCheap=${info.minutesUntilCheap}`);
         return;
       }
 
       const steps = [
-        this.buildDischargeRateStep('Automation EXCESS EXPORT', this.excessExportDischargeKw),
-        ...this.buildTimedSlotSteps('Automation EXCESS EXPORT', 'discharge', info.start, info.end),
+        this.buildDischargeRateStep('Automation Evening Excess Export', this.excessExportDischargeKw),
+        ...this.buildTimedSlotSteps('Automation Evening Excess Export', 'discharge', info.start, info.end),
       ];
       this.activeExcessExportSlot = { ...info, start: new Date(info.start), end: new Date(info.end) };
-      this.enqueueAutomationSequence('Automation EXCESS EXPORT', steps);
+      this.enqueueAutomationSequence('Automation Evening Excess Export', steps);
       const dischargeWatts = Math.round(this.excessExportDischargeKw * 1000);
-      this.log.info(`Automation -> EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | dischargeRate=${dischargeWatts}W | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
+      this.log.info(`Automation -> EVENING_EXCESS_EXPORT | ${this.formatSlotTime(info.start)}-${this.formatSlotTime(info.end)} | dischargeRate=${dischargeWatts}W | soc=${snap.soc.toFixed(1)}% | ladder=${info.minSocTarget.toFixed(1)}% | trigger=${info.triggerSoc.toFixed(1)}% | slotsRemaining=${info.slotsRemaining} | minsUntilCheap=${info.minutesUntilCheap}`);
       return;
     }
 

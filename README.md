@@ -53,7 +53,7 @@ The aim is simple: charge the home battery when electricity is cheap and stop th
 
 ### Telemetry Freshness Guard
 
-From v3.7.0-beta.1, GivHome includes a passive telemetry freshness guard.
+From v3.7.0, GivHome includes a passive telemetry freshness guard.
 
 This does **not** add inverter polling, Modbus reads or extra GivTCP traffic. It watches the `Stats.Last_Updated_Time` value already published by GivTCP and decides whether the cached telemetry is still fresh enough to trust.
 
@@ -67,7 +67,7 @@ The guard protects:
 
 - Intelligent Octopus automatic charging
 - Battery Care Charging
-- Excess Energy Export
+- Evening Excess Export
 - manual Charge controls
 - manual Export controls
 - future automation features using SOC or power telemetry
@@ -125,33 +125,21 @@ Enter the real maximum for your system, or a deliberate lower maximum if you wan
 
 Start with **Balanced** unless you have a clear reason to do otherwise.
 
-### Excess Energy Export
+### Evening Excess Export
 
-Excess Energy Export is optional and disabled by default.
+Evening Excess Export is optional and disabled by default. It is one of GivHome’s local battery automation features: it can export spare battery energy in the evening before the cheap overnight charging window starts, while preserving a configurable minimum battery level for the home.
 
-From v3.6.4, automated evening export also sets the requested discharge power through GivTCP before creating the export slot. This matters because some GivEnergy systems will not export meaningfully from a timed discharge slot unless a discharge rate is explicitly set. GivHome uses the public GivTCP `/setDischargeRate` REST abstraction rather than writing raw inverter registers directly.
+Use the Homebridge UI for setup values such as battery size, minimum battery to keep, evening start time, export power limit, slot length and safety margin. Once configured, use the **GivHome Evening Excess Export** switch in Apple Home to arm or disarm it day to day. You should not need to log back into Homebridge just to turn the feature on or off.
 
+Evening Excess Export can:
 
-It is designed for homes that sometimes reach the evening with more battery energy than they need before the next cheap charging window.
+- use local GivTCP REST control only;
+- set the requested discharge/export power before creating an export slot;
+- check SOC, reserve, time remaining and the next cheap-rate window before exporting;
+- verify the export start by reading back GivTCP cache state;
+- verify cleanup and check discharge slots 1-10 are clear.
 
-When enabled, GivHome can create a short local export slot later in the evening, after normal household demand has usually settled, while keeping enough charge for your home to get you to the cheap overnight window.
-
-In plain English:
-
-> GivHome can sell some spare battery energy in the evening, but keeps a sensible reserve so the house is not left short before cheap electricity returns.
-
-It is not Agile export optimisation. It does not chase live Agile prices. It is local Intelligent Octopus Go-aware evening export management.
-
-Excess Energy Export can:
-
-- start from a configurable evening time
-- check battery SOC before exporting
-- keep a reserve for the rest of the evening
-- stop before the cheap overnight window
-- avoid running during cheap, smart or grace windows
-- return the system to normal ECO behaviour afterwards
-
-It replaces the need for stacks of manual Apple Home export automations.
+Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically. It is not Agile price optimisation and it does not depend on GivEnergy cloud control.
 
 ### Manual Charge and Export controls
 
@@ -168,7 +156,7 @@ GivHome creates simple Apple Home controls for common manual actions:
 
 The manual tiles are truth-based: they reflect live inverter schedule state rather than only remembering what the plugin last requested.
 
-From v3.7.0-beta.4, timed Charge and Export actions include a stronger write/readback/verify lifecycle. This applies to manual timed Charge/Export actions, Intelligent Octopus Go smart-window charging, the fallback 23:30-05:30 cheap charging window, and Evening Excess Export when enabled. After GivHome writes a start command, it patiently reads back the existing GivTCP cache up to 10 times over roughly 80 seconds by default, because users normally request Charge or Export when they need energy or need battery space. Cleanup remains stricter: GivHome verifies the relevant schedule is disabled and checks charge/discharge slots 1-10 are clear, so hidden slot persistence is detected rather than missed. If a start cannot be verified, GivHome performs fail-safe cleanup and verifies the cleanup state. This does not add background polling, Modbus reads, GivTCP restart logic, or inverter probing.
+From v3.7.0, timed Charge and Export actions include a stronger write/readback/verify lifecycle. This applies to manual timed Charge/Export actions, Intelligent Octopus Go smart-window charging, the fallback 23:30-05:30 cheap charging window, and Evening Excess Export when enabled. After GivHome writes a start command, it patiently reads back the existing GivTCP cache up to 10 times over roughly 80 seconds by default, because users normally request Charge or Export when they need energy or need battery space. Cleanup remains stricter: GivHome verifies the relevant schedule is disabled and checks charge/discharge slots 1-10 are clear, so hidden slot persistence is detected rather than missed. If a start cannot be verified, GivHome performs fail-safe cleanup and verifies the cleanup state. This does not add background polling, Modbus reads, GivTCP restart logic, or inverter probing.
 
 ### Apple Home visibility
 
@@ -272,11 +260,11 @@ Start with:
 
 Only enable Battery Care Charging after you are confident that normal GivHome charging is working correctly.
 
-### Excess Energy Export
+### Evening Excess Export
 
 Start conservatively:
 
-- Excess Energy Export: off until you understand the behaviour
+- Evening Excess Export: off until you understand the behaviour
 - Evening Export Start Time: 19:30 or 20:00
 - Reserve SOC: 20%
 - SOC Safety Margin: 2%
@@ -299,7 +287,7 @@ These settings add no inverter traffic. They only inspect freshness information 
 
 ### Timed Action Write Verification
 
-Leave this enabled unless diagnosing an unusual GivTCP installation. GivHome uses write verification after timed Charge and Export start commands, Intelligent Octopus Go smart-window starts, fallback cheap-window charging starts, Excess Energy Export starts, and timed-action cleanup.
+Leave this enabled unless diagnosing an unusual GivTCP installation. GivHome uses write verification after timed Charge and Export start commands, Intelligent Octopus Go smart-window starts, fallback cheap-window charging starts, Evening Excess Export starts, and timed-action cleanup.
 
 Recommended starting values:
 

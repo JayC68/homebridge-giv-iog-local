@@ -1,3 +1,13 @@
+## 3.7.1 - 2026-06-14
+
+- Fixes HomeKit firmware/build metadata so stable installs no longer report `3.7.0-beta.4`.
+- Standardises user-facing wording on Evening Excess Export across code logs, Homebridge UI wording, README and release notes.
+- Adds a `GivHome Evening Excess Export` HomeKit switch so configured users can arm or disarm the feature from Apple Home without opening the Homebridge UI.
+- Keeps the Homebridge UI as the setup area for battery size, reserve SOC, export power, start time, slot length and safety margin.
+- Clears Evening Excess Export memory state after failed export start verification and fail-safe cleanup.
+- Disarming an active Evening Excess Export session from Apple Home now issues discharge cleanup and verifies slots 1-10 clear.
+- No platform rename, no background polling, no GivTCP restart logic and no additional Modbus probing.
+
 ## 3.7.0-beta.4 - 2026-06-08
 
 - Extends start verification patience for timed Charge and Export starts to 10 readback attempts by default, roughly 80 seconds with the default delay.
@@ -50,7 +60,7 @@
 
 ### Fixed
 
-- Fixes Excess Energy Export scheduling without setting discharge power.
+- Fixes Evening Excess Export scheduling without setting discharge power.
 - Automated evening export now writes `/setDischargeRate` using the configured Max Export Power before enabling the discharge schedule and setting the discharge slot.
 - Aligns `BUILD_VERSION` with the package version so HomeKit firmware metadata reflects the installed beta.
 
@@ -70,8 +80,8 @@
 - Refreshes the README, public website wording, Homebridge config descriptions and release notes around the current GivHome feature set.
 - Repositions GivHome around the clearer promise: “Your battery quietly does the right thing, automatically.”
 - Explains Battery Care Charging in plain English as kinder overnight charging during the main cheap-rate window.
-- Explains Excess Energy Export as local evening export management that keeps enough charge to get the home to the next cheap window.
-- Clarifies that Excess Energy Export is not Agile price automation.
+- Explains Evening Excess Export as local evening export management that keeps enough charge to get the home to the next cheap window.
+- Clarifies that Evening Excess Export is not Agile price automation.
 - Improves wording for non-technical users who want useful battery automation without day-to-day battery management.
 
 ### Battery-care and asset-protection wording
@@ -81,27 +91,27 @@
 
 ### Configuration wording
 
-- Reviews Homebridge UI wording for Battery Care Charging and Excess Energy Export.
+- Reviews Homebridge UI wording for Battery Care Charging and Evening Excess Export.
 - Keeps existing config keys, defaults and behaviour intact.
 - Keeps Maximum Battery Charge Power user-defined, because 100% charge rate means different kW values on different systems.
 
 ### Technical notes
 
 - No intended backend automation changes from v3.6.2-beta.6.
-- Standard charging, Battery Care Charging, Excess Energy Export, Eve History and manual tiles are intended to behave as in the validated 3.6.2 beta line.
+- Standard charging, Battery Care Charging, Evening Excess Export, Eve History and manual tiles are intended to behave as in the validated 3.6.2 beta line.
 
 ## 3.6.2-beta.6 - 2026-05-27
 
 - Suppressed the very large Fakegato startup `read data from ...` history dumps at normal log level.
 - Eve/Fakegato history persistence is unchanged; this is a targeted log hygiene fix only.
-- Battery Care Charging, Standard Charging and Excess Energy Export logic are unchanged from beta.5.
+- Battery Care Charging, Standard Charging and Evening Excess Export logic are unchanged from beta.5.
 
 
 ## 3.6.2-beta.5
 
 ### Fixed
 
-- Fixes Excess Energy Export restart recovery during the Battery Care beta series.
+- Fixes Evening Excess Export restart recovery during the Battery Care beta series.
 - Recovers an already-active inverter discharge slot after Homebridge/plugin restart and preserves it instead of creating a new sliding export slot from the current minute.
 - Keeps active evening export slots stable until they expire, whether held in memory or recovered from live inverter schedule telemetry.
 - Preserves the v3.6.2-beta.3 fix so standard charging does not write `/setChargeRate 100`.
@@ -112,7 +122,7 @@
 
 - Fixes a Smooth Charging beta regression where ordinary non-Smooth automatic charging sent `/setChargeRate 100`.
 - Standard charging now leaves the charge-rate actuator untouched, matching the v3.6.0 control model.
-- Excess Energy Export is isolated again from Battery Care charge-rate writes.
+- Evening Excess Export is isolated again from Battery Care charge-rate writes.
 
 ### Notes
 
@@ -148,7 +158,7 @@
 
 - Long cheap windows can now use progressive charge-rate updates when Smooth Charging is enabled and correctly configured.
 - Short charge windows continue to use standard 100% charge-rate behaviour.
-- Excess Energy Export, manual charge/export tiles, Eve history and HomeKit accessory identity are preserved.
+- Evening Excess Export, manual charge/export tiles, Eve history and HomeKit accessory identity are preserved.
 
 ### Notes
 
@@ -160,32 +170,32 @@
 
 ### Added
 
-- Adds Excess Energy Export: optional local evening sell-off automation for unused battery energy before the cheap overnight window.
+- Adds Evening Excess Export: optional local evening sell-off automation for unused battery energy before the cheap overnight window.
 - Adds full Homebridge UI controls for Battery Capacity, Evening Export Start Time, Max Export Power, Reserve SOC, SOC Safety Margin, Slot Duration and Serve Overnight Load From Battery.
 - Adds local SOC-ladder behaviour inspired by MrMessy/WonderWatt-style evening export planning.
 
 ### Changed
 
-- Promotes the soak-tested v3.6.0-beta.4 Excess Energy Export implementation to the public v3.6.0 release.
-- Keeps Excess Energy Export disabled by default and opt-in through the Homebridge UI.
+- Promotes the soak-tested v3.6.0-beta.4 Evening Excess Export implementation to the public v3.6.0 release.
+- Keeps Evening Excess Export disabled by default and opt-in through the Homebridge UI.
 - Preserves existing Intelligent Octopus Go charging, manual tiles, Eve History, platform identity and HomeKit accessory identity behaviour.
 
 ### Notes
 
-- Excess Energy Export uses local GivTCP REST controls only.
+- Evening Excess Export uses local GivTCP REST controls only.
 - No GivEnergy cloud dependency is required for the new automation.
 - Daytime PV behaviour is unchanged; local battery-pause/freeze behaviour is not attempted in this release.
 
 ## 3.6.0-beta.4
 
-- Exposes all Excess Energy Export evening sell-off controls in the Homebridge config UI.
+- Exposes all Evening Excess Export evening sell-off controls in the Homebridge config UI.
 - Renames beta config keys to clearer user-facing names: Evening Export Start Time, Max Export Power, and SOC Safety Margin.
 - Keeps backwards tolerance for beta.3 config keys.
 - No intended change to existing IOG, Eve History, platform identity, or accessory identity behaviour.
 
 ## 3.6.0-beta.3
 
-- Adds the first local Excess Energy Export evening sell-off automation.
+- Adds the first local Evening Excess Export evening sell-off automation.
 - Uses a MrMessy/WonderWatt-style SOC reserve ladder to export unused battery energy after normal evening household demand and before the cheap overnight window.
 - Keeps the feature disabled by default and opt-in through the Homebridge UI.
 - Adds configurable battery capacity, evening start time, reserve SOC, discharge rate, slot size and trigger margin.

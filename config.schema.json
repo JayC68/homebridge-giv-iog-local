@@ -191,51 +191,51 @@
         "description": "Optional. Creates Eve Solar History, Eve Import History, and Eve Export History accessories so the Eve app can show local energy graphs and trends. These history tiles are informational only; in Apple Home, we recommend setting them to Exclude from Home View."
       },
       "enableExcessEnergyExport": {
-        "title": "Excess Energy Export",
+        "title": "Enable Evening Excess Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Lets GivHome export spare battery energy later in the evening while keeping enough charge for your home to reach the next cheap overnight window. Disabled by default."
+        "description": "Optional. Enables GivHome's evening sell-off planner. Once this is configured here, use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day. Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically before the cheap overnight charge window."
       },
       "batteryCapacityKwh": {
-        "title": "Battery Capacity (kWh)",
+        "title": "Battery Size Used for Planning (kWh)",
         "type": "number",
         "default": 13.5,
         "minimum": 1,
         "maximum": 40,
-        "description": "Nominal battery capacity used by Excess Energy Export and Battery Care Charging. Enter the usable size of your system as closely as practical."
+        "description": "Usable battery size used by Evening Excess Export and Battery Care Charging. Enter the practical usable size of your system as closely as you can."
       },
       "excessExportStartTime": {
-        "title": "Evening Export Start Time",
+        "title": "Evening Export Earliest Start Time",
         "type": "string",
         "default": "19:30",
-        "description": "Earliest time GivHome may begin evening export. Choose a time after normal cooking, hot water and evening household use, for example 19:30 or 20:00."
+        "description": "Earliest time Evening Excess Export may begin. Choose a time after normal cooking, hot water and evening household use, for example 19:30 or 20:00."
       },
       "excessExportReserveSoc": {
-        "title": "Evening Reserve SOC (%)",
+        "title": "Minimum Battery to Keep (%)",
         "type": "number",
         "default": 20,
         "minimum": 5,
         "maximum": 95,
-        "description": "Minimum battery level to keep before the cheap overnight window. GivHome will not intentionally export below this reserve."
+        "description": "Minimum battery level to preserve before the cheap overnight window. GivHome will not intentionally export below this reserve."
       },
       "maxExportPowerKw": {
-        "title": "Max Export Power (kW)",
+        "title": "Evening Export Power Limit (kW)",
         "type": "number",
         "default": 5,
         "minimum": 0.5,
         "maximum": 12,
-        "description": "Requested evening export/discharge power. GivHome uses this both for the SOC ladder calculation and, in v3.6.4-beta.1+, writes it to GivTCP via /setDischargeRate before starting an automated export slot."
+        "description": "Requested evening export/discharge power. GivHome uses this for the reserve ladder and writes it to GivTCP using /setDischargeRate before starting an Evening Excess Export slot."
       },
       "excessExportSlotMinutes": {
-        "title": "Excess Export Slot Size (minutes)",
+        "title": "Export Check Interval (minutes)",
         "type": "number",
         "default": 30,
         "minimum": 15,
         "maximum": 60,
-        "description": "How long each evening export attempt should run before GivHome checks again. 30 minutes is a sensible starting point."
+        "description": "How long each Evening Excess Export slot should run before GivHome checks the battery and time remaining again. 30 minutes is a sensible starting point."
       },
       "excessExportMarginSoc": {
-        "title": "SOC Safety Margin (%)",
+        "title": "Extra Safety Margin Before Export (%)",
         "type": "number",
         "default": 2,
         "minimum": 0,
@@ -246,7 +246,7 @@
         "title": "Serve Overnight Load From Battery",
         "type": "boolean",
         "default": false,
-        "description": "Advanced. Leave off for most Intelligent Octopus Go homes. Off assumes household load after 23:30 can be served by cheap grid electricity rather than preserved battery."
+        "description": "Advanced. Leave off for most Intelligent Octopus Go homes. Off assumes household load after the cheap window begins can be served by cheap grid electricity rather than preserved battery."
       },
       "smoothChargingEnabled": {
         "title": "Battery Care Charging",
@@ -301,7 +301,7 @@
         "default": 0,
         "minimum": 0,
         "maximum": 12000,
-        "description": "Optional safety/compatibility setting. Leave at 0 to avoid changing your normal discharge-rate setting after Excess Energy Export. If you know your system needs a specific normal discharge power restored after export, enter it in watts."
+        "description": "Optional safety/compatibility setting. Leave at 0 to avoid changing your normal discharge-rate setting after Evening Excess Export. If you know your system needs a specific normal discharge power restored after export, enter it in watts."
       },
       "enableTelemetryFreshnessGuard": {
         "title": "Enable Telemetry Freshness Guard",
@@ -329,7 +329,7 @@
         "title": "Verify Timed Actions (Start and Cleanup)",
         "type": "boolean",
         "default": true,
-        "description": "Recommended. After timed Charge, Export, Intelligent Octopus Go, fallback cheap-window and Excess Energy Export writes, GivHome reads back the existing GivTCP cache and verifies the requested state. Cleanup verification confirms schedules are disabled and charge/discharge slots 1-10 are clear. This is a gentle post-write check and does not add Modbus polling."
+        "description": "Recommended. After timed Charge, Export, Intelligent Octopus Go, fallback cheap-window and Evening Excess Export writes, GivHome reads back the existing GivTCP cache and verifies the requested state. Cleanup verification confirms schedules are disabled and charge/discharge slots 1-10 are clear. This is a gentle post-write check and does not add Modbus polling."
       },
       "writeVerificationDelaySeconds": {
         "title": "Write Verification Delay (seconds)",
@@ -411,10 +411,10 @@
     },
     {
       "type": "fieldset",
-      "title": "Excess Energy Export",
+      "title": "Evening Excess Export \u2014 sell spare battery before cheap rate",
       "expandable": true,
-      "expanded": false,
-      "description": "Optional local evening sell-off automation. GivHome now explicitly sets the requested discharge power through GivTCP before creating each export slot, while retaining the configured reserve until the next cheap window. Disabled by default.",
+      "expanded": true,
+      "description": "Optional local evening export automation. GivHome can export spare battery energy before your cheap overnight charging window starts. It uses battery size, current SOC, reserve setting, export power and time remaining to decide whether exporting is safe. Configure it here, then use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day.",
       "items": [
         "enableExcessEnergyExport",
         "batteryCapacityKwh",
