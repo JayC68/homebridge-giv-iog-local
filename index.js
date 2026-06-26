@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.1';
+const BUILD_VERSION = '3.7.2-beta.1';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -126,6 +126,7 @@ class GivTcpMqttPlatform {
     this.lastTelemetryFreshnessSignature = '';
     this.lastTelemetryFreshnessStateSignature = '';
     this.lastTelemetryAutomationBlockSignature = '';
+    this.lastEveEnergyHistorySkipSignature = '';
 
     // Gentle post-write verification for timed Charge/Export lifecycle transitions.
     // This reads GivTCP's existing REST cache only after command writes; it does not poll the inverter.
@@ -1187,6 +1188,20 @@ class GivTcpMqttPlatform {
       return;
     }
 
+    const telemetryStatus = this.getTelemetryStatus();
+    this.updateTelemetryFreshnessLog(telemetryStatus);
+    if (!telemetryStatus.safeForAutomation) {
+      const age = Number.isFinite(telemetryStatus.ageSeconds) ? Math.round(telemetryStatus.ageSeconds) : 'unknown';
+      const ageBucket = age === 'unknown' ? 'unknown' : Math.floor(Number(age) / Math.max(60, Math.max(1, this.eveEnergyHistorySampleMinutes) * 60));
+      const signature = `${telemetryStatus.state}|${telemetryStatus.source}|${ageBucket}`;
+      if (signature !== this.lastEveEnergyHistorySkipSignature) {
+        this.lastEveEnergyHistorySkipSignature = signature;
+        this.log.warn(`[EveHistory] skipped: stale telemetry | state=${telemetryStatus.state} | age=${age}s | source=${telemetryStatus.source}`);
+      }
+      return;
+    }
+    this.lastEveEnergyHistorySkipSignature = '';
+
     const snap = this.getSnapshot();
     const time = Math.round(now / 1000);
     const elapsedHours = this.eveEnergyRuntimeTotalUpdatedMs > 0
@@ -1367,6 +1382,8 @@ class GivTcpMqttPlatform {
 
     if (valueKind === 'enabled') {
       return this.firstKnownText([
+        `Control/Enable_${prefix}_Schedule`,
+        `Timeslots/Enable_${prefix}_Schedule`,
         `Control/${prefix}_Schedule`,
         `Control/${prefix}/Schedule`,
         `Control/${prefix}_Schedule_Enable`,
@@ -1387,6 +1404,7 @@ class GivTcpMqttPlatform {
     const suffix = valueKind === 'start' ? 'Start' : 'End';
     const restSuffix = valueKind === 'start' ? 'start' : 'finish';
     return this.firstKnownText([
+      `Timeslots/${prefix}_${valueKind}_time_slot_1`,
       `Control/${prefix}_Slot_1_${suffix}`,
       `Control/${prefix}/Slot_1_${suffix}`,
       `Control/${prefix}_Slot_1/${suffix}`,
@@ -1398,6 +1416,7 @@ class GivTcpMqttPlatform {
       `Battery_Details/${prefix}_Slot_1_${suffix}`,
       `Battery_Details/${prefix}/Slot_1_${suffix}`,
     ], [
+      `${prefix}_${valueKind}_time_slot_1`,
       `${prefix}_Slot_1_${suffix}`,
       `${prefix}_Slot_1_${restSuffix}`,
       `${lower}_slot_1_${valueKind}`,
@@ -2089,15 +2108,17 @@ class GivTcpMqttPlatform {
   buildNeutralizeSlotSteps(prefix, kind, options = {}) {
     if (kind === 'charge') {
       return [
-        { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable` },
-        { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00`, verifyClearedKind: options.verifyCleared ? 'charge' : null },
+        { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable`, continueOnError: true },
+        { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00`, continueOnError: true },
+        { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable final`, continueOnError: true, verifyClearedKind: options.verifyCleared ? 'charge' : null },
       ];
     }
 
     if (kind === 'discharge') {
       const steps = [
-        { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable` },
-        { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00`, verifyClearedKind: options.verifyCleared ? 'discharge' : null },
+        { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable`, continueOnError: true },
+        { restPath: '/setDischargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setDischargeSlot 1 00:00-00:00`, continueOnError: true },
+        { restPath: '/enableDischargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableDischargeSchedule disable final`, continueOnError: true, verifyClearedKind: options.verifyCleared ? 'discharge' : null },
       ];
 
       const restoreStep = this.buildRestoreDischargeRateStep(prefix);
@@ -2116,7 +2137,14 @@ class GivTcpMqttPlatform {
     let verifyActiveKind = null;
     let verifyClearedKind = null;
     for (let i = 0; i < steps.length; i += 1) {
-      await this.postRestControl(steps[i].restPath, steps[i].restBody, `${label} step ${i + 1}/${steps.length}: ${steps[i].note}`);
+      try {
+        await this.postRestControl(steps[i].restPath, steps[i].restBody, `${label} step ${i + 1}/${steps.length}: ${steps[i].note}`);
+      } catch (err) {
+        if (!steps[i].continueOnError) {
+          throw err;
+        }
+        this.log.warn(`${label} step ${i + 1}/${steps.length}: ${steps[i].note} failed; continuing cleanup: ${err.message}`);
+      }
       if (steps[i].verifyActiveKind) {
         verifyActiveKind = steps[i].verifyActiveKind;
       }
