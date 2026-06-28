@@ -1,3 +1,17 @@
+## v3.7.2
+
+### Improved
+- Improved stale telemetry detection and automation safety.
+- Improved Eve Energy history reliability during telemetry outages.
+- Improved inverter write verification and diagnostics.
+- Improved Evening Excess Export schedule cleanup.
+- Improved resilience during temporary GivTCP communication interruptions.
+
+### Fixed
+- Prevent stale telemetry from being recorded into Eve history.
+- Improved detection of schedule writes that fail to apply correctly.
+- Various reliability and internal stability improvements.
+
 ## 3.7.1 - 2026-06-14
 
 - Fixes HomeKit firmware/build metadata so stable installs no longer report `3.7.0-beta.4`.
