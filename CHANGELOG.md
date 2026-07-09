@@ -1,3 +1,11 @@
+## 3.7.3-beta.2 - 2026-07-09
+
+- Adds CE / AC-coupled read-remember-write-clean-reinstate handling for temporary charge-slot control.
+- Keeps CE systems on charge slot 1 and preserves the user's existing slot 1 schedule instead of clearing it or forcing a default baseline.
+- Reinstates the remembered CE charge slot after temporary Octopus/manual charging ends or fails, including the previous enable state and target SoC where readback provides it.
+- Treats GivTCP `AttributeError`, failed write text, contradictory enable/disable acknowledgements and non-clear slot writes reported as `00:00-00:00` as hard command anomalies.
+- Leaves non-CE schedule cleanup behaviour unchanged from v3.7.2.
+
 ## v3.7.2
 
 ### Improved

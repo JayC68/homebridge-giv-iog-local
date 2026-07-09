@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.2';
+const BUILD_VERSION = '3.7.3-beta.2';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -143,6 +143,12 @@ class GivTcpMqttPlatform {
       ? this.clamp(Math.round(this.config.writeVerificationClearRetries), 1, 6)
       : (Number.isFinite(this.config.writeVerificationRetries) ? this.clamp(Math.round(this.config.writeVerificationRetries), 1, 6) : 3);
     this.writeVerificationRetries = this.writeVerificationClearRetries;
+
+    // CE / AC-coupled systems have a single user-owned core charge schedule.
+    // When GivHome temporarily uses charge slot 1 for Octopus/manual charging,
+    // it reads and remembers the existing slot before writing, then reinstates it afterwards.
+    this.ceChargeSlotMemory = null;
+    this.lastCeChargeSlotLogSignature = '';
 
     this.enableEveEnergyHistory = Boolean(this.config.enableEveEnergyHistory);
 
@@ -1573,7 +1579,43 @@ class GivTcpMqttPlatform {
       throw new Error(`REST ${path} failed (${response.status}): ${text}`);
     }
 
+    const anomaly = this.detectGivTcpCommandAnomaly(path, body, text);
+    if (anomaly) {
+      throw new Error(`GivTCP command anomaly: ${anomaly} | response=${text}`);
+    }
+
     this.log.info(`REST control -> ${path} = ${JSON.stringify(body)} :: ${text}`);
+    return text;
+  }
+
+  detectGivTcpCommandAnomaly(path, body, text) {
+    const lowerPath = String(path || '').toLowerCase();
+    const lowerText = String(text || '').toLowerCase();
+
+    if (/attributeerror|traceback|exception|\bfailed\b|error/.test(lowerText)) {
+      return 'GivTCP reported an internal write failure';
+    }
+
+    if (lowerPath.includes('enablechargeschedule') || lowerPath.includes('enabledischargeschedule')) {
+      const requested = String(body?.state || '').trim().toLowerCase();
+      if (requested === 'enable' && /schedule to disable/.test(lowerText)) {
+        return 'requested schedule enable but GivTCP response says disable';
+      }
+      if (requested === 'disable' && /schedule to enable/.test(lowerText)) {
+        return 'requested schedule disable but GivTCP response says enable';
+      }
+    }
+
+    if (lowerPath.includes('setchargeslot') || lowerPath.includes('setdischargeslot')) {
+      const requestedStart = this.normalizeReadbackTime(body?.start);
+      const requestedFinish = this.normalizeReadbackTime(body?.finish);
+      const requestedIsClear = requestedStart === '00:00' && requestedFinish === '00:00';
+      if (!requestedIsClear && /00:00\s*-\s*00:00/.test(lowerText)) {
+        return `requested slot ${requestedStart}-${requestedFinish} but GivTCP response says 00:00-00:00`;
+      }
+    }
+
+    return null;
   }
 
 
@@ -1815,6 +1857,185 @@ class GivTcpMqttPlatform {
     return slots.map((slot) => `${slot.slot}:${slot.start}-${slot.end}`).join(', ');
   }
 
+  isCeAcCoupledSystem() {
+    const serial = String(this.activeSerial || this.inverterSerial || '').trim().toUpperCase();
+    if (serial.startsWith('CE')) {
+      return true;
+    }
+
+    const isAcCoupled = this.getText(['raw/invertor/is_ac_coupled'], 'is_ac_coupled');
+    return this.isEnabledValue(isAcCoupled);
+  }
+
+  getCeChargeSlotMemoryPath() {
+    const serial = String(this.activeSerial || this.inverterSerial || 'pending').replace(/[^a-z0-9._-]+/gi, '_');
+    return path.join(this.getStoragePath(), `givhome_${serial}_ce_charge_slot_memory.json`);
+  }
+
+  loadCeChargeSlotMemory() {
+    if (this.ceChargeSlotMemory) {
+      return this.ceChargeSlotMemory;
+    }
+
+    try {
+      const memoryPath = this.getCeChargeSlotMemoryPath();
+      if (!fs.existsSync(memoryPath)) {
+        return null;
+      }
+      const parsed = JSON.parse(fs.readFileSync(memoryPath, 'utf8'));
+      if (parsed?.active && parsed?.slot1?.start && parsed?.slot1?.end) {
+        this.ceChargeSlotMemory = parsed;
+        return parsed;
+      }
+    } catch (err) {
+      this.log.warn(`[CE Charge Slot] could not load remembered schedule: ${err.message}`);
+    }
+
+    return null;
+  }
+
+  persistCeChargeSlotMemory(memory) {
+    try {
+      const memoryPath = this.getCeChargeSlotMemoryPath();
+      if (!memory) {
+        if (fs.existsSync(memoryPath)) {
+          fs.unlinkSync(memoryPath);
+        }
+        this.ceChargeSlotMemory = null;
+        return;
+      }
+
+      this.ceChargeSlotMemory = memory;
+      fs.writeFileSync(memoryPath, JSON.stringify(memory, null, 2));
+    } catch (err) {
+      this.log.warn(`[CE Charge Slot] could not persist remembered schedule: ${err.message}`);
+    }
+  }
+
+  getChargeTargetSocReadback(data) {
+    const value = this.firstNestedValue(data, [
+      ['raw', 'invertor', 'charge_target_soc'],
+      ['raw', 'invertor', 'charge_soc'],
+      ['raw', 'invertor', 'charge_soc_stop_1'],
+      ['decoded', 'Timeslots', 'Charge_Target_SOC'],
+      ['decoded', 'Invertor', 'Charge_Target_SOC'],
+      ['Power', 'Power', 'Charge_Target_SOC'],
+    ])
+      ?? this.findFirstNestedKey(data, 'charge_target_soc')
+      ?? this.findFirstNestedKey(data, 'Charge_Target_SOC')
+      ?? this.findFirstNestedKey(data, 'charge_soc');
+
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 100) {
+      return Math.round(numeric);
+    }
+    return null;
+  }
+
+  async readCeChargeSlot1State(label) {
+    const { path: sourcePath, data } = await this.readGivTcpCacheForVerification();
+    const slot1 = this.getSlotReadback(data, 'charge', 1);
+    const enabled = this.getTimedScheduleReadback(data, 'charge');
+    const chargeToPercent = this.getChargeTargetSocReadback(data);
+
+    if (!slot1?.hasSlotEvidence) {
+      throw new Error(`charge slot 1 was not visible in ${sourcePath}`);
+    }
+
+    const state = {
+      sourcePath,
+      enabled: enabled === null ? false : Boolean(enabled),
+      slot1: { start: slot1.start, end: slot1.end },
+      chargeToPercent,
+    };
+
+    this.log.info(`[CE Charge Slot] ${label}: read slot 1 ${state.slot1.start}-${state.slot1.end} | enabled=${state.enabled} | target=${chargeToPercent ?? 'unknown'} | source=${sourcePath}`);
+    return state;
+  }
+
+  async rememberCeChargeSlotBeforeWrite(label) {
+    if (!this.isCeAcCoupledSystem()) {
+      return;
+    }
+
+    const existing = this.loadCeChargeSlotMemory();
+    if (existing?.active) {
+      this.log.info(`[CE Charge Slot] ${label}: existing remembered slot retained ${existing.slot1.start}-${existing.slot1.end} | enabled=${Boolean(existing.enabled)}`);
+      return;
+    }
+
+    const previous = await this.readCeChargeSlot1State(label);
+    const memory = {
+      version: BUILD_VERSION,
+      active: true,
+      rememberedAt: new Date().toISOString(),
+      label,
+      enabled: previous.enabled,
+      slot1: previous.slot1,
+      chargeToPercent: previous.chargeToPercent,
+      sourcePath: previous.sourcePath,
+    };
+
+    this.persistCeChargeSlotMemory(memory);
+    this.log.info(`[CE Charge Slot] remembered user schedule before temporary charge: slot 1 ${memory.slot1.start}-${memory.slot1.end} | enabled=${memory.enabled} | target=${memory.chargeToPercent ?? 'unknown'}`);
+  }
+
+  buildCeChargeReinstateSteps(prefix, options = {}) {
+    if (!this.isCeAcCoupledSystem()) {
+      return this.buildNeutralizeSlotSteps(prefix, 'charge', options);
+    }
+
+    const memory = this.loadCeChargeSlotMemory();
+    if (!memory?.active) {
+      return [
+        { customAction: 'ceChargeNoop', note: `${prefix} -> CE idle: no remembered charge slot to reinstate` },
+      ];
+    }
+
+    const target = Number.isFinite(Number(memory.chargeToPercent))
+      ? this.clamp(Math.round(Number(memory.chargeToPercent)), 1, 100)
+      : this.targetSoc;
+
+    return [
+      { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> CE clean: REST enableChargeSchedule disable`, continueOnError: true },
+      { restPath: '/setChargeSlot', restBody: { slot: '1', start: memory.slot1.start, finish: memory.slot1.end, chargeToPercent: String(target) }, note: `${prefix} -> CE reinstate charge slot 1 ${memory.slot1.start}-${memory.slot1.end}`, continueOnError: false },
+      { restPath: '/enableChargeSchedule', restBody: { state: memory.enabled ? 'enable' : 'disable' }, note: `${prefix} -> CE reinstate charge schedule ${memory.enabled ? 'enable' : 'disable'}`, continueOnError: false, verifyCeChargeReinstate: true },
+    ];
+  }
+
+  async verifyCeChargeSlotReinstated(label) {
+    const memory = this.loadCeChargeSlotMemory();
+    if (!memory?.active) {
+      return true;
+    }
+
+    const delayMs = Math.max(2, this.writeVerificationDelaySeconds) * 1000;
+    const retries = Math.max(1, this.writeVerificationClearRetries);
+
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      try {
+        const current = await this.readCeChargeSlot1State(`${label} verify reinstated attempt ${attempt}/${retries}`);
+        const restored = current.slot1.start === memory.slot1.start
+          && current.slot1.end === memory.slot1.end
+          && current.enabled === Boolean(memory.enabled);
+
+        if (restored) {
+          this.log.info(`[CE Charge Slot] ${label}: reinstated slot 1 ${current.slot1.start}-${current.slot1.end} | enabled=${current.enabled}`);
+          this.persistCeChargeSlotMemory(null);
+          return true;
+        }
+
+        this.log.warn(`[CE Charge Slot] ${label}: not reinstated yet | expected=${memory.slot1.start}-${memory.slot1.end} enabled=${memory.enabled} | actual=${current.slot1.start}-${current.slot1.end} enabled=${current.enabled} | attempt=${attempt}/${retries}`);
+      } catch (err) {
+        this.log.warn(`[CE Charge Slot] ${label}: reinstate readback failed | attempt=${attempt}/${retries}: ${err.message}`);
+      }
+    }
+
+    this.log.warn(`[CE Charge Slot] ${label}: remembered schedule may still require manual inspection`);
+    return false;
+  }
+
   async verifyTimedActionState(label, kind, expectedState, options = {}) {
     if (!this.enableWriteVerification) {
       this.log.info(`[WriteVerify] ${label} skipped: write verification disabled`);
@@ -1910,15 +2131,7 @@ class GivTcpMqttPlatform {
     }
 
     const steps = this.buildNeutralizeSlotSteps(cleanupLabel, kind, { verifyCleared: true });
-    for (let i = 0; i < steps.length; i += 1) {
-      await this.postRestControl(steps[i].restPath, steps[i].restBody, `${cleanupLabel} step ${i + 1}/${steps.length}: ${steps[i].note}`);
-      await new Promise((resolve) => setTimeout(resolve, 2200));
-    }
-
-    const cleared = await this.verifyTimedActionCleared(cleanupLabel, kind);
-    if (!cleared) {
-      this.log.warn(`[WriteVerify] ${cleanupLabel} failed; ${kind} schedule may still require manual inspection`);
-    }
+    await this.runRestStepQueue(cleanupLabel, steps);
   }
 
   formatSlotTime(date) {
@@ -1933,16 +2146,21 @@ class GivTcpMqttPlatform {
 
     if (kind === 'charge') {
       const body = { slot: '1', start, finish, chargeToPercent: String(Math.max(1, Math.min(100, Math.round(chargeToPercent ?? this.targetSoc)))) };
-      return [
-        { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable` },
-        { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'charge' },
-      ];
+      const steps = [];
+      if (this.isCeAcCoupledSystem()) {
+        steps.push({ customAction: 'rememberCeChargeSlot', note: `${prefix} -> CE read and remember charge slot 1 before temporary write` });
+      }
+      steps.push(
+        { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable`, failCleanupKind: 'charge' },
+        { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'charge', failCleanupKind: 'charge' },
+      );
+      return steps;
     }
 
     if (kind === 'discharge') {
       return [
-        { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable` },
-        { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'discharge' },
+        { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable`, failCleanupKind: 'discharge' },
+        { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'discharge', failCleanupKind: 'discharge' },
       ];
     }
 
@@ -2107,6 +2325,10 @@ class GivTcpMqttPlatform {
 
   buildNeutralizeSlotSteps(prefix, kind, options = {}) {
     if (kind === 'charge') {
+      if (this.isCeAcCoupledSystem()) {
+        return this.buildCeChargeReinstateSteps(prefix, options);
+      }
+
       return [
         { restPath: '/enableChargeSchedule', restBody: { state: 'disable' }, note: `${prefix} -> REST enableChargeSchedule disable`, continueOnError: true },
         { restPath: '/setChargeSlot', restBody: { slot: '1', start: '00:00', finish: '00:00' }, note: `${prefix} -> REST setChargeSlot 1 00:00-00:00`, continueOnError: true },
@@ -2136,20 +2358,44 @@ class GivTcpMqttPlatform {
     this.log.info(`${label} -> queued ${steps.length} step(s)`);
     let verifyActiveKind = null;
     let verifyClearedKind = null;
+    let verifyCeChargeReinstate = false;
     for (let i = 0; i < steps.length; i += 1) {
+      const step = steps[i];
       try {
-        await this.postRestControl(steps[i].restPath, steps[i].restBody, `${label} step ${i + 1}/${steps.length}: ${steps[i].note}`);
+        if (step.customAction === 'rememberCeChargeSlot') {
+          this.log.info(`${label} step ${i + 1}/${steps.length}: ${step.note}`);
+          await this.rememberCeChargeSlotBeforeWrite(label);
+        } else if (step.customAction === 'ceChargeNoop') {
+          const signature = `${label}|${step.note}`;
+          if (signature !== this.lastCeChargeSlotLogSignature) {
+            this.lastCeChargeSlotLogSignature = signature;
+            this.log.info(`${label} step ${i + 1}/${steps.length}: ${step.note}`);
+          }
+        } else {
+          await this.postRestControl(step.restPath, step.restBody, `${label} step ${i + 1}/${steps.length}: ${step.note}`);
+        }
       } catch (err) {
-        if (!steps[i].continueOnError) {
+        if (!step.continueOnError) {
+          if (step.failCleanupKind) {
+            this.log.warn(`${label} step ${i + 1}/${steps.length}: ${step.note} failed; issuing fail-safe ${step.failCleanupKind} cleanup: ${err.message}`);
+            try {
+              await this.runFailedStartCleanup(label, step.failCleanupKind);
+            } catch (cleanupErr) {
+              this.log.warn(`${label} fail-safe cleanup also failed: ${cleanupErr.message}`);
+            }
+          }
           throw err;
         }
-        this.log.warn(`${label} step ${i + 1}/${steps.length}: ${steps[i].note} failed; continuing cleanup: ${err.message}`);
+        this.log.warn(`${label} step ${i + 1}/${steps.length}: ${step.note} failed; continuing cleanup: ${err.message}`);
       }
-      if (steps[i].verifyActiveKind) {
-        verifyActiveKind = steps[i].verifyActiveKind;
+      if (step.verifyActiveKind) {
+        verifyActiveKind = step.verifyActiveKind;
       }
-      if (steps[i].verifyClearedKind) {
-        verifyClearedKind = steps[i].verifyClearedKind;
+      if (step.verifyClearedKind) {
+        verifyClearedKind = step.verifyClearedKind;
+      }
+      if (step.verifyCeChargeReinstate) {
+        verifyCeChargeReinstate = true;
       }
       await new Promise((resolve) => setTimeout(resolve, 2200));
     }
@@ -2163,6 +2409,10 @@ class GivTcpMqttPlatform {
 
     if (verifyClearedKind) {
       await this.verifyTimedActionCleared(label, verifyClearedKind);
+    }
+
+    if (verifyCeChargeReinstate) {
+      await this.verifyCeChargeSlotReinstated(label);
     }
   }
 
