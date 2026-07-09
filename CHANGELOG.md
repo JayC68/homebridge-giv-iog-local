@@ -1,3 +1,10 @@
+## 3.7.3-beta.3 - 2026-07-09
+
+- Fixes cleanup verification so a disabled charge/discharge schedule is treated as safe even when inactive stored slot times remain visible.
+- Logs stored inactive slots as information instead of failing ECO cleanup, for example `stored inactive slots 8:17:18-17:48`.
+- Keeps the CE / AC-coupled read, remember, write, clean and reinstate behaviour from v3.7.3-beta.2.
+- Keeps `latest` users unaffected; this remains a beta-tagged validation build.
+
 ## 3.7.3-beta.2 - 2026-07-09
 
 - Adds CE / AC-coupled read-remember-write-clean-reinstate handling for temporary charge-slot control.

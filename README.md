@@ -486,3 +486,8 @@ All 8 documents support these success criteria:
 *Last updated: 2026-05-03*  
 *For: homebridge-giv-iog-local v3.3.11-beta.4 → v3.3.11*  
 *Purpose: Complete QA documentation and release guidance*
+
+## v3.7.3-beta.3 validation note
+
+This beta refines write verification: if the inverter schedule is disabled, stored inactive slot times are treated as configuration residue rather than active behaviour. GivHome logs those stored inactive slots for visibility without failing ECO cleanup.
+

@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.3-beta.2';
+const BUILD_VERSION = '3.7.3-beta.3';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -1834,7 +1834,13 @@ class GivTcpMqttPlatform {
     const unclearedSlots = slotsWithEvidence.filter((slot) => !slot.cleared);
     const slot1 = slots.find((slot) => slot.slot === 1);
     const allObservedSlotsCleared = slotsWithEvidence.length > 0 && unclearedSlots.length === 0;
-    const cleared = allObservedSlotsCleared && scheduleEnabled !== true;
+
+    // Cleanup safety is governed by the enable flag. Stored slot times are configuration, not active behaviour.
+    // If the schedule is disabled, treat cleanup as safe even when inactive slot times remain visible.
+    // If the enable flag is unknown, retain the older stricter slot-clear behaviour.
+    const scheduleDisabled = scheduleEnabled === false;
+    const storedInactiveSlots = scheduleDisabled ? unclearedSlots : [];
+    const cleared = scheduleDisabled || (allObservedSlotsCleared && scheduleEnabled !== true);
     const active = Boolean(slot1?.active) && scheduleEnabled !== false;
 
     return {
@@ -1843,6 +1849,7 @@ class GivTcpMqttPlatform {
       slotsWithEvidence,
       activeSlots,
       unclearedSlots,
+      storedInactiveSlots,
       slot1,
       active,
       cleared,
@@ -2061,7 +2068,11 @@ class GivTcpMqttPlatform {
         }
 
         if (expectedState === 'cleared' && result.cleared) {
-          this.log.info(`[WriteVerify] ${label} cleared | ${kind} slots 1-10 clear | schedule=${scheduleText} | source=${sourcePath}`);
+          if (result.storedInactiveSlots?.length > 0) {
+            this.log.info(`[WriteVerify] ${label} cleared | ${kind} schedule=disabled | stored inactive slots ${this.formatSlotList(result.storedInactiveSlots)} | source=${sourcePath}`);
+          } else {
+            this.log.info(`[WriteVerify] ${label} cleared | ${kind} slots clear | schedule=${scheduleText} | source=${sourcePath}`);
+          }
           return true;
         }
 
