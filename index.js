@@ -13,7 +13,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.3';
+const BUILD_VERSION = '3.7.4';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -1580,8 +1580,11 @@ class GivTcpMqttPlatform {
     }
 
     const anomaly = this.detectGivTcpCommandAnomaly(path, body, text);
-    if (anomaly) {
-      throw new Error(`GivTCP command anomaly: ${anomaly} | response=${text}`);
+    if (anomaly?.hardFailure) {
+      throw new Error(`GivTCP command failure: ${anomaly.message} | response=${text}`);
+    }
+    if (anomaly?.message) {
+      this.log.warn(`GivTCP response anomaly: ${anomaly.message}; continuing to write verification | response=${text}`);
     }
 
     this.log.info(`REST control -> ${path} = ${JSON.stringify(body)} :: ${text}`);
@@ -1593,16 +1596,16 @@ class GivTcpMqttPlatform {
     const lowerText = String(text || '').toLowerCase();
 
     if (/attributeerror|traceback|exception|\bfailed\b|error/.test(lowerText)) {
-      return 'GivTCP reported an internal write failure';
+      return { hardFailure: true, message: 'GivTCP reported an internal write failure' };
     }
 
     if (lowerPath.includes('enablechargeschedule') || lowerPath.includes('enabledischargeschedule')) {
       const requested = String(body?.state || '').trim().toLowerCase();
       if (requested === 'enable' && /schedule to disable/.test(lowerText)) {
-        return 'requested schedule enable but GivTCP response says disable';
+        return { hardFailure: false, message: 'requested schedule enable but GivTCP response says disable' };
       }
       if (requested === 'disable' && /schedule to enable/.test(lowerText)) {
-        return 'requested schedule disable but GivTCP response says enable';
+        return { hardFailure: false, message: 'requested schedule disable but GivTCP response says enable' };
       }
     }
 
@@ -1611,7 +1614,7 @@ class GivTcpMqttPlatform {
       const requestedFinish = this.normalizeReadbackTime(body?.finish);
       const requestedIsClear = requestedStart === '00:00' && requestedFinish === '00:00';
       if (!requestedIsClear && /00:00\s*-\s*00:00/.test(lowerText)) {
-        return `requested slot ${requestedStart}-${requestedFinish} but GivTCP response says 00:00-00:00`;
+        return { hardFailure: false, message: `requested slot ${requestedStart}-${requestedFinish} but GivTCP response says 00:00-00:00` };
       }
     }
 

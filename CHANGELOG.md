@@ -1,14 +1,14 @@
 # Changelog
 
-## 3.7.3 - 2026-07-09
+## 3.7.4 - 2026-07-10
 
 ### Fixed
 
-- Promoted the v3.7.3-beta.3 schedule-safety work to stable.
-- Improved CE / AC-coupled charge-slot ownership handling using read, remember, write, clean, and reinstate behaviour.
-- Improved cleanup verification so disabled schedules are treated as safe even when inactive stored slot times remain visible in GivTCP readback.
-- Kept CH / AIO behaviour on the normal non-CE path while avoiding misleading cleanup warnings.
+- Fixed a v3.7.3 regression that could abort CH/AIO charging during both baseline cheap-rate windows and Intelligent Octopus Go bonus windows.
+- Contradictory GivTCP success wording is now logged as a warning and passed to write verification instead of triggering immediate fail-safe cleanup.
+- Genuine GivTCP internal errors remain hard failures.
 
+## 3.7.3-beta.3 - 2026-07-09
 
 - Fixes cleanup verification so a disabled charge/discharge schedule is treated as safe even when inactive stored slot times remain visible.
 - Logs stored inactive slots as information instead of failing ECO cleanup, for example `stored inactive slots 8:17:18-17:48`.
