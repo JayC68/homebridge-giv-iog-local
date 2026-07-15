@@ -1,3 +1,20 @@
+## v3.7.5-beta.1
+
+### Added
+- Isolated CE/AC-coupled single-slot charge schedule preservation and reinstatement.
+- Optional guarded GivTCP stale-telemetry self-recovery with cooldown protection.
+- Narrow host helper installer for restarting only the `givtcp` container.
+
+### Changed
+- Restored the proven v3.7.2 CH/AIO timed charge and export lifecycle.
+- CE failed-start cleanup is now confined to CE systems.
+- CE slot pre-state must come from fresh `Stats.Last_Updated_Time` telemetry.
+
+### Safety
+- Recovery never sends inverter control commands.
+- Automation remains blocked until fresh telemetry is observed after restart.
+- Self-recovery is disabled by default and requires explicit helper installation.
+
 # Changelog
 
 ## 3.7.4 - 2026-07-10

@@ -362,6 +362,34 @@
         "minimum": 1,
         "maximum": 6,
         "description": "Legacy compatibility setting now used as the clear-attempt value when Write Verification Clear Attempts is not set. New installs should use the separate Start and Clear attempt settings."
+      },
+      "enableGivTcpSelfRecovery": {
+        "title": "Enable GivTCP Self-Recovery",
+        "type": "boolean",
+        "default": false,
+        "description": "Advanced. After sustained stale Last_Updated_Time telemetry, run one local helper command to restart GivTCP. Automation remains blocked until fresh telemetry returns. Requires the separately installed narrow restart helper."
+      },
+      "givTcpRecoveryStaleSeconds": {
+        "title": "GivTCP Recovery Trigger (seconds)",
+        "type": "integer",
+        "minimum": 600,
+        "maximum": 86400,
+        "default": 900,
+        "description": "How long Last_Updated_Time must remain offline before one recovery restart is attempted. Minimum 10 minutes."
+      },
+      "givTcpRecoveryCooldownSeconds": {
+        "title": "GivTCP Recovery Cooldown (seconds)",
+        "type": "integer",
+        "minimum": 1800,
+        "maximum": 86400,
+        "default": 21600,
+        "description": "Minimum time between recovery attempts. Default six hours prevents restart loops."
+      },
+      "givTcpRecoveryCommand": {
+        "title": "GivTCP Recovery Helper Path",
+        "type": "string",
+        "default": "/usr/local/sbin/givhome-restart-givtcp",
+        "description": "Absolute path to the root-owned helper that restarts only the givtcp container. Do not point this at a shell or arbitrary command."
       }
     },
     "required": [
@@ -459,6 +487,10 @@
         "enableTelemetryFreshnessGuard",
         "telemetryFreshSeconds",
         "telemetryOfflineSeconds",
+        "enableGivTcpSelfRecovery",
+        "givTcpRecoveryStaleSeconds",
+        "givTcpRecoveryCooldownSeconds",
+        "givTcpRecoveryCommand",
         "enableWriteVerification",
         "writeVerificationDelaySeconds",
         "writeVerificationStartRetries",

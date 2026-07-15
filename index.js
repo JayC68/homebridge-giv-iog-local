@@ -3,6 +3,7 @@
 const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
 let fakeGatoHistoryModule = null;
 try {
@@ -13,7 +14,7 @@ try {
 
 const PLUGIN_NAME = 'homebridge-giv-iog-local';
 const PLATFORM_NAME = 'GivEnergy Local + Intelligent Octopus Go';
-const BUILD_VERSION = '3.7.4';
+const BUILD_VERSION = '3.7.5-beta.1';
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivTcpMqttPlatform);
@@ -127,6 +128,25 @@ class GivTcpMqttPlatform {
     this.lastTelemetryFreshnessStateSignature = '';
     this.lastTelemetryAutomationBlockSignature = '';
     this.lastEveEnergyHistorySkipSignature = '';
+
+    // Optional host-side GivTCP self-recovery. Disabled by default because restarting a
+    // Docker container requires an explicitly installed, narrowly-scoped sudo rule.
+    // Recovery never writes to the inverter and automation remains blocked until fresh
+    // Stats.Last_Updated_Time telemetry has been observed after the restart.
+    this.enableGivTcpSelfRecovery = Boolean(this.config.enableGivTcpSelfRecovery);
+    this.givTcpRecoveryStaleSeconds = Number.isFinite(this.config.givTcpRecoveryStaleSeconds)
+      ? this.clamp(Math.round(this.config.givTcpRecoveryStaleSeconds), 600, 86400)
+      : 900;
+    this.givTcpRecoveryCooldownSeconds = Number.isFinite(this.config.givTcpRecoveryCooldownSeconds)
+      ? this.clamp(Math.round(this.config.givTcpRecoveryCooldownSeconds), 1800, 86400)
+      : 21600;
+    this.givTcpRecoveryCommand = String(this.config.givTcpRecoveryCommand || '/usr/local/sbin/givhome-restart-givtcp').trim();
+    this.givTcpRecoveryInProgress = false;
+    this.givTcpRecoveryAwaitingFreshTelemetry = false;
+    this.givTcpRecoveryStartedAtMs = 0;
+    this.givTcpRecoveryLastAttemptMs = 0;
+    this.givTcpRecoveryLastSourceTimestampMs = null;
+    this.givTcpRecoveryLastLogSignature = '';
 
     // Gentle post-write verification for timed Charge/Export lifecycle transitions.
     // This reads GivTCP's existing REST cache only after command writes; it does not poll the inverter.
@@ -398,6 +418,9 @@ class GivTcpMqttPlatform {
   startLoops() {
     setInterval(() => {
       this.refreshAccessories();
+      this.maybeRecoverStaleGivTcp().catch((err) => {
+        this.log.warn(`[Telemetry Recovery] unexpected recovery error: ${err.message}`);
+      });
       this.applyAutomation();
     }, 30_000);
 
@@ -1968,6 +1991,12 @@ class GivTcpMqttPlatform {
       return;
     }
 
+    const telemetry = this.getTelemetryStatus();
+    if (!telemetry.safeForAutomation || !telemetry.hasSourceTimestamp) {
+      const age = Number.isFinite(telemetry.ageSeconds) ? Math.round(telemetry.ageSeconds) : 'unknown';
+      throw new Error(`CE charge slot pre-state is not trustworthy | state=${telemetry.state} | age=${age}s | source=${telemetry.source}`);
+    }
+
     const existing = this.loadCeChargeSlotMemory();
     if (existing?.active) {
       this.log.info(`[CE Charge Slot] ${label}: existing remembered slot retained ${existing.slot1.start}-${existing.slot1.end} | enabled=${Boolean(existing.enabled)}`);
@@ -2165,16 +2194,16 @@ class GivTcpMqttPlatform {
         steps.push({ customAction: 'rememberCeChargeSlot', note: `${prefix} -> CE read and remember charge slot 1 before temporary write` });
       }
       steps.push(
-        { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable`, failCleanupKind: 'charge' },
-        { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'charge', failCleanupKind: 'charge' },
+        { restPath: '/enableChargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableChargeSchedule enable`, ...(this.isCeAcCoupledSystem() ? { failCleanupKind: 'charge' } : {}) },
+        { restPath: '/setChargeSlot', restBody: body, note: `${prefix} -> REST setChargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'charge', ...(this.isCeAcCoupledSystem() ? { failCleanupKind: 'charge' } : {}) },
       );
       return steps;
     }
 
     if (kind === 'discharge') {
       return [
-        { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable`, failCleanupKind: 'discharge' },
-        { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'discharge', failCleanupKind: 'discharge' },
+        { restPath: '/enableDischargeSchedule', restBody: { state: 'enable' }, note: `${prefix} -> REST enableDischargeSchedule enable` },
+        { restPath: '/setDischargeSlot', restBody: { slot: '1', start, finish }, note: `${prefix} -> REST setDischargeSlot 1 ${start}-${finish}`, verifyActiveKind: 'discharge' },
       ];
     }
 
@@ -2942,6 +2971,97 @@ class GivTcpMqttPlatform {
       mqttAgeSeconds,
       safeForAutomation,
     };
+  }
+
+  logTelemetryRecovery(message, level = 'info', signature = message) {
+    if (signature === this.givTcpRecoveryLastLogSignature) {
+      return;
+    }
+    this.givTcpRecoveryLastLogSignature = signature;
+    const writer = level === 'warn' ? this.log.warn.bind(this.log) : this.log.info.bind(this.log);
+    writer(`[Telemetry Recovery] ${message}`);
+  }
+
+  runGivTcpRecoveryCommand() {
+    return new Promise((resolve, reject) => {
+      execFile('/usr/bin/sudo', ['-n', this.givTcpRecoveryCommand], { timeout: 120_000, windowsHide: true }, (error, stdout, stderr) => {
+        if (error) {
+          const detail = String(stderr || stdout || error.message).trim();
+          reject(new Error(detail || error.message));
+          return;
+        }
+        resolve(String(stdout || '').trim());
+      });
+    });
+  }
+
+  async maybeRecoverStaleGivTcp() {
+    if (!this.enableGivTcpSelfRecovery || this.givTcpRecoveryInProgress) {
+      return;
+    }
+
+    const status = this.getTelemetryStatus();
+    const now = Date.now();
+
+    if (this.givTcpRecoveryAwaitingFreshTelemetry) {
+      const advanced = status.state === 'fresh'
+        && status.hasSourceTimestamp
+        && Number.isFinite(status.sourceTimestampMs)
+        && (!Number.isFinite(this.givTcpRecoveryLastSourceTimestampMs)
+          || status.sourceTimestampMs > this.givTcpRecoveryLastSourceTimestampMs);
+
+      if (advanced) {
+        this.givTcpRecoveryAwaitingFreshTelemetry = false;
+        this.givTcpRecoveryLastLogSignature = '';
+        this.log.info(`[Telemetry Recovery] recovered automatically | source=Stats.Last_Updated_Time | age=${Math.round(status.ageSeconds)}s`);
+        return;
+      }
+
+      const waitSeconds = Math.max(0, Math.round((now - this.givTcpRecoveryStartedAtMs) / 1000));
+      if (waitSeconds >= 300) {
+        this.givTcpRecoveryAwaitingFreshTelemetry = false;
+        this.log.warn('[Telemetry Recovery] telemetry is still stale five minutes after restart; no further restart will be attempted until cooldown expires');
+      }
+      return;
+    }
+
+    if (status.state !== 'offline'
+      || !status.hasSourceTimestamp
+      || !Number.isFinite(status.ageSeconds)
+      || status.ageSeconds < this.givTcpRecoveryStaleSeconds) {
+      return;
+    }
+
+    const cooldownMs = this.givTcpRecoveryCooldownSeconds * 1000;
+    if (this.givTcpRecoveryLastAttemptMs > 0 && (now - this.givTcpRecoveryLastAttemptMs) < cooldownMs) {
+      const remaining = Math.ceil((cooldownMs - (now - this.givTcpRecoveryLastAttemptMs)) / 1000);
+      this.logTelemetryRecovery(
+        `restart suppressed by cooldown | remaining=${remaining}s | telemetry age=${Math.round(status.ageSeconds)}s`,
+        'warn',
+        `cooldown|${Math.floor(remaining / 300)}`,
+      );
+      return;
+    }
+
+    // Automation is already blocked by the same freshness state. The helper only restarts
+    // GivTCP; it must not call inverter-control REST endpoints or mutate schedules.
+    this.givTcpRecoveryInProgress = true;
+    this.givTcpRecoveryLastAttemptMs = now;
+    this.givTcpRecoveryStartedAtMs = now;
+    this.givTcpRecoveryLastSourceTimestampMs = status.sourceTimestampMs;
+    this.givTcpRecoveryLastLogSignature = '';
+    this.log.warn(`[Telemetry Recovery] sustained stale telemetry detected | age=${Math.round(status.ageSeconds)}s | restarting GivTCP once | command=${this.givTcpRecoveryCommand}`);
+
+    try {
+      const output = await this.runGivTcpRecoveryCommand();
+      this.givTcpRecoveryAwaitingFreshTelemetry = true;
+      this.log.info(`[Telemetry Recovery] restart command completed${output ? ` | ${output}` : ''}; waiting for fresh Last_Updated_Time`);
+    } catch (err) {
+      this.givTcpRecoveryAwaitingFreshTelemetry = false;
+      this.log.warn(`[Telemetry Recovery] restart command failed safely: ${err.message}`);
+    } finally {
+      this.givTcpRecoveryInProgress = false;
+    }
   }
 
   getTelemetryStatusBrightness() {
