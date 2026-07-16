@@ -63,5 +63,9 @@
     "RELEASE_NOTES_3.7.5-beta.1.md",
     "install-givtcp-recovery-helper.sh"
   ],
-  "icon": "homebridge-ui/public/logo.svg"
+  "icon": "homebridge-ui/public/logo.png",
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://buymeacoffee.com/jayc68"
+  }
 }
