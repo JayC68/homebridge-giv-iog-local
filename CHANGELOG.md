@@ -1,3 +1,45 @@
+# Changelog
+
+## 3.7.5 - 2026-07-16
+
+### Added
+
+- Adds isolated CE and AC-coupled single-slot charge schedule preservation.
+- Reads and remembers the existing slot 1 schedule, target state of charge and enable state before temporary use.
+- Restores the remembered user schedule after successful, failed or interrupted temporary charging.
+- Adds optional guarded GivTCP stale-telemetry recovery with a configurable stale threshold and restart cooldown.
+- Includes a narrow host helper installer that can restart only the local `givtcp` container.
+
+### Changed
+
+- Restores the proven v3.7.2 CH and All-in-One timed charge and export lifecycle.
+- Confines CE failed-start cleanup and reinstate behaviour to confirmed CE/AC-coupled systems.
+- Requires fresh `Stats.Last_Updated_Time` telemetry before a CE user-owned slot may be overwritten.
+- Treats a disabled schedule as safe even when inactive historical slot times remain stored.
+- Treats contradictory GivTCP success wording as advisory and relies on readback verification for the final result.
+
+### Fixed
+
+- Prevents CE single-slot compatibility changes from altering CH baseline overnight charging or Intelligent Octopus Go bonus-window charging.
+- Prevents temporary CE charging from permanently replacing a user's existing charge schedule.
+- Prevents unsupported charge-slot writes to slots 2–10 on confirmed single-slot systems.
+- Prevents valid inverter writes from being aborted solely because GivTCP returned contradictory success wording.
+
+### Safety and telemetry
+
+- Retains stale-telemetry automation blocking and Eve history suppression.
+- GivTCP recovery never sends inverter-control REST commands.
+- Automation remains blocked until fresh telemetry with an advancing source timestamp is observed.
+- A cooldown prevents repeated restart loops.
+- GivTCP recovery is disabled by default and requires explicit helper installation.
+
+### Validation
+
+- CH/All-in-One overnight validation passed with fresh and advancing REST telemetry.
+- REST and MQTT state of charge agreed.
+- No stale telemetry, blocked automation, uncleared slots, REST timeouts, unknown-success failures or write-verification failures were recorded during the release health check.
+- No GivTCP connection failures or restart indicators were recorded during the inspected 24-hour period.
+
 ## v3.7.5-beta.1
 
 ### Added
@@ -15,7 +57,6 @@
 - Automation remains blocked until fresh telemetry is observed after restart.
 - Self-recovery is disabled by default and requires explicit helper installation.
 
-# Changelog
 
 ## 3.7.4 - 2026-07-10
 
@@ -82,7 +123,6 @@
 - Silences parked Smooth Charging timer-clear logging when Smooth Charging is disabled, with dedupe retained as a safety net if Smooth is re-enabled.
 - No background polling, ping checks, port checks, GivTCP restart logic, EEE behaviour changes or platform naming changes.
 
-# Changelog
 
 ## 3.7.0-beta.2 - 2026-06-08
 

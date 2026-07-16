@@ -17,8 +17,8 @@ function section(start, end) {
   return source.slice(a, b);
 }
 
-assert.strictEqual(pkg.version, '3.7.5-beta.1');
-assert(source.includes("const BUILD_VERSION = '3.7.5-beta.1';"));
+assert.strictEqual(pkg.version, '3.7.5');
+assert(source.includes("const BUILD_VERSION = '3.7.5';"));
 
 const timed = section('  buildTimedSlotSteps(', '  buildNeutralizeSlotSteps(');
 assert(timed.includes("if (this.isCeAcCoupledSystem())"), 'CE boundary missing');
