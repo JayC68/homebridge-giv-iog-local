@@ -1,71 +1,70 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "3.7.5",
-  "description": "GivHome brings local GivEnergy battery automation into Apple Home with Intelligent Octopus Go, Battery Care Charging, Evening Excess Export, manual controls and Eve energy history.",
+  "version": "4.0.0-beta.1",
+  "description": "Direct local GivEnergy integration for Homebridge, with Apple Home telemetry and optional Intelligent Octopus Go, Flux Export and Agile Export features.",
   "main": "index.js",
-  "license": "Apache-2.0",
+  "license": "GPL-3.0-or-later",
   "keywords": [
     "homebridge-plugin",
+    "supports-hap",
     "homebridge",
     "givenergy",
-    "givtcp",
-    "mqtt",
-    "octopus",
+    "givhome",
+    "modbus",
+    "local-control",
     "apple-home",
     "homekit",
     "intelligent-octopus-go",
-    "eve",
-    "energy-history",
-    "local-control",
-    "excess-energy-export",
+    "octopus-energy",
+    "octopus-flux",
+    "agile-export",
     "battery-export",
     "energy-automation",
-    "smooth-charging",
-    "battery-health",
-    "battery-care",
-    "local-battery-automation",
-    "apple-home-energy",
-    "battery-care-charging"
+    "eve",
+    "energy-history"
   ],
   "engines": {
-    "homebridge": "^1.8.0 || ^2.0.0-beta.0 || ^2.0.0",
-    "node": "^18.20.4 || ^20.15.1 || ^22 || ^24"
+    "node": "^22.0.0 || ^24.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0"
   },
-  "dependencies": {
-    "mqtt": "^5.10.4",
-    "fakegato-history": "^0.6.5"
+  "peerDependencies": {
+    "homebridge": "^1.8.0 || ^2.0.0"
   },
-  "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/JayC68/homebridge-giv-iog-local.git"
+  "scripts": {
+    "test": "node tools/verify-release.js",
+    "verify": "node tools/verify-release.js",
+    "pack:dry": "npm pack --dry-run"
   },
-  "bugs": {
-    "url": "https://github.com/JayC68/homebridge-giv-iog-local/issues"
-  },
-  "displayName": "GivHome",
   "files": [
     "index.js",
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
-    "homebridge-ui",
-    "RELEASE_NOTES_3.6.4-beta.1.md",
-    "RELEASE_NOTES_3.7.0-beta.1.md",
-    "RELEASE_NOTES_3.7.0-beta.2.md",
-    "RELEASE_NOTES_3.7.0-beta.4.md",
-    "RELEASE_NOTES_3.6.5.md",
-    "RELEASE_NOTES_3.7.0-beta.3.md",
-    "RELEASE_NOTES_3.7.1.md",
-    "RELEASE_NOTES_3.7.3-beta.2.md",
-    "RELEASE_NOTES_3.7.3-beta.3.md",
-    "RELEASE_NOTES_3.7.4.md",
-    "RELEASE_NOTES_3.7.5.md",
-    "install-givtcp-recovery-helper.sh"
+    "LICENSE",
+    "NOTICE",
+    "TRADEMARKS.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "assets",
+    "docs",
+    "lib",
+    "tools/verify-release.js"
   ],
-  "icon": "homebridge-ui/public/logo.png",
+  "displayName": "GivHome",
+  "homepage": "https://givhome.kernowekconsulting.co.uk/",
+  "author": "Kernowek Consulting",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JayC68/homebridge-giv-iog-local.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JayC68/homebridge-giv-iog-local/issues"
+  },
+  "optionalDependencies": {
+    "fakegato-history": "^0.6.5"
+  },
   "funding": {
-    "type": "buymeacoffee",
-    "url": "https://buymeacoffee.com/jayc68"
+    "type": "website",
+    "url": "https://givhome.kernowekconsulting.co.uk/"
   }
 }
