@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v4.0.0'
+      - 'oidc-diagnostic-v4.0.0'
 
 permissions:
   contents: read
@@ -27,18 +28,52 @@ jobs:
           npm install --global npm@11.20.0
           test "$(npm --version)" = "11.20.0"
 
-      - name: Verify OIDC publication environment
+      - name: Inspect OIDC claims safely
         shell: bash
         run: |
           set -euo pipefail
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
-          test -z "${NODE_AUTH_TOKEN:-}"
-          test -z "${NPM_TOKEN:-}"
-          npm config get registry | grep -Fx 'https://registry.npmjs.org/'
+          response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm%3Aregistry.npmjs.org")"
+          token="$(printf '%s' "$response" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
+              const j=JSON.parse(s); if(!j.value) process.exit(2); process.stdout.write(j.value)
+            })')"
+          payload="$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="; print}' | base64 -d)"
+          printf '%s' "$payload" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
+              const j=JSON.parse(s);
+              const keep=["iss","aud","sub","repository","repository_owner","workflow","workflow_ref","ref","ref_type","event_name","runner_environment","actor"];
+              for (const k of keep) console.log(`${k}=${j[k] ?? "<absent>"}`);
+              const expected={
+                iss:"https://token.actions.githubusercontent.com",
+                aud:"npm:registry.npmjs.org",
+                repository:"JayC68/homebridge-giv-iog-local",
+                repository_owner:"JayC68",
+                workflow:"Publish npm",
+                ref:"refs/tags/oidc-diagnostic-v4.0.0",
+                ref_type:"tag",
+                event_name:"push",
+                runner_environment:"github-hosted"
+              };
+              let bad=false;
+              for (const [k,v] of Object.entries(expected)) if(j[k]!==v){console.error(`MISMATCH ${k}: expected=${v} actual=${j[k]}`); bad=true}
+              const wr="JayC68/homebridge-giv-iog-local/.github/workflows/publish-npm.yml@refs/tags/oidc-diagnostic-v4.0.0";
+              if(j.workflow_ref!==wr){console.error(`MISMATCH workflow_ref: expected=${wr} actual=${j.workflow_ref}`); bad=true}
+              if(bad) process.exit(3);
+              console.log("OIDC_CLAIMS=PASS");
+            })'
 
       - name: Verify release
+        if: github.ref == 'refs/tags/v4.0.0'
         run: npm test
 
       - name: Publish with OIDC provenance
-        run: npm publish --access public --provenance
+        if: github.ref == 'refs/tags/v4.0.0'
+        run: npm publish --access public --provenance --loglevel=silly
+
+      - name: Diagnostic only
+        if: github.ref == 'refs/tags/oidc-diagnostic-v4.0.0'
+        run: echo "DIAGNOSTIC_ONLY=YES; NPM_PUBLISH_NOT_RUN"
