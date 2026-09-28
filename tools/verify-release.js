@@ -1,57 +1,45 @@
 'use strict';
-
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
-
 const root = path.resolve(__dirname, '..');
-const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
-const json = (file) => JSON.parse(read(file));
-
-const pkg = json('package.json');
-const schema = json('config.schema.json');
-const index = read('index.js');
-const constants = read('lib/evidence-led-constants.js');
-const readme = read('README.md');
-const changelog = read('CHANGELOG.md');
-
-let ok = true;
-function assert(label, condition, detail = '') {
-  if (condition) console.log('PASS ' + label);
-  else {
-    ok = false;
-    console.error('FAIL ' + label + (detail ? ' :: ' + detail : ''));
-  }
-}
-
-const schemaText = JSON.stringify(schema);
-const files = Array.isArray(pkg.files) ? pkg.files.join('|') : '';
-
-assert('package name', pkg.name === 'homebridge-giv-iog-local', pkg.name);
-assert('package version', pkg.version === '4.0.0-beta.1', pkg.version);
-assert('licence', pkg.license === 'GPL-3.0-or-later', pkg.license);
-assert('repository points to original package repo', String(pkg.repository && pkg.repository.url || '').includes('JayC68/homebridge-giv-iog-local'));
-assert('plugin registration uses package name', index.includes("const PLUGIN_NAME = 'homebridge-giv-iog-local';"));
-assert('platform alias retained', schema.pluginAlias === 'GivHomeModbus' && index.includes("const PLATFORM_NAME = 'GivHomeModbus';"));
-assert('runtime marker updated', constants.includes('GivHome Modbus 4.0.0-beta.1 loaded') && index.includes("version: '4.0.0-beta.1'"));
-assert('Homebridge keywords retained', pkg.keywords.includes('homebridge-plugin') && pkg.keywords.includes('supports-hap'));
-assert('GivTCP/MQTT keywords removed', !pkg.keywords.includes('givtcp') && !pkg.keywords.includes('mqtt'));
-assert('no install scripts', !pkg.scripts.preinstall && !pkg.scripts.install && !pkg.scripts.postinstall && !pkg.scripts.prepare && !pkg.scripts.prepublish);
-assert('minimal package files', files.includes('index.js') && files.includes('lib') && files.includes('docs') && !files.includes('EVIDENCE.md'));
-assert('old evidence doc removed', !fs.existsSync(path.join(root, 'EVIDENCE.md')));
-assert('README is direct-local and concise', readme.includes('Direct local GivEnergy integration') && readme.includes('GivTCP') && readme.length < 6000);
-assert('CHANGELOG has v4 beta', changelog.includes('## 4.0.0-beta.1') && changelog.includes('GPL-3.0-or-later'));
-assert('required docs present', ['docs/MIGRATION_V3_TO_V4.md','docs/TROUBLESHOOTING.md','docs/SAFETY.md','docs/ADVANCED_OCTOPUS.md','NOTICE','TRADEMARKS.md','SECURITY.md','SUPPORT.md'].every((file) => fs.existsSync(path.join(root, file))));
-assert('Flux observed-power code retained', index.includes('energyBudgetBasis=observed-effective-power-not-HR112-assumption') && index.includes('HR112PowerRatioObeyed') && index.includes('observedBatteryKwh'));
-assert('shared export route cleanup retained', index.includes('sharedRouteNeutralised=yes') && index.includes('HR291 clear') && index.includes('HR293 clear'));
-assert('Agile safety retained', index.includes('planner-only current-slot-selected') && index.includes('noInverterWrites=yes') && schemaText.includes('plannerOnly'));
-
-const forbiddenTopLevelPrefixes = ['RELEASE_NOTES_', 'QA_', 'BETA'];
-const badTopLevel = fs.readdirSync(root).filter((name) => forbiddenTopLevelPrefixes.some((prefix) => name.startsWith(prefix)));
-assert('no old top-level release clutter', badTopLevel.length === 0, badTopLevel.join(', '));
-
-if (!ok) {
-  console.error('GivHome v4 cleanup verification failed');
-  process.exit(1);
-}
-
-console.log('GivHome v4 cleanup verification passed');
+let failures = 0;
+function check(name, ok, detail='') { console.log(`${ok?'PASS':'FAIL'} ${name}${detail?` | ${detail}`:''}`); if(!ok) failures++; }
+function read(f){ return fs.readFileSync(path.join(root,f),'utf8'); }
+function sha(f){ return crypto.createHash('sha256').update(fs.readFileSync(path.join(root,f))).digest('hex'); }
+const pkg=JSON.parse(read('package.json'));
+const schema=JSON.parse(read('config.schema.json'));
+const idx=read('index.js');
+const constants=read('lib/evidence-led-constants.js');
+const solar=read('lib/predicted-solar.js');
+const recorder=read('lib/internal-flight-recorder.js');
+check('package identity',pkg.name==='homebridge-giv-iog-local'&&pkg.version==='4.0.0',`${pkg.name}@${pkg.version}`);
+check('public display name',pkg.displayName==='GivHome',pkg.displayName);
+check('GPL v4 licence',pkg.license==='GPL-3.0-or-later',pkg.license);
+check('v4 repository',pkg.repository&&/JayC68\/homebridge-giv-iog-local\.git$/.test(pkg.repository.url||''));
+check('fakegato required dependency',pkg.dependencies&&pkg.dependencies['fakegato-history']==='^0.6.5'&&!pkg.optionalDependencies);
+check('clean publication surface',!pkg.files.includes('EVIDENCE.md')&&!pkg.files.some(x=>/verify-beta/.test(x)));
+check('v4 legal/support surface',['NOTICE','TRADEMARKS.md','SECURITY.md','SUPPORT.md','docs'].every(x=>pkg.files.includes(x)));
+check('platform alias preserved',schema.pluginAlias==='GivHomeModbus'&&schema.pluginType==='platform'&&schema.singular===true);
+check('v4 schema presentation',schema.schema.properties.name.default==='GivHome'&&/GivHome connects Homebridge/.test(schema.headerDisplay||''));
+check('Predicted Solar schema',!!schema.schema.properties.enablePredictedSolar&&!!schema.schema.properties.predictedSolarArrays);
+check('plugin constant converted',idx.includes("const PLUGIN_NAME = 'homebridge-giv-iog-local';"));
+check('platform constant preserved',idx.includes("const PLATFORM_NAME = 'GivHomeModbus';"));
+check('configured-name fallback preserved',idx.includes("this.config.name || 'GivHome Modbus'")&&idx.includes("|| 'GivHome Modbus';"));
+check('read-only UUID revision preserved',idx.includes("const READ_ONLY_ACCESSORY_UX_REVISION = 'givhome-1.1.0-agile-outgoing-status-lightbulb-ux-v2';"));
+check('UUID accessory IDs preserved',idx.includes("const MANUAL_CHARGE_ACCESSORY_ID = 'manual-charge-command';")&&idx.includes("const APPLIANCE_COMMAND_ACCESSORY_PREFIX = 'appliance-command';")&&idx.includes("const EVE_HISTORY_ACCESSORY_PREFIX = 'eve-history';"));
+check('Predicted Solar is new distinct ID',idx.includes("const PREDICTED_SOLAR_ACCESSORY_ID = 'predicted-solar';"));
+check('Smart Window improvement retained',/case ACCESSORY_IDS\.SMART_WINDOW:\s*return Boolean\(cheapState && cheapState\.cheapActive\);/.test(idx));
+check('authoritative reconciler retained',idx.includes('COMMAND_TRUTH_RECONCILE_INTERVAL_MS = 60000')&&idx.includes('reconcileCommandTruth'));
+check('Flux single-peak completion retained',idx.includes('octopusFluxExportCompletedPeakKey'));
+check('Flux requested-energy budgeting retained',idx.includes('requestedEnergyBudgetKwh'));
+check('Eve production implementation retained',idx.includes('createEveEnergyCharacteristics')&&idx.includes('ensureEveEnergyCharacteristics')&&idx.includes('fakegato-history'));
+check('Predicted Solar controller retained',idx.includes('PredictedSolarController')&&fs.existsSync(path.join(root,'lib/predicted-solar.js')));
+check('v4 runtime identity',constants.includes("const STAGE = 'GivHome 4.0.0';")&&idx.includes("version: '4.0.0'")&&idx.includes("stage: 'GivHome 4.0.0'"));
+check('Flux/Agile persisted state identifies v4',idx.includes("stage: 'givhome-v4-octopus-flux-export-observed-power-ratio-planner'")&&idx.includes("const fallback = { version: '4.0.0', serial:")&&idx.includes("version: '4.0.0',\n      builtAt:"));
+check('Predicted Solar user-agent converted',solar.includes("homebridge-giv-iog-local/4.0.0"));
+check('flight recorder product label converted',recorder.includes("const PLUGIN = 'GivHome';"));
+check('flight recorder storage/schema continuity',recorder.includes("givhome-modbus-internal-flight-recorder-v3.0")&&recorder.includes("/var/lib/homebridge/givhome-flight-recorder"));
+for (const f of ['LICENSE','NOTICE','TRADEMARKS.md','SECURITY.md','SUPPORT.md','docs/RELEASE_PROVENANCE.md','docs/MIGRATION_V3_TO_V4.md','docs/SAFETY.md','docs/TROUBLESHOOTING.md']) check(`required file ${f}`,fs.existsSync(path.join(root,f)));
+console.log(`KEY SUMMARY: ${failures===0?'PASS':'FAIL'} | failures=${failures}`);
+if(failures) process.exit(1);

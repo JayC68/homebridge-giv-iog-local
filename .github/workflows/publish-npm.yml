@@ -1,0 +1,32 @@
+name: Publish npm
+
+on:
+  push:
+    tags:
+      - 'v4.0.0'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Use npm 11
+        run: npm install --global npm@11
+
+      - name: Verify release
+        run: npm test
+
+      - name: Publish with provenance
+        run: npm publish --access public --provenance

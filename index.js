@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 
 const {
   DEFAULT_ADAPTER_SERIAL,
@@ -90,6 +91,7 @@ const {
   loadJson,
   saveJson
 } = require('./lib/appliance-integrated-control');
+const { PredictedSolarController, validateConfig: validatePredictedSolarConfig } = require('./lib/predicted-solar');
 const {
   buildSlotPlan: buildAgileExportAutopilotSlotPlan,
   findCurrentSelectedSlot: findCurrentAgileExportAutopilotSlot,
@@ -101,9 +103,13 @@ const PLATFORM_NAME = 'GivHomeModbus';
 const MANUAL_CHARGE_ACCESSORY_ID = 'manual-charge-command';
 const APPLIANCE_COMMAND_ACCESSORY_PREFIX = 'appliance-command';
 const EVE_HISTORY_ACCESSORY_PREFIX = 'eve-history';
+const PREDICTED_SOLAR_ACCESSORY_ID = 'predicted-solar';
 const READ_ONLY_ACCESSORY_UX_REVISION = 'givhome-1.1.0-agile-outgoing-status-lightbulb-ux-v2';
 const DEFAULT_MANUAL_CHARGE_COMMAND_DURATION_MINUTES = 30;
 const APPLIANCE_AUTOMATION_INTERVAL_MS = 30000;
+const COMMAND_TRUTH_RECONCILE_INTERVAL_MS = 60000;
+const COMMAND_TRUTH_RECONCILE_STARTUP_DELAY_MS = 250;
+const COMMAND_TRUTH_RECONCILE_BUSY_RETRY_MS = 2000;
 const COMMAND_TRANSPORT_WAIT_TIMEOUT_MS = 180000;
 const COMMAND_TRANSPORT_HOLD_MS = 45000;
 const COMMAND_TRANSPORT_DEFER_LOG_MS = 5000;
@@ -118,8 +124,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.0-beta.1',
-      stage: 'GivHome Modbus 4.0.0-beta.1'
+      version: '4.0.0',
+      stage: 'GivHome 4.0.0'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -213,6 +219,11 @@ class GivHomeModbusPlatform {
     this.applianceCommandTruthSnapshotAtMs = 0;
     this.applianceCommandTruthSnapshotInFlight = null;
     this.applianceCommandTruthSnapshotTtlMs = 5000;
+    this.commandTruthReconcileTimer = null;
+    this.commandTruthReconcileRetryTimer = null;
+    this.commandTruthReconcileInFlight = false;
+    this.commandTruthReconcileStarted = false;
+    this.commandTruthReconcileLastSuccessAtMs = 0;
     this.activeExcessExportSlot = null;
     this.excessEnergyExportActive = false;
     this.lastExcessExportDecisionSignature = '';
@@ -236,6 +247,7 @@ class GivHomeModbusPlatform {
     this.octopusFluxExportArmed = this.applianceControl.features.octopusFluxExport;
     this.lastOctopusFluxExportDecisionSignature = '';
     this.lastOctopusFluxExportDecisionLogMs = 0;
+    this.octopusFluxExportCompletedPeakKey = '';
     this.loadOctopusFluxExportMemory();
     this.activeOctopusAgileOutgoingSlot = null;
     this.octopusAgileOutgoingExportActive = false;
@@ -257,17 +269,43 @@ class GivHomeModbusPlatform {
     this.loadOctopusAgileOutgoingMemory();
     this.ceAcChargeSlotMemory = null;
     this.loadCeAcChargeSlotMemory();
-    this.eveHistoryServices = new Map();
-    this.eveHistoryRuntimeTotals = new Map();
-    this.eveHistoryLastRecordMs = 0;
-    this.fakeGatoHistoryService = null;
-    this.warnedMissingFakeGato = false;
+    // Eve Energy: clean implementation based on the validated IOG 3.7.5 contract.
+    // Bridge containment is retained: an Eve failure
+    // must never be allowed to take down the child bridge or touch inverter controls.
+    this.eveEnergyHistoryKinds = ['solar', 'import', 'export'];
+    this.eveEnergyHistoryServices = new Map();
+    this.eveEnergyRuntimeTotalsKwh = new Map();
+    this.eveEnergyRuntimeTotalUpdatedMs = 0;
+    this.lastEveEnergyHistoryEntryMs = 0;
+    this.eveEnergyHistorySampleMinutes = 5;
+    this.eveEnergyHistorySize = 12 * 24 * 365 * 5;
+    this.lastEveEnergyHistorySkipSignature = '';
+    this.filteredFakeGatoLogger = null;
+    this._warnedMissingFakeGato = false;
+    this.EveEnergyCharacteristic = this.createEveEnergyCharacteristics();
+    this.FakeGatoHistoryService = null;
+    let fakeGatoHistoryModule = null;
     try {
-      const fakeGatoHistory = require('fakegato-history');
-      this.fakeGatoHistoryService = fakeGatoHistory(this.api);
-    } catch {
-      this.fakeGatoHistoryService = null;
+      fakeGatoHistoryModule = require('fakegato-history');
+    } catch (err) {
+      this.log.warn('[EveHistory] fakegato-history module load failed safely: %s', err && err.message ? err.message : String(err));
     }
+    if (fakeGatoHistoryModule) {
+      try {
+        this.FakeGatoHistoryService = fakeGatoHistoryModule(this.api);
+      } catch (err) {
+        try {
+          this.FakeGatoHistoryService = fakeGatoHistoryModule;
+        } catch {
+          this.log.warn('[EveHistory] fakegato-history initialisation failed safely: %s', err && err.message ? err.message : String(err));
+        }
+      }
+    }
+    this.loadEveEnergyRuntimeTotals();
+    this.predictedSolarValidation = validatePredictedSolarConfig(this.config);
+    this.predictedSolarController = null;
+    this.predictedSolarService = null;
+    this.predictedSolarLastResult = null;
 
     this.log.info(STAGE_RUNTIME_MARKER);
     if (this.flightRecorder) {
@@ -282,7 +320,7 @@ class GivHomeModbusPlatform {
     } else {
       this.log.warn('Manual Charge command accessory dual gate satisfied: HomeKit Set handler will bind for explicit user-triggered Manual Charge start/cancel only. automaticMutationPath=absent');
     }
-    this.log.warn('GivHome evidence Intelligent Octopus Go dynamic-slot enforcement: original plugin semantic snapshot model retained; grid flow split corrected (IR30 positive=export, negative=import); Intelligent Octopus Go dispatch windows are logged, home-battery protection is continuously re-enforced while smart windows or early-termination billing grace are active, SOC-at-target no longer suppresses protection, changed dispatch windows can update the active inverter charge window, and plugin-internal Flight Recorder records GivHome Modbus evidence without relying on the external tail service.');
+    this.log.warn('GivHome evidence Intelligent Octopus Go dynamic-slot enforcement: original plugin semantic snapshot model retained; grid flow split corrected (IR30 positive=export, negative=import); Intelligent Octopus Go dispatch windows are logged, home-battery protection is continuously re-enforced while smart windows or early-termination billing grace are active, SOC-at-target no longer suppresses protection, changed dispatch windows can update the active inverter charge window, and plugin-internal Flight Recorder records GivHome evidence without relying on the external tail service.');
     this.log.warn('GivHome evidence Advanced Modbus unit policy: normalUnitAddress=17 configuredModbusUnitAddress=%s engineeringOverride=%s activeUnitAddress=%s uiExposure=hidden-from-normal-config automaticMutationPath=absent', this.configuredModbusUnitAddress ?? 'unset', this.engineeringModbusUnitOverride ? 'yes' : 'no', this.deviceAddress);
     this.log.warn('GivHome evidence smart-window policy: graceMinutes=%s cheapStart=%s cheapEnd=%s octopusPollSeconds=%s scope=Intelligent-Octopus-Go-dispatch-plus-early-termination-billing-grace gracePolicy=ceil-to-next-half-hour-up-to-configured-cap normalDispatchEndExtended=no dynamicDispatchUpdates=yes batteryCareGracePeriodsExcluded=yes automaticMutationPath=absent', this.applianceControl.graceMinutes, this.applianceControl.cheapStart, this.applianceControl.cheapEnd, this.applianceControl.octopusPollSeconds);
     this.log.warn('GivHome evidence v3.7.5 parity policy: octopusAgileOutgoingAutonomousExport=yes octopusAgileOutgoingMpanAudit=yes octopusFluxPeakExportPlanner=yes eveningExcessExportConfigSection=yes eveningExcessExportLegacyAliases=yes eveningExcessExportPlannerIdleReasons=yes eveningExcessExportRecoverySharedSnapshot=yes eveningExcessExportRecovery=yes truthBackedCommandSwitches=yes ceAcPersistentChargeSlotMemory=yes ceAcCleanupLeavesHr96Off=yes eveHistoryHardening=yes normalDispatchEndExtended=no automaticMutationPath=absent');
@@ -326,6 +364,8 @@ class GivHomeModbusPlatform {
     this.ensureManualChargeCommandAccessory();
     this.ensureApplianceCommandAccessories();
     this.ensureEveHistoryAccessories();
+    this.ensurePredictedSolarAccessory();
+    this.startPredictedSolar();
 
     if (!this.enableReadOnlyPolling) {
       this.log.warn('Read-only polling is disabled in config. Accessories will stay idle.');
@@ -344,6 +384,7 @@ class GivHomeModbusPlatform {
     this.pollTimer = setInterval(() => this.pollOnce(), this.pollIntervalSeconds * 1000);
     this.startManualChargeSupervisor();
     this.startApplianceAutomationLoops();
+    this.startCommandTruthReconciliation();
 
     if (this.enableReadOnlyCapabilityDiscovery) {
       this.log.info('GivHome capability read-only capability discovery is enabled: level=%s', this.capabilityDiscoveryLevel);
@@ -401,6 +442,7 @@ class GivHomeModbusPlatform {
       expectedUUIDs.add(uuid);
 
       let accessory = this.accessoryByUUID.get(uuid);
+      const isNew = !accessory;
       if (!accessory) {
         accessory = new this.api.platformAccessory(definition.displayName, uuid);
         accessory.context.definitionId = definition.id;
@@ -414,6 +456,7 @@ class GivHomeModbusPlatform {
       accessory.context.displayName = definition.displayName;
       accessory.displayName = definition.displayName;
       this.configureAccessoryServices(accessory, definition);
+      if (!isNew && typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
     }
 
     const stale = this.accessories.filter((accessory) => accessory.context && accessory.context.readOnly && !expectedUUIDs.has(accessory.UUID));
@@ -427,7 +470,7 @@ class GivHomeModbusPlatform {
       let accessory = this.accessoryByUUID.get(uuid);
       const isNew = !accessory;
       if (!accessory) {
-        accessory = new this.api.platformAccessory('Octopus Flux Export', uuid);
+        accessory = new this.api.platformAccessory('Flux Out', uuid);
         this.accessoryByUUID.set(uuid, accessory);
         this.accessories.push(accessory);
         created.push(accessory);
@@ -435,8 +478,9 @@ class GivHomeModbusPlatform {
       accessory.context.definitionId = `${APPLIANCE_COMMAND_ACCESSORY_PREFIX}:${COMMAND_KINDS.OCTOPUS_FLUX_EXPORT}`;
       accessory.context.commandAccessory = true;
       accessory.context.applianceCommandKind = COMMAND_KINDS.OCTOPUS_FLUX_EXPORT;
-      accessory.displayName = 'Octopus Flux Export';
+      accessory.displayName = 'Flux Out';
       this.configureOctopusFluxExportAccessory(accessory);
+      if (!isNew && typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
       if (!isNew) {
         this.log.warn('GivHome evidence Octopus Flux Export accessory already registered: armed=%s', this.octopusFluxExportArmed ? 'yes' : 'no');
       }
@@ -456,7 +500,7 @@ class GivHomeModbusPlatform {
       let accessory = this.accessoryByUUID.get(uuid);
       const isNew = !accessory;
       if (!accessory) {
-        accessory = new this.api.platformAccessory('Octopus Agile Export', uuid);
+        accessory = new this.api.platformAccessory('Agile Out', uuid);
         this.accessoryByUUID.set(uuid, accessory);
         this.accessories.push(accessory);
         created.push(accessory);
@@ -464,8 +508,9 @@ class GivHomeModbusPlatform {
       accessory.context.definitionId = `${APPLIANCE_COMMAND_ACCESSORY_PREFIX}:${COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT}`;
       accessory.context.commandAccessory = true;
       accessory.context.applianceCommandKind = COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT;
-      accessory.displayName = 'Octopus Agile Export';
+      accessory.displayName = 'Agile Out';
       this.configureOctopusAgileOutgoingExportAccessory(accessory);
+      if (!isNew && typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
       if (!isNew) {
         this.log.warn('GivHome evidence Octopus Agile Export accessory already registered: armed=%s dryRun=%s', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no');
       }
@@ -485,6 +530,76 @@ class GivHomeModbusPlatform {
       this.log.info('Registered %s read-only accessor%s.', created.length, created.length === 1 ? 'y' : 'ies');
     } else {
       this.log.info('Read-only accessories already registered.');
+    }
+  }
+
+
+  predictedSolarAccessoryUUID() {
+    return this.api.hap.uuid.generate(`${PLUGIN_NAME}:${this.name}:${PREDICTED_SOLAR_ACCESSORY_ID}`);
+  }
+
+  ensurePredictedSolarAccessory() {
+    const uuid = this.predictedSolarAccessoryUUID();
+    let accessory = this.accessoryByUUID.get(uuid);
+    const validation = this.predictedSolarValidation;
+    if (!validation.enabled || !validation.ok) {
+      if (accessory) {
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.accessoryByUUID.delete(uuid);
+        this.accessories = this.accessories.filter((candidate) => candidate.UUID !== uuid);
+      }
+      if (validation.enabled && !validation.ok) this.log.warn('[PredictedSolar] accessory withheld safely: %s', validation.reason);
+      return;
+    }
+    const created = !accessory;
+    if (!accessory) {
+      accessory = new this.api.platformAccessory('Solar 2mrw', uuid);
+      this.accessoryByUUID.set(uuid, accessory);
+      this.accessories.push(accessory);
+    }
+    accessory.context.definitionId = PREDICTED_SOLAR_ACCESSORY_ID;
+    accessory.context.predictedSolar = true;
+    accessory.displayName = 'Solar 2mrw';
+    const service = accessory.getService(this.Service.Lightbulb) || accessory.addService(this.Service.Lightbulb, 'Solar 2mrw', PREDICTED_SOLAR_ACCESSORY_ID);
+    service.setCharacteristic(this.Characteristic.Name, 'Solar 2mrw');
+    service.getCharacteristic(this.Characteristic.On).onGet(() => Boolean(this.predictedSolarLastResult));
+    service.getCharacteristic(this.Characteristic.Brightness).onGet(() => this.predictedSolarLastResult ? this.predictedSolarLastResult.brightness : 1);
+    service.updateCharacteristic(this.Characteristic.On, Boolean(this.predictedSolarLastResult));
+    service.updateCharacteristic(this.Characteristic.Brightness, this.predictedSolarLastResult ? this.predictedSolarLastResult.brightness : 1);
+    const info = accessory.getService(this.Service.AccessoryInformation);
+    if (info) info.setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting').setCharacteristic(this.Characteristic.Model, 'Predicted Solar').setCharacteristic(this.Characteristic.FirmwareRevision, '4.0.0');
+    this.predictedSolarService = service;
+    if (created) this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    else if (typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
+  }
+
+  startPredictedSolar() {
+    const validation = this.predictedSolarValidation;
+    if (!validation.enabled) { this.log.info('[PredictedSolar] disabled; no accessory and no network requests.'); return; }
+    if (!validation.ok) { this.log.warn('[PredictedSolar] invalid configuration isolated; Modbus continues normally: %s', validation.reason); return; }
+    try {
+      const storagePath = this.api && this.api.user && typeof this.api.user.storagePath === 'function' ? this.api.user.storagePath() : '/var/lib/homebridge';
+      this.predictedSolarController = new PredictedSolarController({
+        config: this.config,
+        log: this.log,
+        storagePath,
+        onUpdate: (result) => {
+          const forecastKwh = Number(result && result.kwh);
+          const referenceKwh = Number(result && result.referenceKwh);
+          const publishedBrightness = Number.isFinite(forecastKwh) && forecastKwh >= 0 && Number.isFinite(referenceKwh) && referenceKwh > 0
+            ? Math.min(99, Math.max(1, Math.round((forecastKwh / referenceKwh) * 100)))
+            : 1;
+          this.predictedSolarLastResult = { ...result, brightness: publishedBrightness };
+          if (this.predictedSolarService) {
+            this.predictedSolarService.updateCharacteristic(this.Characteristic.On, true);
+            this.predictedSolarService.updateCharacteristic(this.Characteristic.Brightness, publishedBrightness);
+          }
+          this.log.info('[PredictedSolar] Home publication forecast=%skWh reference=%skWh tile=%s%%', Number.isFinite(forecastKwh) ? forecastKwh.toFixed(2) : 'invalid', Number.isFinite(referenceKwh) ? referenceKwh.toFixed(2) : 'invalid', publishedBrightness);
+        }
+      });
+      this.predictedSolarController.start();
+    } catch (err) {
+      this.log.warn('[PredictedSolar] startup isolated without failing child bridge: %s', err && err.message ? err.message : String(err));
     }
   }
 
@@ -582,6 +697,7 @@ class GivHomeModbusPlatform {
       accessory.context.applianceCommandKind = tile.kind;
       accessory.displayName = tile.displayName;
       this.configureApplianceCommandAccessory(accessory, tile);
+      if (!isNew && typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
       if (!isNew) {
         this.log.warn('GivHome evidence command accessory already registered: %s liveCapable=yes', tile.displayName);
       }
@@ -592,7 +708,7 @@ class GivHomeModbusPlatform {
       let accessory = this.accessoryByUUID.get(uuid);
       const isNew = !accessory;
       if (!accessory) {
-        accessory = new this.api.platformAccessory('Evening Excess Export', uuid);
+        accessory = new this.api.platformAccessory('Excess Out', uuid);
         this.accessoryByUUID.set(uuid, accessory);
         this.accessories.push(accessory);
         created.push(accessory);
@@ -600,8 +716,9 @@ class GivHomeModbusPlatform {
       accessory.context.definitionId = `${APPLIANCE_COMMAND_ACCESSORY_PREFIX}:${COMMAND_KINDS.EVENING_EXCESS_EXPORT}`;
       accessory.context.commandAccessory = true;
       accessory.context.applianceCommandKind = COMMAND_KINDS.EVENING_EXCESS_EXPORT;
-      accessory.displayName = 'Evening Excess Export';
+      accessory.displayName = 'Excess Out';
       this.configureEveningExcessExportAccessory(accessory);
+      if (!isNew && typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
       if (!isNew) {
         this.log.warn('GivHome evidence Evening Excess Export accessory already registered: armed=%s', this.eveningExcessExportArmed ? 'yes' : 'no');
       }
@@ -636,7 +753,7 @@ class GivHomeModbusPlatform {
     this.applianceCommandServices.set(tile.kind, service);
     const onCharacteristic = service.getCharacteristic(this.Characteristic.On);
     if (typeof onCharacteristic.onGet === 'function') {
-      onCharacteristic.onGet(async () => this.getApplianceCommandTruthState(tile.kind));
+      onCharacteristic.onGet(() => Boolean(onCharacteristic.value));
     }
     if (typeof onCharacteristic.onSet === 'function') {
       onCharacteristic.onSet(async (value) => this.handleApplianceCommandSet(tile.kind, Boolean(value)));
@@ -655,13 +772,13 @@ class GivHomeModbusPlatform {
       .setCharacteristic(this.Characteristic.SerialNumber, this.inverterSerial || 'unconfirmed')
       .setCharacteristic(this.Characteristic.FirmwareRevision, '1.0.0');
     const service = accessory.getServiceById(this.Service.Switch, COMMAND_KINDS.EVENING_EXCESS_EXPORT)
-      || accessory.addService(this.Service.Switch, 'Evening Excess Export', COMMAND_KINDS.EVENING_EXCESS_EXPORT);
-    service.setCharacteristic(this.Characteristic.Name, 'Evening Excess Export');
+      || accessory.addService(this.Service.Switch, 'Excess Out', COMMAND_KINDS.EVENING_EXCESS_EXPORT);
+    service.setCharacteristic(this.Characteristic.Name, 'Excess Out');
     service.updateCharacteristic(this.Characteristic.On, Boolean(this.eveningExcessExportArmed));
     this.applianceCommandServices.set(COMMAND_KINDS.EVENING_EXCESS_EXPORT, service);
     const onCharacteristic = service.getCharacteristic(this.Characteristic.On);
     if (typeof onCharacteristic.onGet === 'function') {
-      onCharacteristic.onGet(async () => this.getEveningExcessExportTruthState());
+      onCharacteristic.onGet(() => Boolean(onCharacteristic.value));
     }
     const handler = async (value) => {
       this.eveningExcessExportArmed = Boolean(value);
@@ -683,15 +800,15 @@ class GivHomeModbusPlatform {
       .setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting')
       .setCharacteristic(this.Characteristic.Model, 'GivHome Direct Octopus Flux Export')
       .setCharacteristic(this.Characteristic.SerialNumber, this.inverterSerial || 'unconfirmed')
-      .setCharacteristic(this.Characteristic.FirmwareRevision, '4.0.0-beta.1');
+      .setCharacteristic(this.Characteristic.FirmwareRevision, '4.0.0');
     const service = accessory.getServiceById(this.Service.Switch, COMMAND_KINDS.OCTOPUS_FLUX_EXPORT)
-      || accessory.addService(this.Service.Switch, 'Octopus Flux Export', COMMAND_KINDS.OCTOPUS_FLUX_EXPORT);
-    service.setCharacteristic(this.Characteristic.Name, 'Octopus Flux Export');
+      || accessory.addService(this.Service.Switch, 'Flux Out', COMMAND_KINDS.OCTOPUS_FLUX_EXPORT);
+    service.setCharacteristic(this.Characteristic.Name, 'Flux Out');
     service.updateCharacteristic(this.Characteristic.On, Boolean(this.octopusFluxExportArmed));
     this.applianceCommandServices.set(COMMAND_KINDS.OCTOPUS_FLUX_EXPORT, service);
     const onCharacteristic = service.getCharacteristic(this.Characteristic.On);
     if (typeof onCharacteristic.onGet === 'function') {
-      onCharacteristic.onGet(async () => this.getOctopusFluxExportTruthState());
+      onCharacteristic.onGet(() => Boolean(onCharacteristic.value));
     }
     const handler = async (value) => {
       this.octopusFluxExportArmed = Boolean(value);
@@ -712,15 +829,15 @@ class GivHomeModbusPlatform {
       .setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting')
       .setCharacteristic(this.Characteristic.Model, 'GivHome Direct Octopus Agile Export')
       .setCharacteristic(this.Characteristic.SerialNumber, this.inverterSerial || 'unconfirmed')
-      .setCharacteristic(this.Characteristic.FirmwareRevision, '4.0.0-beta.1');
+      .setCharacteristic(this.Characteristic.FirmwareRevision, '4.0.0');
     const service = accessory.getServiceById(this.Service.Switch, COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT)
-      || accessory.addService(this.Service.Switch, 'Octopus Agile Export', COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT);
-    service.setCharacteristic(this.Characteristic.Name, 'Octopus Agile Export');
+      || accessory.addService(this.Service.Switch, 'Agile Out', COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT);
+    service.setCharacteristic(this.Characteristic.Name, 'Agile Out');
     service.updateCharacteristic(this.Characteristic.On, Boolean(this.octopusAgileOutgoingExportArmed));
     this.applianceCommandServices.set(COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT, service);
     const onCharacteristic = service.getCharacteristic(this.Characteristic.On);
     if (typeof onCharacteristic.onGet === 'function') {
-      onCharacteristic.onGet(async () => this.getOctopusAgileOutgoingTruthState());
+      onCharacteristic.onGet(() => Boolean(onCharacteristic.value));
     }
     const handler = async (value) => {
       this.octopusAgileOutgoingExportArmed = Boolean(value);
@@ -735,59 +852,339 @@ class GivHomeModbusPlatform {
     else if (typeof onCharacteristic.on === 'function') onCharacteristic.on('set', (value, callback) => handler(value).then(() => callback()).catch(callback));
   }
 
+  createEveEnergyCharacteristics() {
+    // Eve descriptors only. Do not subclass Homebridge/HAP Characteristic.
+    // Constructing the custom subclass path can throw
+    // "Class constructor Characteristic cannot be invoked without 'new'" on this host.
+    // Construct the canonical HAP Characteristic base directly instead.
+    return {
+      Consumption: { name: 'Consumption', UUID: 'E863F10D-079E-48FF-8F27-9C2605A29F52', unit: 'W' },
+      TotalConsumption: { name: 'Total Consumption', UUID: 'E863F10C-079E-48FF-8F27-9C2605A29F52', unit: 'kWh' },
+      Voltage: { name: 'Voltage', UUID: 'E863F10A-079E-48FF-8F27-9C2605A29F52', unit: 'V' },
+      Current: { name: 'Current', UUID: 'E863F126-079E-48FF-8F27-9C2605A29F52', unit: 'A' }
+    };
+  }
+
+  getEveEnergyHistoryMeta(kind) {
+    return ({
+      solar: { kind: 'solar', displayName: 'Eve Solar History', valueKey: 'pvPowerW', description: 'Eve solar history' },
+      import: { kind: 'import', displayName: 'Eve Import History', valueKey: 'gridImportPowerW', description: 'Eve import history' },
+      export: { kind: 'export', displayName: 'Eve Export History', valueKey: 'gridExportPowerW', description: 'Eve export history' }
+    })[kind] || null;
+  }
+
+  getDesiredEveEnergyHistoryKinds() {
+    // Modbus already exposes PV telemetry on supported systems. Preserve the three deployed
+    // pseudo-accessory identities to avoid another HomeKit identity migration.
+    return ['solar', 'import', 'export'];
+  }
+
   ensureEveHistoryAccessories() {
     if (!this.applianceControl.features.eveHistory) return;
-    const kinds = [
-      { kind: 'solar', displayName: 'Eve Solar History', valueKey: 'pvPowerW' },
-      { kind: 'import', displayName: 'Eve Import History', valueKey: 'gridImportPowerW' },
-      { kind: 'export', displayName: 'Eve Export History', valueKey: 'gridExportPowerW' }
-    ];
     const created = [];
-    for (const meta of kinds) {
-      const uuid = this.eveHistoryUUID(meta.kind);
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const meta = this.getEveEnergyHistoryMeta(kind);
+      const uuid = this.eveHistoryUUID(kind);
       let accessory = this.accessoryByUUID.get(uuid);
       if (!accessory) {
-        accessory = new this.api.platformAccessory(meta.displayName, uuid);
+        const category = this.api.hap.Categories && (this.api.hap.Categories.OUTLET || this.api.hap.Categories.SWITCH);
+        accessory = new this.api.platformAccessory(meta.displayName, uuid, category);
         this.accessoryByUUID.set(uuid, accessory);
         this.accessories.push(accessory);
         created.push(accessory);
       }
-      accessory.context.definitionId = `${EVE_HISTORY_ACCESSORY_PREFIX}:${meta.kind}`;
-      accessory.context.eveHistoryKind = meta.kind;
+      accessory.context.definitionId = `${EVE_HISTORY_ACCESSORY_PREFIX}:${kind}`;
+      accessory.context.eveHistoryKind = kind;
       accessory.context.eveHistoryValueKey = meta.valueKey;
       accessory.displayName = meta.displayName;
-      this.configureEveHistoryAccessory(accessory, meta);
+      this.configureEveEnergyHistoryAccessorySafely(accessory, kind, meta.displayName);
     }
     if (created.length > 0) {
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, created);
-      this.log.warn('Registered %s GivHome evidence Eve history accessor%s.', created.length, created.length === 1 ? 'y' : 'ies');
+      this.log.info('[EveHistory] registered %s history accessor%s', created.length, created.length === 1 ? 'y' : 'ies');
+    }
+
+    // Restored platform accessories are already registered, so changing their
+    // service/characteristic shape in memory is not enough. Explicitly publish the
+    // reconfigured Modbus-owned Eve accessories back through Homebridge's platform API.
+    // Newly-created accessories are persisted by registerPlatformAccessories above.
+    const restored = this.getDesiredEveEnergyHistoryKinds()
+      .map((kind) => this.accessoryByUUID.get(this.eveHistoryUUID(kind)))
+      .filter((accessory) => accessory && !created.includes(accessory));
+    if (restored.length > 0 && typeof this.api.updatePlatformAccessories === 'function') {
+      this.api.updatePlatformAccessories(restored);
+      this.log.info('[EveHistory] published updated service shape for %s restored history accessor%s', restored.length, restored.length === 1 ? 'y' : 'ies');
     }
   }
 
-  configureEveHistoryAccessory(accessory, meta) {
+  configureEveEnergyHistoryAccessorySafely(accessory, kind, displayName) {
+    try {
+      this.configureEveEnergyHistoryAccessory(accessory, kind, displayName);
+    } catch (err) {
+      // Bridge containment is deliberate: Eve is optional monitoring. A malformed legacy cache
+      // or history-store problem must not prevent the Modbus child bridge from starting.
+      this.log.error('[EveHistory] accessory setup isolated without failing child bridge: kind=%s error=%s', kind, err && err.message ? err.message : String(err));
+    }
+  }
+
+  configureEveEnergyHistoryAccessory(accessory, kind, displayName) {
     const info = accessory.getService(this.Service.AccessoryInformation) || accessory.addService(this.Service.AccessoryInformation);
     info
       .setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting')
       .setCharacteristic(this.Characteristic.Model, 'GivHome Direct Eve History')
-      .setCharacteristic(this.Characteristic.SerialNumber, `${this.inverterSerial || 'unconfirmed'}-${meta.kind}`)
-      .setCharacteristic(this.Characteristic.FirmwareRevision, '1.0.0');
-    const service = accessory.getServiceById(this.Service.Outlet, meta.kind) || accessory.addService(this.Service.Outlet, meta.displayName, meta.kind);
-    service.setCharacteristic(this.Characteristic.Name, meta.displayName);
-    const eveOn = service.getCharacteristic(this.Characteristic.On);
-    if (typeof eveOn.onGet === 'function') eveOn.onGet(() => false);
-    eveOn.onSet(async () => {});
+      .setCharacteristic(this.Characteristic.SerialNumber, `${this.inverterSerial || 'unconfirmed'}-${kind}`)
+      .setCharacteristic(this.Characteristic.FirmwareRevision, '4.0.0');
+
+    const service = accessory.getServiceById(this.Service.Outlet, kind)
+      || accessory.addService(this.Service.Outlet, displayName, kind);
+    service.setCharacteristic(this.Characteristic.Name, displayName);
+
+    this.assertNoDuplicateEveEnergyCharacteristics(service, kind);
+    this.prepareEveEnergyOutletService(service);
+    service.getCharacteristic(this.Characteristic.On)
+      .onGet(() => false)
+      .onSet(async () => {});
+    service.getCharacteristic(this.Characteristic.OutletInUse)
+      .onGet(() => false);
     service.updateCharacteristic(this.Characteristic.On, false);
-    const outletInUse = service.getCharacteristic(this.Characteristic.OutletInUse);
-    if (typeof outletInUse.onGet === 'function') outletInUse.onGet(() => false);
     service.updateCharacteristic(this.Characteristic.OutletInUse, false);
-    if (this.fakeGatoHistoryService && !this.eveHistoryServices.has(meta.kind)) {
-      try {
-        const history = new this.fakeGatoHistoryService('energy', accessory, { size: 12 * 24 * 365 * 5, storage: 'fs' });
-        this.eveHistoryServices.set(meta.kind, history);
-        this.log.warn('Eve history fakegato service enabled for %s', meta.displayName);
-      } catch (err) {
-        this.log.warn('Eve history fakegato service failed for %s: %s', meta.displayName, err && err.message ? err.message : String(err));
+    this.ensureEveEnergyCharacteristics(service, kind);
+    this.seedEveEnergyCharacteristics(service, kind);
+    this.assertEveEnergyPublishedShape(service, kind);
+    this.setupEveEnergyHistoryService(accessory, kind);
+  }
+
+  assertNoDuplicateEveEnergyCharacteristics(service, kind) {
+    const wanted = new Set(Object.values(this.EveEnergyCharacteristic).map((C) => String(C.UUID).toUpperCase()));
+    const counts = new Map();
+    for (const characteristic of (Array.isArray(service.characteristics) ? service.characteristics : [])) {
+      const uuid = String(characteristic && characteristic.UUID || '').toUpperCase();
+      if (wanted.has(uuid)) counts.set(uuid, (counts.get(uuid) || 0) + 1);
+    }
+    const duplicates = [...counts.entries()].filter(([, count]) => count > 1);
+    if (duplicates.length) {
+      throw new Error(`unsafe cached Eve characteristic duplication for ${kind}: ${duplicates.map(([uuid,count]) => `${uuid}x${count}`).join(',')}`);
+    }
+  }
+
+  prepareEveEnergyOutletService(service) {
+    // No optional-characteristic constructor registration. The four Eve
+    // characteristics are attached as concrete base Characteristic instances by
+    // getOrAddCharacteristic(), avoiding the failing custom subclass constructor path.
+    return service;
+  }
+
+  getOrAddCharacteristic(service, descriptor) {
+    if (!service || !descriptor) return null;
+    const uuid = String(descriptor.UUID || '').toUpperCase();
+    const existing = (Array.isArray(service.characteristics) ? service.characteristics : [])
+      .find((characteristic) => String(characteristic && characteristic.UUID || '').toUpperCase() === uuid);
+    if (existing) return existing;
+
+    const Formats = (this.api && this.api.hap && this.api.hap.Formats) || this.Characteristic.Formats;
+    const Perms = (this.api && this.api.hap && this.api.hap.Perms) || this.Characteristic.Perms;
+    const props = {
+      format: Formats.FLOAT,
+      unit: descriptor.unit,
+      minValue: 0,
+      perms: [Perms.PAIRED_READ || Perms.READ, Perms.NOTIFY]
+    };
+    const characteristic = new this.Characteristic(descriptor.name, descriptor.UUID, props);
+    characteristic.value = characteristic.getDefaultValue();
+    service.addCharacteristic(characteristic);
+    return characteristic;
+  }
+
+  assertEveEnergyPublishedShape(service, kind) {
+    if (!service || !this.EveEnergyCharacteristic) return;
+    const wanted = Object.values(this.EveEnergyCharacteristic)
+      .map((CharacteristicClass) => String(CharacteristicClass.UUID || '').toUpperCase());
+    const counts = new Map(wanted.map((uuid) => [uuid, 0]));
+    for (const characteristic of (Array.isArray(service.characteristics) ? service.characteristics : [])) {
+      const uuid = String(characteristic && characteristic.UUID || '').toUpperCase();
+      if (counts.has(uuid)) counts.set(uuid, counts.get(uuid) + 1);
+    }
+    const bad = [...counts.entries()].filter(([, count]) => count !== 1);
+    if (bad.length) {
+      throw new Error(`Eve published characteristic shape invalid for ${kind}: ${bad.map(([uuid,count]) => `${uuid}x${count}`).join(',')}`);
+    }
+  }
+
+  ensureEveEnergyCharacteristics(service, kind) {
+    if (!service || !this.EveEnergyCharacteristic) return;
+    const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
+    this.prepareEveEnergyOutletService(service);
+    this.getOrAddCharacteristic(service, Consumption).onGet(() => this.getEveEnergyHistoryPower(kind));
+    this.getOrAddCharacteristic(service, TotalConsumption).onGet(() => Math.max(0, Number((this.eveEnergyRuntimeTotalsKwh.get(kind) || 0).toFixed(3))));
+    this.getOrAddCharacteristic(service, Voltage).onGet(() => Number(this.getEveEnergyVoltage().toFixed(1)));
+    this.getOrAddCharacteristic(service, Current).onGet(() => this.getEveEnergyHistoryCurrent(kind));
+  }
+
+  seedEveEnergyCharacteristics(service, kind, model = null) {
+    if (!service || !this.EveEnergyCharacteristic) return;
+    const { Consumption, TotalConsumption, Voltage, Current } = this.EveEnergyCharacteristic;
+    const power = this.getEveEnergyHistoryPower(kind, model);
+    const totalKwh = this.eveEnergyRuntimeTotalsKwh.get(kind) || 0;
+    this.getOrAddCharacteristic(service, Consumption).updateValue(Math.max(0, Number(power.toFixed ? power.toFixed(1) : power)));
+    this.getOrAddCharacteristic(service, TotalConsumption).updateValue(Math.max(0, Number(totalKwh.toFixed(3))));
+    this.getOrAddCharacteristic(service, Voltage).updateValue(Number(this.getEveEnergyVoltage(model).toFixed(1)));
+    this.getOrAddCharacteristic(service, Current).updateValue(this.getEveEnergyHistoryCurrent(kind, model));
+  }
+
+  getEveEnergyVoltage(model = null) {
+    const source = model || this.latestModel;
+    const candidates = source ? [source.gridVoltageV, source.gridVoltage, source.acVoltageV, source.voltageV] : [];
+    for (const value of candidates) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    }
+    return 230;
+  }
+
+  getEveEnergyHistoryPower(kind, model = null) {
+    const meta = this.getEveEnergyHistoryMeta(kind);
+    const source = model || this.latestModel;
+    if (!meta || !source) return 0;
+    const value = Number(source[meta.valueKey] || 0);
+    return Number.isFinite(value) && value >= 0 ? Math.round(value) : 0;
+  }
+
+  getEveEnergyHistoryCurrent(kind, model = null) {
+    const voltage = this.getEveEnergyVoltage(model);
+    if (!Number.isFinite(voltage) || voltage <= 0) return 0;
+    return Number((this.getEveEnergyHistoryPower(kind, model) / voltage).toFixed(2));
+  }
+
+  createFilteredFakeGatoLogger() {
+    if (this.filteredFakeGatoLogger) return this.filteredFakeGatoLogger;
+    const shouldSuppress = (args) => /\*\*\s*Fakegato-history\s+read data from/i.test(args && args.length ? String(args[0]) : '');
+    const wrap = (level) => (...args) => {
+      if (shouldSuppress(args)) return;
+      const target = typeof this.log[level] === 'function' ? this.log[level] : this.log.info;
+      return target.apply(this.log, args);
+    };
+    this.filteredFakeGatoLogger = { info: wrap('info'), warn: wrap('warn'), error: wrap('error'), debug: wrap('debug'), log: wrap('info') };
+    return this.filteredFakeGatoLogger;
+  }
+
+  setupEveEnergyHistoryService(accessory, kind) {
+    if (!this.applianceControl.features.eveHistory || !this.FakeGatoHistoryService) {
+      if (this.applianceControl.features.eveHistory && !this.FakeGatoHistoryService && !this._warnedMissingFakeGato) {
+        this._warnedMissingFakeGato = true;
+        this.log.error('[EveHistory] enabled but fakegato-history is unavailable; Eve history disabled without failing child bridge');
       }
+      return null;
+    }
+    if (this.eveEnergyHistoryServices.has(kind)) return this.eveEnergyHistoryServices.get(kind);
+    const fakeGatoLog = this.createFilteredFakeGatoLogger();
+    accessory.log = fakeGatoLog;
+    const service = accessory.getServiceById(this.Service.Outlet, kind);
+    if (service) {
+      this.prepareEveEnergyOutletService(service);
+      this.ensureEveEnergyCharacteristics(service, kind);
+      this.seedEveEnergyCharacteristics(service, kind);
+      this.assertEveEnergyPublishedShape(service, kind);
+    }
+    try {
+      const history = new this.FakeGatoHistoryService('energy', accessory, {
+        size: this.eveEnergyHistorySize,
+        storage: 'fs',
+        disableRepeatLastData: false,
+        log: fakeGatoLog
+      });
+      if (!history) throw new Error('fakegato constructor returned no history service');
+      this.eveEnergyHistoryServices.set(kind, history);
+      this.log.info('[EveHistory] fakegato enabled: kind=%s accessory=%s', kind, accessory.displayName || kind);
+      return history;
+    } catch (err) {
+      this.log.error('[EveHistory] fakegato setup isolated without failing child bridge: kind=%s error=%s', kind, err && err.message ? err.message : String(err));
+      return null;
+    }
+  }
+
+  getStoragePath() {
+    try {
+      if (this.api && this.api.user && typeof this.api.user.storagePath === 'function') return this.api.user.storagePath();
+    } catch { /* fall through */ }
+    return process.cwd();
+  }
+
+  getEveEnergyTotalsStatePath() {
+    const serial = String(this.inverterSerial || 'pending').replace(/[^a-z0-9._-]+/gi, '_');
+    return path.join(this.getStoragePath(), `givhome_${serial}_eve_energy_totals.json`);
+  }
+
+  recoverEveEnergyTotalsFromFakegatoStorage() {
+    const totals = {};
+    const storagePath = this.getStoragePath();
+    let files = [];
+    try { files = fs.readdirSync(storagePath); } catch { return totals; }
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const meta = this.getEveEnergyHistoryMeta(kind);
+      const candidates = files.filter((file) => file.includes(meta.displayName) && file.endsWith('_persist.json'));
+      for (const file of candidates) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(path.join(storagePath, file), 'utf8'));
+          const history = Array.isArray(parsed && parsed.history) ? parsed.history : [];
+          for (const entry of history) {
+            const numeric = Number(entry && entry.totalConsumption);
+            if (Number.isFinite(numeric) && numeric >= 0) totals[kind] = Math.max(totals[kind] || 0, numeric);
+          }
+        } catch { /* fakegato owns these files; ignore partial writes */ }
+      }
+    }
+    return totals;
+  }
+
+  loadEveEnergyRuntimeTotals() {
+    if (!this.applianceControl.features.eveHistory) return;
+    const loaded = {};
+    try {
+      const statePath = this.getEveEnergyTotalsStatePath();
+      if (fs.existsSync(statePath)) {
+        const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        const totals = parsed && parsed.totals && typeof parsed.totals === 'object' ? parsed.totals : {};
+        for (const [kind, value] of Object.entries(totals)) {
+          const numeric = Number(value);
+          if (Number.isFinite(numeric) && numeric >= 0) loaded[kind] = numeric;
+        }
+      }
+    } catch (err) {
+      this.log.warn('[EveHistory] cumulative totals state load failed safely: %s', err && err.message ? err.message : String(err));
+    }
+    const recovered = this.recoverEveEnergyTotalsFromFakegatoStorage();
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const best = Math.max(Number(loaded[kind] || 0), Number(recovered[kind] || 0));
+      this.eveEnergyRuntimeTotalsKwh.set(kind, Number.isFinite(best) && best >= 0 ? best : 0);
+    }
+    this.persistEveEnergyRuntimeTotals();
+  }
+
+  persistEveEnergyRuntimeTotals() {
+    if (!this.applianceControl.features.eveHistory) return;
+    const totals = {};
+    for (const [kind, value] of this.eveEnergyRuntimeTotalsKwh.entries()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric >= 0) totals[kind] = Number(numeric.toFixed(6));
+    }
+    try {
+      fs.writeFileSync(this.getEveEnergyTotalsStatePath(), JSON.stringify({
+        version: '1.1.0-beta.24', updatedAt: new Date().toISOString(), totals
+      }, null, 2));
+    } catch (err) {
+      this.log.warn('[EveHistory] cumulative totals persistence failed safely: %s', err && err.message ? err.message : String(err));
+    }
+  }
+
+  updateEveEnergyHistoryAccessories(model = null) {
+    if (!this.applianceControl.features.eveHistory) return;
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const accessory = this.accessoryByUUID.get(this.eveHistoryUUID(kind));
+      const service = accessory ? accessory.getServiceById(this.Service.Outlet, kind) : null;
+      if (!service) continue;
+      service.updateCharacteristic(this.Characteristic.On, false);
+      service.updateCharacteristic(this.Characteristic.OutletInUse, false);
+      this.seedEveEnergyCharacteristics(service, kind, model || this.latestModel);
     }
   }
 
@@ -812,7 +1209,7 @@ class GivHomeModbusPlatform {
 
     const onCharacteristic = service.getCharacteristic(this.Characteristic.On);
     if (typeof onCharacteristic.onGet === 'function') {
-      onCharacteristic.onGet(async () => this.getManualChargeTruthState());
+      onCharacteristic.onGet(() => Boolean(onCharacteristic.value));
     }
     if (typeof onCharacteristic.onSet === 'function') {
       onCharacteristic.onSet(async (value) => this.handleManualChargeHomeKitSet(value));
@@ -944,6 +1341,7 @@ class GivHomeModbusPlatform {
       this.commandPollHoldUntilMs = Date.now() + 5000;
       this.commandTransportInFlight = false;
       this.log.warn('GivHome evidence command released: ticket=%s label=%s pollingHoldAfterMs=5000 automaticMutationPath=local-command-queue', ticket, label);
+      this.scheduleCommandTruthReconciliation('post-command', 5500);
     }
   }
 
@@ -1252,6 +1650,7 @@ class GivHomeModbusPlatform {
     if (this.applianceCommandTimers.has(kind)) clearTimeout(this.applianceCommandTimers.get(kind));
     const timer = setTimeout(() => {
       this.applianceCommandTimers.delete(kind);
+      if (kind === COMMAND_KINDS.OCTOPUS_FLUX_EXPORT) this.markOctopusFluxExportCompleted('duration-ended-timer', new Date());
       this.cleanupApplianceCommandFamily(family, `${kind} duration ended`).catch((err) => {
         this.log.warn('GivHome command timed cleanup failed/uncertain: kind=%s error=%s', kind, err && err.message ? err.message : String(err));
       });
@@ -1359,8 +1758,8 @@ class GivHomeModbusPlatform {
   persistOctopusFluxExportMemory(slot, reason) {
     if (!slot) return;
     const payload = {
-      version: '4.0.0-beta.1',
-      stage: 'givhome-1.1.0-octopus-flux-export-observed-power-ratio-planner',
+      version: '4.0.0',
+      stage: 'givhome-v4-octopus-flux-export-observed-power-ratio-planner',
       serial: this.inverterSerial,
       capturedAt: new Date().toISOString(),
       reason: reason || 'octopus-flux-export-start',
@@ -1374,6 +1773,8 @@ class GivHomeModbusPlatform {
         requestedPowerKw: Number.isFinite(Number(slot.requestedPowerKw)) ? Number(slot.requestedPowerKw) : this.applianceControl.octopusFluxExportPowerKw,
         effectivePlanningKw: Number.isFinite(Number(slot.effectivePlanningKw)) ? Number(slot.effectivePlanningKw) : this.applianceControl.maxBatteryExportPowerKw,
         expectedBatteryKwh: Number.isFinite(Number(slot.expectedBatteryKwh)) ? Number(slot.expectedBatteryKwh) : null,
+        requestedEnergyBudgetKwh: Number.isFinite(Number(slot.requestedEnergyBudgetKwh || slot.expectedBatteryKwh)) ? Number(slot.requestedEnergyBudgetKwh || slot.expectedBatteryKwh) : null,
+        effectivePhysicalKwhAtPlannedRuntime: Number.isFinite(Number(slot.effectivePhysicalKwhAtPlannedRuntime)) ? Number(slot.effectivePhysicalKwhAtPlannedRuntime) : null,
         observedBatteryKwh: Number.isFinite(Number(slot.observedBatteryKwh)) ? Number(slot.observedBatteryKwh) : 0,
         observedGridKwh: Number.isFinite(Number(slot.observedGridKwh)) ? Number(slot.observedGridKwh) : 0,
         reserveSoc: slot.reserveSoc || this.applianceControl.octopusFluxReserveSoc,
@@ -1622,6 +2023,22 @@ class GivHomeModbusPlatform {
     return { enabled, active, start: window.start, end: window.end, durationMinutes: window.durationMinutes };
   }
 
+  beta9PerfNowMs() {
+    return Number(process.hrtime.bigint()) / 1e6;
+  }
+
+  async beta9TimedHomeGet(label, fn) {
+    const started = this.beta9PerfNowMs();
+    try {
+      const value = await fn();
+      this.log.info('[Beta9Perf] homeGet label=%s durationMs=%s result=%s', label, (this.beta9PerfNowMs() - started).toFixed(1), value === true ? 'on' : 'off');
+      return value;
+    } catch (err) {
+      this.log.warn('[Beta9Perf] homeGet label=%s durationMs=%s error=%s', label, (this.beta9PerfNowMs() - started).toFixed(1), err && err.message ? err.message : String(err));
+      throw err;
+    }
+  }
+
   invalidateCommandTruthSnapshot(reason = 'live-write') {
     this.applianceCommandTruthSnapshot = null;
     this.applianceCommandTruthSnapshotAtMs = 0;
@@ -1629,30 +2046,47 @@ class GivHomeModbusPlatform {
   }
 
   async readCommandTruthSnapshot(reason = 'homekit-onget', options = {}) {
+    const perfStarted = this.beta9PerfNowMs();
     const forceFresh = options?.forceFresh === true;
     const nowMs = Date.now();
     if (!forceFresh && this.applianceCommandTruthSnapshot && nowMs - this.applianceCommandTruthSnapshotAtMs <= this.applianceCommandTruthSnapshotTtlMs) {
+      this.log.info('[Beta9Perf] truthSnapshot reason=%s path=cache-hit ageMs=%s durationMs=%s', reason, nowMs - this.applianceCommandTruthSnapshotAtMs, (this.beta9PerfNowMs() - perfStarted).toFixed(1));
       return this.applianceCommandTruthSnapshot;
     }
     if (!forceFresh && this.applianceCommandTruthSnapshotInFlight) {
-      return this.applianceCommandTruthSnapshotInFlight;
+      const value = await this.applianceCommandTruthSnapshotInFlight;
+      this.log.info('[Beta9Perf] truthSnapshot reason=%s path=join-inflight durationMs=%s', reason, (this.beta9PerfNowMs() - perfStarted).toFixed(1));
+      return value;
     }
     if (!forceFresh && (this.pollInFlight || this.capabilityDiscoveryInFlight || this.commandTransportInFlight) && this.applianceCommandTruthSnapshot) {
       this.log.info('GivHome evidence truth switch snapshot reused: reason=%s ageMs=%s pollInFlight=%s capabilityDiscoveryInFlight=%s commandTransportInFlight=%s transportFanOut=no source=single-shared-register-snapshot', reason, nowMs - this.applianceCommandTruthSnapshotAtMs, this.pollInFlight ? 'yes' : 'no', this.capabilityDiscoveryInFlight ? 'yes' : 'no', this.commandTransportInFlight ? 'yes' : 'no');
+      this.log.info('[Beta9Perf] truthSnapshot reason=%s path=transport-reuse ageMs=%s durationMs=%s', reason, nowMs - this.applianceCommandTruthSnapshotAtMs, (this.beta9PerfNowMs() - perfStarted).toFixed(1));
       return this.applianceCommandTruthSnapshot;
     }
 
     this.applianceCommandTruthSnapshotInFlight = (async () => {
+      const snapshotStarted = this.beta9PerfNowMs();
+      const timedRead = async (address, count, label) => {
+        const started = this.beta9PerfNowMs();
+        try {
+          const value = await this.readHoldingRegisters(address, count, label);
+          this.log.info('[Beta9Perf] truthRead label=%s address=%s count=%s durationMs=%s status=ok', label, address, count, (this.beta9PerfNowMs() - started).toFixed(1));
+          return value;
+        } catch (err) {
+          this.log.warn('[Beta9Perf] truthRead label=%s address=%s count=%s durationMs=%s status=error error=%s', label, address, count, (this.beta9PerfNowMs() - started).toFixed(1), err && err.message ? err.message : String(err));
+          throw err;
+        }
+      };
       const profileKind = this.isCeAcCoupledProfile() ? 'ce-ac' : 'ch-aio';
-      const chargeCore = await this.readHoldingRegisters(94, 3, 'truth-switch-charge-core');
-      const exportCore = await this.readHoldingRegisters(56, 4, 'truth-switch-export-core');
-      const exportPower = await this.readHoldingRegisters(112, 1, 'truth-switch-export-power');
-      const pauseCore = await this.readHoldingRegisters(318, 3, 'truth-switch-pause-core');
+      const chargeCore = await timedRead(94, 3, 'truth-switch-charge-core');
+      const exportCore = await timedRead(56, 4, 'truth-switch-export-core');
+      const exportPower = await timedRead(111, 6, 'truth-switch-export-power');
+      const pauseCore = await timedRead(318, 3, 'truth-switch-pause-core');
       let slot8 = [null, null, null];
       let slot8Status = 'not-needed';
       if (profileKind === 'ch-aio') {
         try {
-          slot8 = await this.readHoldingRegisters(291, 3, 'truth-switch-export-slot8');
+          slot8 = await timedRead(291, 3, 'truth-switch-export-slot8');
           slot8Status = 'ok';
         } catch (err) {
           slot8Status = 'failed';
@@ -1664,7 +2098,7 @@ class GivHomeModbusPlatform {
         reason,
         profileKind,
         charge: { HR94: chargeCore[0], HR95: chargeCore[1], HR96: chargeCore[2] },
-        export: { HR56: exportCore[0], HR57: exportCore[1], HR59: exportCore[3], HR112: exportPower[0], HR291: slot8[0], HR292: slot8[1], HR293: slot8[2], slot8Status },
+        export: { HR56: exportCore[0], HR57: exportCore[1], HR59: exportCore[3], HR112: exportPower[1], HR291: slot8[0], HR292: slot8[1], HR293: slot8[2], slot8Status },
         pause: { HR318: pauseCore[0], HR319: pauseCore[1], HR320: pauseCore[2] }
       };
       this.applianceCommandTruthSnapshot = snapshot;
@@ -1673,6 +2107,7 @@ class GivHomeModbusPlatform {
         ? 'stored-window-disabled'
         : (snapshot.charge.HR96 === 0 ? 'empty-disabled' : 'enabled');
       this.log.info('GivHome truth switch snapshot read: reason=%s profile=%s HR94=%s HR95=%s HR96=%s chargeWindowState=%s HR56=%s HR57=%s HR59=%s HR112=%s HR291=%s HR292=%s HR293=%s HR318=%s HR319=%s HR320=%s slot8Status=%s transportFanOut=no source=single-shared-register-snapshot', reason, profileKind, snapshot.charge.HR94, snapshot.charge.HR95, snapshot.charge.HR96, chargeWindowState, snapshot.export.HR56, snapshot.export.HR57, snapshot.export.HR59, snapshot.export.HR112, snapshot.export.HR291, snapshot.export.HR292, snapshot.export.HR293, snapshot.pause.HR318, snapshot.pause.HR319, snapshot.pause.HR320, slot8Status);
+      this.log.info('[Beta9Perf] truthSnapshot reason=%s path=fresh-read durationMs=%s', reason, (this.beta9PerfNowMs() - snapshotStarted).toFixed(1));
       return snapshot;
     })();
 
@@ -1680,6 +2115,98 @@ class GivHomeModbusPlatform {
       return await this.applianceCommandTruthSnapshotInFlight;
     } finally {
       this.applianceCommandTruthSnapshotInFlight = null;
+    }
+  }
+
+  startCommandTruthReconciliation() {
+    if (this.commandTruthReconcileStarted) return;
+    this.commandTruthReconcileStarted = true;
+    this.log.warn('GivHome command truth hybrid reconciliation started: HomeKitReads=cached-fast authoritativeBackground=yes intervalSeconds=%s startupDelayMs=%s source=single-shared-register-snapshot', Math.round(COMMAND_TRUTH_RECONCILE_INTERVAL_MS / 1000), COMMAND_TRUTH_RECONCILE_STARTUP_DELAY_MS);
+    this.scheduleCommandTruthReconciliation('startup', COMMAND_TRUTH_RECONCILE_STARTUP_DELAY_MS);
+    this.commandTruthReconcileTimer = setInterval(() => {
+      this.scheduleCommandTruthReconciliation('periodic', 0);
+    }, COMMAND_TRUTH_RECONCILE_INTERVAL_MS);
+  }
+
+  scheduleCommandTruthReconciliation(reason = 'scheduled', delayMs = 0) {
+    if (this.commandTruthReconcileRetryTimer) return;
+    this.commandTruthReconcileRetryTimer = setTimeout(() => {
+      this.commandTruthReconcileRetryTimer = null;
+      this.reconcileCommandTruthFromInverter(reason).catch((err) => {
+        this.log.warn('GivHome command truth background reconciliation failed: reason=%s error=%s HomeKitReadsRemainCached=yes failClosed=no-write', reason, err && err.message ? err.message : String(err));
+      });
+    }, Math.max(0, Number(delayMs) || 0));
+  }
+
+  async reconcileCommandTruthFromInverter(reason = 'background') {
+    if (this.commandTruthReconcileInFlight) return { status: 'in-flight' };
+    if (this.pollInFlight || this.capabilityDiscoveryInFlight || this.commandTransportInFlight || this.manualChargeSupervisorInFlight || this.commandIntentPending || Date.now() < this.commandPollHoldUntilMs) {
+      this.scheduleCommandTruthReconciliation(`${reason}-busy-retry`, COMMAND_TRUTH_RECONCILE_BUSY_RETRY_MS);
+      return { status: 'deferred-busy' };
+    }
+
+    this.commandTruthReconcileInFlight = true;
+    try {
+      // Authoritative means a fresh inverter snapshot, never a cached truth snapshot.
+      // Invalidate only after the transport is known idle so this cannot create command/poll fan-out.
+      this.invalidateCommandTruthSnapshot(`background-reconcile-${reason}`);
+      const snapshot = await this.readCommandTruthSnapshot(`background-reconcile-${reason}`);
+      const now = new Date();
+      const changed = [];
+      const publish = (kind, value) => {
+        const next = value === true;
+        const previous = this.applianceCommandTruthCache.get(kind) === true;
+        this.setApplianceCommandState(kind, next);
+        if (previous !== next) changed.push(`${kind}:${previous ? 'on' : 'off'}->${next ? 'on' : 'off'}`);
+      };
+
+      const manualTruth = this.slotTruthFromPrestate(snapshot.charge, 'HR94', 'HR95', 'HR96', now);
+      const manualValue = Boolean(manualTruth.enabled && manualTruth.active);
+      const previousManual = this.applianceCommandTruthCache.get('Manual_Charge') === true;
+      this.applianceCommandTruthCache.set('Manual_Charge', manualValue);
+      this.setManualChargeHomeKitState(manualValue);
+      if (previousManual !== manualValue) changed.push(`Manual_Charge:${previousManual ? 'on' : 'off'}->${manualValue ? 'on' : 'off'}`);
+
+      for (const tile of COMMAND_TILES) {
+        let value = false;
+        if (tile.family === 'charge') {
+          const truth = this.slotTruthFromPrestate(snapshot.charge, 'HR94', 'HR95', 'HR96', now);
+          value = Boolean(truth.enabled && truth.active && durationMatchesMinutes(truth.durationMinutes, tile.minutes));
+        } else if (tile.family === 'pause') {
+          const truth = this.pauseTruthFromPrestate(snapshot.pause || { HR318: 0, HR319: 0, HR320: 0 }, now);
+          value = Boolean(truth.active && Number(snapshot.pause?.HR318 || 0) === Number(tile.pauseValue));
+        } else if (tile.family === 'export') {
+          const truth = snapshot.profileKind === 'ch-aio'
+            ? this.slotTruthFromPrestate(snapshot.export, 'HR291', 'HR292', 'HR59', now)
+            : this.slotTruthFromPrestate(snapshot.export, 'HR56', 'HR57', 'HR59', now);
+          value = Boolean(truth.enabled && truth.active && durationMatchesMinutes(truth.durationMinutes, tile.minutes));
+        }
+        publish(tile.kind, value);
+      }
+
+      // Automation tiles retain their existing ownership/armed semantics. A foreign live
+      // export must never be claimed merely because HR59 is active.
+      const exportTruth = snapshot.profileKind === 'ch-aio'
+        ? this.slotTruthFromPrestate(snapshot.export, 'HR291', 'HR292', 'HR59', now)
+        : this.slotTruthFromPrestate(snapshot.export, 'HR56', 'HR57', 'HR59', now);
+      const excessMemoryActive = Boolean(this.activeExcessExportSlot?.end instanceof Date && now < this.activeExcessExportSlot.end);
+      const fluxMemoryActive = Boolean(this.activeOctopusFluxExportSlot?.end instanceof Date && now < this.activeOctopusFluxExportSlot.end);
+      const agileMemoryActive = Boolean(this.activeOctopusAgileOutgoingSlot?.end instanceof Date && now < this.activeOctopusAgileOutgoingSlot.end);
+      if (this.applianceControl.features.eveningExcessExport) {
+        publish(COMMAND_KINDS.EVENING_EXCESS_EXPORT, Boolean(this.eveningExcessExportArmed || excessMemoryActive || (exportTruth.enabled && exportTruth.active && this.activeExcessExportSlot)));
+      }
+      if (this.applianceControl.features.octopusFluxExport) {
+        publish(COMMAND_KINDS.OCTOPUS_FLUX_EXPORT, Boolean(this.octopusFluxExportArmed || fluxMemoryActive || (exportTruth.enabled && exportTruth.active && this.activeOctopusFluxExportSlot)));
+      }
+      if (this.applianceControl.features.octopusAgileOutgoingExport) {
+        publish(COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT, Boolean(this.octopusAgileOutgoingExportArmed || agileMemoryActive || (exportTruth.enabled && exportTruth.active && this.activeOctopusAgileOutgoingSlot)));
+      }
+
+      this.commandTruthReconcileLastSuccessAtMs = Date.now();
+      this.log.info('GivHome command truth background reconciliation ok: reason=%s changed=%s HomeKitReads=cached-fast authoritativeBackground=yes writes=no source=single-shared-register-snapshot', reason, changed.length ? changed.join(',') : 'none');
+      return { status: 'ok', changed, snapshot };
+    } finally {
+      this.commandTruthReconcileInFlight = false;
     }
   }
 
@@ -2026,6 +2553,33 @@ class GivHomeModbusPlatform {
     this.log.warn('GivHome command Function 06 reconciled: label=%s HR%s=%s responseReceived=%s noBlindResend=yes', label, register, value, writeResponse.responseReceived ? 'yes' : 'no');
   }
 
+
+  async writeDirectRegisterWithCleanupReconcile(register, value, label, attempts = 2) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await this.writeDirectRegister(register, value, attempt === 1 ? label : `${label} retry-${attempt}`);
+        return { register, value, ok: true, attempts: attempt };
+      } catch (err) {
+        lastError = err;
+        this.log.warn('GivHome evidence cleanup write reconcile required: label=%s HR%s=%s attempt=%s/%s error=%s noBlindResend=%s', label, register, value, attempt, attempts, err && err.message ? err.message : String(err), attempt < attempts ? 'retry-after-readback' : 'exhausted');
+        try {
+          const valueBack = (await this.readHoldingRegisters(register, 1, `${label} reconcile readback`))[0];
+          if (valueBack === value) {
+            this.invalidateCommandTruthSnapshot(`${label} HR${register}`);
+            this.log.warn('GivHome evidence cleanup write reconciled by readback: label=%s HR%s=%s attempt=%s automaticMutationPath=%s', label, register, value, attempt, this.applianceControl.automaticMutationPath);
+            return { register, value, ok: true, attempts: attempt, reconciledByReadback: true };
+          }
+          this.log.warn('GivHome evidence cleanup readback still not neutral: label=%s HR%s requested=%s readback=%s attempt=%s/%s', label, register, value, valueBack, attempt, attempts);
+        } catch (readErr) {
+          this.log.warn('GivHome evidence cleanup reconcile readback failed: label=%s HR%s error=%s', label, register, readErr && readErr.message ? readErr.message : String(readErr));
+        }
+        if (attempt < attempts) await sleep(750);
+      }
+    }
+    throw lastError || new Error(`${label} cleanup write failed`);
+  }
+
   async startTimedChargeCommand(tileOrPlan, options = {}) {
     const minutes = Math.max(1, Number(tileOrPlan.minutes || options.minutes || 30));
     const now = options.startDate instanceof Date ? options.startDate : new Date();
@@ -2259,17 +2813,17 @@ class GivHomeModbusPlatform {
     const profileKind = snapshot?.profileKind || (this.isCeAcCoupledProfile() ? 'ce-ac' : 'ch-aio');
     const restoreHr112 = Number.isFinite(Number(snapshot?.HR112));
     this.log.warn('GivHome evidence shared export route cleanup queued: owner=%s reason=%s route=%s strategy=neutralise-shared-route HR59=0-first clearSlot=yes restoreHr112=%s automaticMutationPath=%s', ownerLabel, reason, profileKind, restoreHr112 ? 'captured-prestate' : 'preserve-current', this.applianceControl.automaticMutationPath);
-    await this.writeDirectRegister(59, 0, `GivHome ${ownerLabel} cleanup HR59 disable-first`);
+    await this.writeDirectRegisterWithCleanupReconcile(59, 0, `GivHome ${ownerLabel} cleanup HR59 disable-first`, 2);
     if (profileKind === 'ch-aio') {
-      await this.writeDirectRegister(291, 0, `GivHome ${ownerLabel} cleanup HR291 clear`);
-      await this.writeDirectRegister(292, 0, `GivHome ${ownerLabel} cleanup HR292 clear`);
-      await this.writeDirectRegister(293, 0, `GivHome ${ownerLabel} cleanup HR293 clear`);
+      await this.writeDirectRegisterWithCleanupReconcile(291, 0, `GivHome ${ownerLabel} cleanup HR291 clear`, 2);
+      await this.writeDirectRegisterWithCleanupReconcile(292, 0, `GivHome ${ownerLabel} cleanup HR292 clear`, 3);
+      await this.writeDirectRegisterWithCleanupReconcile(293, 0, `GivHome ${ownerLabel} cleanup HR293 clear`, 2);
     } else {
-      await this.writeDirectRegister(56, 0, `GivHome ${ownerLabel} cleanup HR56 clear`);
-      await this.writeDirectRegister(57, 0, `GivHome ${ownerLabel} cleanup HR57 clear`);
+      await this.writeDirectRegisterWithCleanupReconcile(56, 0, `GivHome ${ownerLabel} cleanup HR56 clear`, 2);
+      await this.writeDirectRegisterWithCleanupReconcile(57, 0, `GivHome ${ownerLabel} cleanup HR57 clear`, 2);
     }
     if (restoreHr112) {
-      await this.writeDirectRegister(112, Number(snapshot.HR112), `GivHome ${ownerLabel} cleanup HR112 restore captured prestate`);
+      await this.writeDirectRegisterWithCleanupReconcile(112, Number(snapshot.HR112), `GivHome ${ownerLabel} cleanup HR112 restore captured prestate`, 2);
     }
     const post = await this.readExportPrestate(profileKind);
     const slotCleared = profileKind === 'ch-aio'
@@ -2545,9 +3099,11 @@ class GivHomeModbusPlatform {
     const agileHandled = await this.applyOctopusAgileOutgoingAutoExport(model, cheapState, now);
     if (agileHandled) return;
 
+    await this.recoverOctopusFluxExportFromInverter(model, cheapState, now);
     const flux = this.evaluateOctopusFluxExport(model, cheapState, now);
     if (flux?.stopReason) {
-      this.log.warn('GivHome evidence Octopus Flux Export stop queued: reason=%s observedBatteryKwh=%s expectedBatteryKwh=%s effectivePlanningKw=%s automaticMutationPath=%s', flux.stopReason, flux.observed?.observedBatteryKwh?.toFixed ? flux.observed.observedBatteryKwh.toFixed(3) : 'unknown', Number(this.activeOctopusFluxExportSlot?.expectedBatteryKwh || 0).toFixed(3), flux.observed?.effectivePlanningKw?.toFixed ? flux.observed.effectivePlanningKw.toFixed(1) : 'unknown', this.applianceControl.automaticMutationPath);
+      this.log.warn('GivHome evidence Octopus Flux Export stop queued: reason=%s observedBatteryKwh=%s expectedBatteryKwh=%s requestedEnergyBudgetKwh=%s effectivePlanningKw=%s automaticMutationPath=%s', flux.stopReason, flux.observed?.observedBatteryKwh?.toFixed ? flux.observed.observedBatteryKwh.toFixed(3) : 'unknown', Number(this.activeOctopusFluxExportSlot?.expectedBatteryKwh || 0).toFixed(3), Number(this.activeOctopusFluxExportSlot?.requestedEnergyBudgetKwh || this.activeOctopusFluxExportSlot?.expectedBatteryKwh || 0).toFixed(3), flux.observed?.effectivePlanningKw?.toFixed ? flux.observed.effectivePlanningKw.toFixed(1) : 'unknown', this.applianceControl.automaticMutationPath);
+      this.markOctopusFluxExportCompleted(flux.stopReason, now);
       await this.cleanupApplianceCommandFamily('export', `Octopus Flux Export ${flux.stopReason}`);
       return;
     }
@@ -2558,11 +3114,11 @@ class GivHomeModbusPlatform {
       this.octopusFluxExportObservedBatteryKwh = 0;
       this.octopusFluxExportObservedGridKwh = 0;
       this.octopusFluxExportLastObservedAtMs = 0;
-      this.activeOctopusFluxExportSlot = { start: flux.start, end: flux.end, minutes: flux.minutes, profileKind: this.isCeAcCoupledProfile() ? 'ce-ac' : 'ch-aio', powerPercent: flux.powerDecision?.powerPercent || this.applianceControl.octopusFluxExportPowerPercent, powerKw: this.applianceControl.octopusFluxExportPowerKw, requestedPowerKw: flux.requestedPowerKw, effectivePlanningKw: flux.effectivePlanningKw, expectedBatteryKwh: flux.expectedBatteryKwh, observedBatteryKwh: 0, observedGridKwh: 0, reserveSoc: flux.reserveSoc, reserveKwh: flux.reserveKwh, availableKwh: flux.availableKwh, powerRatioRegister: 'HR112', powerRatioAuthority: flux.powerRatioAuthority, source: 'octopus-flux-peak-planner' };
+      this.activeOctopusFluxExportSlot = { start: flux.start, end: flux.end, minutes: flux.minutes, profileKind: this.isCeAcCoupledProfile() ? 'ce-ac' : 'ch-aio', powerPercent: flux.powerDecision?.powerPercent || this.applianceControl.octopusFluxExportPowerPercent, powerKw: this.applianceControl.octopusFluxExportPowerKw, requestedPowerKw: flux.requestedPowerKw, effectivePlanningKw: flux.effectivePlanningKw, expectedBatteryKwh: flux.expectedBatteryKwh, requestedEnergyBudgetKwh: flux.requestedEnergyBudgetKwh || flux.expectedBatteryKwh, effectivePhysicalKwhAtPlannedRuntime: flux.effectivePhysicalKwhAtPlannedRuntime, observedBatteryKwh: 0, observedGridKwh: 0, reserveSoc: flux.reserveSoc, reserveKwh: flux.reserveKwh, availableKwh: flux.availableKwh, powerRatioRegister: 'HR112', powerRatioAuthority: flux.powerRatioAuthority, energyBudgetAuthority: 'requested-power-kwh-budget-observed-discharge-metering', source: 'octopus-flux-peak-planner' };
       this.octopusFluxExportActive = true;
       this.persistOctopusFluxExportMemory(this.activeOctopusFluxExportSlot, 'planner-started');
       this.scheduleApplianceCommandCleanup(COMMAND_KINDS.OCTOPUS_FLUX_EXPORT, 'export', flux.minutes);
-      this.log.warn('GivHome evidence Octopus Flux Export command queued: start=%s end=%s minutes=%s reserveSoc=%s reserveKwh=%s availableKwh=%s requestedPowerKw=%s effectivePlanningKw=%s expectedBatteryKwh=%s memorySaved=yes automaticMutationPath=%s', dateToHmm(flux.start), dateToHmm(flux.end), flux.minutes, flux.reserveSoc, flux.reserveKwh.toFixed(2), flux.availableKwh.toFixed(2), flux.requestedPowerKw.toFixed(1), flux.effectivePlanningKw.toFixed(1), flux.expectedBatteryKwh.toFixed(2), this.applianceControl.automaticMutationPath);
+      this.log.warn('GivHome evidence Octopus Flux Export command queued: start=%s end=%s minutes=%s reserveSoc=%s reserveKwh=%s availableKwh=%s requestedPowerKw=%s effectivePlanningKw=%s expectedBatteryKwh=%s requestedEnergyBudgetKwh=%s energyBudgetAuthority=requested-power-kwh-budget-observed-discharge-metering memorySaved=yes automaticMutationPath=%s', dateToHmm(flux.start), dateToHmm(flux.end), flux.minutes, flux.reserveSoc, flux.reserveKwh.toFixed(2), flux.availableKwh.toFixed(2), flux.requestedPowerKw.toFixed(1), flux.effectivePlanningKw.toFixed(1), flux.expectedBatteryKwh.toFixed(2), Number(flux.requestedEnergyBudgetKwh || flux.expectedBatteryKwh).toFixed(2), this.applianceControl.automaticMutationPath);
       return;
     }
 
@@ -2684,7 +3240,7 @@ class GivHomeModbusPlatform {
   }
 
   loadOctopusAgileOutgoingState() {
-    const fallback = { version: '4.0.0-beta.1', serial: this.inverterSerial, dayKey: this.localDayKey(), daily: { plannedKwh: 0, observedInverterKwh: 0, estimatedValuePence: 0 }, slots: [], activeSlot: null, suspendedReason: '' };
+    const fallback = { version: '4.0.0', serial: this.inverterSerial, dayKey: this.localDayKey(), daily: { plannedKwh: 0, observedInverterKwh: 0, estimatedValuePence: 0 }, slots: [], activeSlot: null, suspendedReason: '' };
     const payload = loadJson(this.octopusAgileOutgoingStatePath(), fallback) || fallback;
     if (payload.serial && payload.serial !== this.inverterSerial) return fallback;
     if (payload.dayKey !== this.localDayKey()) {
@@ -2930,7 +3486,7 @@ class GivHomeModbusPlatform {
       source: slot.source
     })) : [];
     state.plan = {
-      version: '4.0.0-beta.1',
+      version: '4.0.0',
       builtAt: now.toISOString(),
       localDay: this.localDayKey(now),
       mode: 'agile-export-autopilot',
@@ -3208,6 +3764,7 @@ class GivHomeModbusPlatform {
       observedExportKw,
       effectivePlanningKw: Math.max(0.1, effectivePlanningKw),
       powerRatioAuthority: useObservedFullPower ? 'HR112-write-readback-observed-not-live-cap-for-CH-AIO-slot-export' : 'HR112-write-readback-live-cap-assumed-for-non-CH-AIO',
+      energyBudgetAuthority: 'requested-power-kwh-budget-observed-discharge-metering',
       hr112Obeyed: !observedOverRequest
     };
   }
@@ -3234,9 +3791,156 @@ class GivHomeModbusPlatform {
     const nowLog = Date.now();
     if (!effective.hr112Obeyed && nowLog - this.lastOctopusFluxObservedPowerLogMs > 5 * 60 * 1000) {
       this.lastOctopusFluxObservedPowerLogMs = nowLog;
-      this.log.warn('GivHome evidence Octopus Flux Export HR112 observed ratio: requestedKw=%s HR112=%s observedBatteryDischargeKw=%s observedGridExportKw=%s effectivePlanningKw=%s HR112PowerRatioObeyed=no action=budget-by-observed-power source=octopus-flux-peak-planner', effective.requestedKw.toFixed(1), slot.powerPercent || 'unknown', effective.observedDischargeKw.toFixed(1), effective.observedExportKw.toFixed(1), effective.effectivePlanningKw.toFixed(1));
+      this.log.warn('GivHome evidence Octopus Flux Export HR112 observed ratio: requestedKw=%s HR112=%s observedBatteryDischargeKw=%s observedGridExportKw=%s effectivePlanningKw=%s HR112PowerRatioObeyed=no action=measure-by-observed-power-stop-at-requested-energy-budget source=octopus-flux-peak-planner', effective.requestedKw.toFixed(1), slot.powerPercent || 'unknown', effective.observedDischargeKw.toFixed(1), effective.observedExportKw.toFixed(1), effective.effectivePlanningKw.toFixed(1));
     }
     return { observedBatteryKwh: this.octopusFluxExportObservedBatteryKwh, observedGridKwh: this.octopusFluxExportObservedGridKwh, ...effective };
+  }
+
+
+  octopusFluxPeakKey(now = new Date()) {
+    return this.localDayKey(now) + ':' + this.applianceControl.octopusFluxExportStartTime + '-' + this.applianceControl.octopusFluxExportEndTime;
+  }
+
+  markOctopusFluxExportCompleted(reason, now = new Date()) {
+    this.octopusFluxExportCompletedPeakKey = this.octopusFluxPeakKey(now);
+    this.log.warn('GivHome evidence Octopus Flux Export peak budget marked complete: key=%s reason=%s noFurtherFluxStartsThisPeak=yes automaticMutationPath=%s', this.octopusFluxExportCompletedPeakKey, reason || 'unknown', this.applianceControl.automaticMutationPath);
+  }
+
+  async recoverOctopusFluxExportFromInverter(model, cheapState, now = new Date()) {
+    if (!this.applianceControl.features.octopusFluxExport || !this.octopusFluxExportArmed) return false;
+    if (cheapState.cheapActive || cheapState.smartActive || cheapState.graceActive) return false;
+
+    const existingMemoryActive = Boolean(
+      this.activeOctopusFluxExportSlot?.start instanceof Date
+      && this.activeOctopusFluxExportSlot?.end instanceof Date
+      && now >= this.activeOctopusFluxExportSlot.start
+      && now < this.activeOctopusFluxExportSlot.end
+    );
+    if (existingMemoryActive) return false;
+
+    const fluxWindow = getMergedCheapState(now, [], {
+      cheapStart: this.applianceControl.octopusFluxExportStartTime,
+      cheapEnd: this.applianceControl.octopusFluxExportEndTime,
+      graceMinutes: 0
+    }, {});
+    if (!fluxWindow.fallbackActive || !(fluxWindow.cheapWindowEnd instanceof Date)) return false;
+
+    let truth;
+    try {
+      truth = await this.readCurrentExportTruth(now);
+    } catch (err) {
+      this.log.warn('GivHome evidence Octopus Flux Export active-route recovery deferred: truthReadback=failed error=%s preserve=yes', err && err.message ? err.message : String(err));
+      return false;
+    }
+
+    if (!truth?.enabled || !truth.active) return false;
+
+    const pre = truth.prestate || {};
+    const slotWindow = truth.profileKind === 'ch-aio'
+      ? this.slotWindowFromHmm(pre.HR291, pre.HR292, now)
+      : this.slotWindowFromHmm(pre.HR56, pre.HR57, now);
+    if (!slotWindow || !(now >= slotWindow.start && now < slotWindow.end)) return false;
+
+    const peakStartMinutes = clockTimeStringToMinutes(this.applianceControl.octopusFluxExportStartTime);
+    const peakEndMinutes = clockTimeStringToMinutes(this.applianceControl.octopusFluxExportEndTime);
+    let withinPeak = false;
+    if (peakStartMinutes !== null && peakEndMinutes !== null) {
+      withinPeak = peakStartMinutes < peakEndMinutes
+        ? slotWindow.startMinutes >= peakStartMinutes && slotWindow.endMinutes <= peakEndMinutes
+        : slotWindow.startMinutes >= peakStartMinutes || slotWindow.endMinutes <= peakEndMinutes;
+    }
+
+    const reserveSoc = Math.min(95, Math.max(5, Number(this.applianceControl.octopusFluxReserveSoc || 35)));
+    const powerDecision = this.buildExportPowerDecision(
+      { displayName: 'Octopus Flux Export' },
+      {
+        label: 'Octopus Flux Export',
+        powerKw: this.applianceControl.octopusFluxExportPowerKw,
+        powerPercent: this.applianceControl.octopusFluxExportPowerPercent,
+        exportFamily: 'octopus-flux-export',
+        exportSource: 'octopus-flux-peak-planner-recovery'
+      }
+    );
+    const expectedHr112 = Number(powerDecision.powerPercent);
+    const actualHr112 = Number(pre.HR112);
+    const hr112Matches = Number.isFinite(actualHr112) && Number.isFinite(expectedHr112) && Math.abs(actualHr112 - expectedHr112) <= 1;
+    const reserveMatches = truth.profileKind !== 'ch-aio' || Number(pre.HR293) === Number(reserveSoc);
+
+    if (!withinPeak || !hr112Matches || !reserveMatches) {
+      this.log.warn('GivHome evidence Octopus Flux Export active slot observed but not claimed: route=%s start=%s end=%s HR59=%s HR112=%s expectedHR112=%s HR293=%s expectedReserveSoc=%s withinPeak=%s preserve=yes duplicateWrite=no',
+        truth.profileKind,
+        dateToHmm(slotWindow.start),
+        dateToHmm(slotWindow.end),
+        pre.HR59,
+        pre.HR112,
+        expectedHr112,
+        pre.HR293,
+        reserveSoc,
+        withinPeak ? 'yes' : 'no'
+      );
+      return false;
+    }
+
+    const requestedKw = Math.max(0.1, Number(this.applianceControl.octopusFluxExportPowerKw || powerDecision.requestedKw || 4));
+    const configuredMinutes = Math.max(1, Number(this.applianceControl.octopusFluxSlotMinutes || slotWindow.durationMinutes || 1));
+    const requestedEnergyBudgetKwh = requestedKw * (configuredMinutes / 60);
+    const effective = this.getOctopusFluxEffectivePlanningPowerKw(model, {
+      estimatedBatteryKw: requestedKw,
+      powerPercent: expectedHr112
+    });
+
+    const elapsedHours = Math.max(0, Math.min(configuredMinutes * 60, (now.getTime() - slotWindow.start.getTime()) / 1000)) / 3600;
+    const observedBatteryDischargeKw = Number.isFinite(Number(model?.batteryDischargePowerW)) ? Math.max(0, Number(model.batteryDischargePowerW) / 1000) : effective.effectivePlanningKw;
+    const observedGridExportKw = Number.isFinite(Number(model?.gridExportPowerW)) ? Math.max(0, Number(model.gridExportPowerW) / 1000) : 0;
+    const seededBatteryKwh = Number((observedBatteryDischargeKw * elapsedHours).toFixed(6));
+    const seededGridKwh = Number((observedGridExportKw * elapsedHours).toFixed(6));
+
+    this.octopusFluxExportObservedBatteryKwh = seededBatteryKwh;
+    this.octopusFluxExportObservedGridKwh = seededGridKwh;
+    this.octopusFluxExportLastObservedAtMs = now.getTime();
+
+    this.activeOctopusFluxExportSlot = {
+      start: slotWindow.start,
+      end: slotWindow.end,
+      minutes: slotWindow.durationMinutes,
+      profileKind: truth.profileKind,
+      powerPercent: expectedHr112,
+      powerKw: requestedKw,
+      requestedPowerKw: requestedKw,
+      effectivePlanningKw: effective.effectivePlanningKw,
+      expectedBatteryKwh: requestedEnergyBudgetKwh,
+      requestedEnergyBudgetKwh,
+      effectivePhysicalKwhAtPlannedRuntime: effective.effectivePlanningKw * (slotWindow.durationMinutes / 60),
+      observedBatteryKwh: seededBatteryKwh,
+      observedGridKwh: seededGridKwh,
+      reserveSoc,
+      reserveKwh: this.applianceControl.octopusFluxEveningReserveKwh,
+      availableKwh: null,
+      powerRatioRegister: 'HR112',
+      powerRatioAuthority: effective.powerRatioAuthority,
+      energyBudgetAuthority: 'requested-power-kwh-budget-observed-discharge-metering-recovered-active-route',
+      source: 'octopus-flux-peak-planner-recovered-active-route'
+    };
+    this.octopusFluxExportActive = true;
+    this.persistOctopusFluxExportMemory(this.activeOctopusFluxExportSlot, 'recovered-active-inverter-slot');
+
+    this.log.warn('GivHome evidence Octopus Flux Export active slot recovered: start=%s end=%s route=%s HR59=%s HR112=%s HR293=%s requestedKw=%s configuredSlotMinutes=%s requestedEnergyBudgetKwh=%s seededObservedBatteryKwh=%s observedBatteryDischargeKw=%s observedGridExportKw=%s HR112PowerRatioObeyed=%s duplicateWrite=no source=inverter-truth',
+      dateToHmm(slotWindow.start),
+      dateToHmm(slotWindow.end),
+      truth.profileKind,
+      pre.HR59,
+      pre.HR112,
+      pre.HR293,
+      requestedKw.toFixed(1),
+      configuredMinutes,
+      requestedEnergyBudgetKwh.toFixed(3),
+      seededBatteryKwh.toFixed(3),
+      observedBatteryDischargeKw.toFixed(1),
+      observedGridExportKw.toFixed(1),
+      effective.hr112Obeyed ? 'yes' : 'no'
+    );
+
+    return true;
   }
 
   evaluateOctopusFluxExport(model, cheapState, now = new Date()) {
@@ -3251,23 +3955,31 @@ class GivHomeModbusPlatform {
     const fluxWindow = getMergedCheapState(now, [], { cheapStart: this.applianceControl.octopusFluxExportStartTime, cheapEnd: this.applianceControl.octopusFluxExportEndTime, graceMinutes: 0 }, {});
     if (!fluxWindow.fallbackActive || !(fluxWindow.cheapWindowEnd instanceof Date)) { this.logOctopusFluxExportDecision(`idle: outside Octopus Flux eligible peak period ${this.applianceControl.octopusFluxExportStartTime}-${this.applianceControl.octopusFluxExportEndTime}`); return null; }
     const peakEnd = fluxWindow.cheapWindowEnd;
+    const peakKey = this.octopusFluxPeakKey(now);
+    if (this.octopusFluxExportCompletedPeakKey === peakKey) { this.logOctopusFluxExportDecision(`idle: Octopus Flux peak budget already completed key=${peakKey} noFurtherFluxStartsThisPeak=yes`); return null; }
     const minutesUntilPeakEnd = Math.max(0, Math.floor((peakEnd.getTime() - now.getTime()) / 60000));
     if (minutesUntilPeakEnd < 5) { this.logOctopusFluxExportDecision('idle: too close to Octopus Flux peak export window end'); return null; }
 
     const memoryActive = Boolean(this.activeOctopusFluxExportSlot?.start instanceof Date && this.activeOctopusFluxExportSlot?.end instanceof Date && now >= this.activeOctopusFluxExportSlot.start && now < this.activeOctopusFluxExportSlot.end && this.activeOctopusFluxExportSlot.end <= peakEnd);
     if (memoryActive) {
       const observed = this.recordOctopusFluxExportObservedEnergy(model, now);
-      const expected = Number(this.activeOctopusFluxExportSlot.expectedBatteryKwh || 0);
+      const expected = Number(this.activeOctopusFluxExportSlot.requestedEnergyBudgetKwh || this.activeOctopusFluxExportSlot.expectedBatteryKwh || 0);
       const reserveFloorSoc = Math.min(95, Number(this.activeOctopusFluxExportSlot.reserveSoc || this.applianceControl.octopusFluxReserveSoc) + Number(this.applianceControl.octopusFluxSafetyMarginSoc || 0));
-      const stopByEnergy = expected > 0 && observed.observedBatteryKwh >= Math.max(0.05, expected * 0.98);
+      const stopThresholdKwh = expected > 0 ? Math.max(0.05, expected * 0.98) : 0;
+      const stopByEnergy = expected > 0 && observed.observedBatteryKwh >= stopThresholdKwh;
       const stopByReserve = Number.isFinite(Number(model.socPercent)) && Number(model.socPercent) <= reserveFloorSoc;
-      this.logOctopusFluxExportDecision(`active: retained existing Octopus Flux Export slot ${dateToHmm(this.activeOctopusFluxExportSlot.start)}-${dateToHmm(this.activeOctopusFluxExportSlot.end)} observedBatteryKwh=${observed.observedBatteryKwh.toFixed(3)} expectedBatteryKwh=${expected ? expected.toFixed(3) : 'n/a'} effectivePlanningKw=${observed.effectivePlanningKw.toFixed(1)} requestedKw=${observed.requestedKw.toFixed(1)} HR112PowerRatioObeyed=${observed.hr112Obeyed ? 'yes' : 'no'}`, true);
+      this.logOctopusFluxExportDecision(`active: retained existing Octopus Flux Export slot ${dateToHmm(this.activeOctopusFluxExportSlot.start)}-${dateToHmm(this.activeOctopusFluxExportSlot.end)} observedBatteryKwh=${observed.observedBatteryKwh.toFixed(3)} expectedBatteryKwh=${expected ? expected.toFixed(3) : 'n/a'} requestedEnergyBudgetKwh=${expected ? expected.toFixed(3) : 'n/a'} stopThresholdKwh=${stopThresholdKwh ? stopThresholdKwh.toFixed(3) : 'n/a'} effectivePlanningKw=${observed.effectivePlanningKw.toFixed(1)} requestedKw=${observed.requestedKw.toFixed(1)} HR112PowerRatioObeyed=${observed.hr112Obeyed ? 'yes' : 'no'} energyBudgetAuthority=requested-power-kwh-budget-observed-discharge-metering`, true);
       if (stopByEnergy || stopByReserve) {
         return { stopReason: stopByEnergy ? 'observed-energy-budget-reached' : 'reserve-floor-reached', observed };
       }
       return null;
     }
-    if (this.activeOctopusFluxExportSlot?.end instanceof Date && now >= this.activeOctopusFluxExportSlot.end) this.clearOctopusFluxExportMemory();
+    if (this.activeOctopusFluxExportSlot?.end instanceof Date && now >= this.activeOctopusFluxExportSlot.end) {
+      this.markOctopusFluxExportCompleted('scheduled-slot-ended', now);
+      this.log.warn('GivHome evidence Octopus Flux Export active memory ended: start=%s end=%s observedBatteryKwh=%s requestedEnergyBudgetKwh=%s noFurtherFluxStartsThisPeak=yes', dateToHmm(this.activeOctopusFluxExportSlot.start), dateToHmm(this.activeOctopusFluxExportSlot.end), Number(this.octopusFluxExportObservedBatteryKwh || 0).toFixed(3), Number(this.activeOctopusFluxExportSlot.requestedEnergyBudgetKwh || this.activeOctopusFluxExportSlot.expectedBatteryKwh || 0).toFixed(3));
+      this.clearOctopusFluxExportMemory();
+      return null;
+    }
 
     const batteryCapacityKwh = Number(this.applianceControl.batteryCapacityKwh);
     const socEnergyKwh = (Number(model.socPercent) / 100) * batteryCapacityKwh;
@@ -3281,21 +3993,25 @@ class GivHomeModbusPlatform {
     const requestedKw = Math.max(0.1, Number(powerDecision.estimatedBatteryKw || this.applianceControl.octopusFluxExportPowerKw));
     const effective = this.getOctopusFluxEffectivePlanningPowerKw(model, powerDecision);
     const effectivePlanningKw = effective.effectivePlanningKw;
-    const exportKwhThisSlot = effectivePlanningKw * (slotMinutes / 60);
-    const minExportKwh = Math.max(this.applianceControl.octopusFluxMinimumExportKwh, Math.min(0.5, exportKwhThisSlot));
+    const requestedEnergyBudgetKwh = requestedKw * (slotMinutes / 60);
+    const energyBudgetKwh = Math.min(availableKwh, requestedEnergyBudgetKwh);
+    const effectivePhysicalKwhThisSlot = effectivePlanningKw * (slotMinutes / 60);
+    const minExportKwh = Math.max(this.applianceControl.octopusFluxMinimumExportKwh, Math.min(0.5, requestedEnergyBudgetKwh));
 
     if (availableKwh < minExportKwh) { this.logOctopusFluxExportDecision(`idle: available ${availableKwh.toFixed(2)}kWh below minimum ${minExportKwh.toFixed(2)}kWh after reserve ${reserveKwh.toFixed(2)}kWh and margin ${safetyKwh.toFixed(2)}kWh`); return null; }
 
-    const end = addMinutes(now, Math.max(1, Math.min(slotMinutes, Math.floor((availableKwh / effectivePlanningKw) * 60))));
+    const budgetedMinutesAtEffectivePower = Math.max(1, Math.floor((energyBudgetKwh / effectivePlanningKw) * 60));
+    const end = addMinutes(now, Math.max(1, Math.min(slotMinutes, budgetedMinutesAtEffectivePower)));
     if (end > peakEnd) end.setTime(peakEnd.getTime());
     const minutes = Math.max(1, Math.round((end.getTime() - now.getTime()) / 60000));
     const pvTodayRaw = model?.counters?.pvGenerationTodayRaw;
-    const selectedSlotKwh = effectivePlanningKw * (minutes / 60);
+    const selectedSlotKwh = energyBudgetKwh;
+    const effectivePhysicalKwhAtPlannedRuntime = effectivePlanningKw * (minutes / 60);
     const fullBandMinutes = clockWindowDurationMinutes(this.applianceControl.octopusFluxExportStartTime, this.applianceControl.octopusFluxExportEndTime);
     const fullBandKwhAtRequestedPower = Number.isFinite(fullBandMinutes) ? (requestedKw * (fullBandMinutes / 60)).toFixed(2) : 'n/a';
     const fullBandKwhAtEffectivePower = Number.isFinite(fullBandMinutes) ? (effectivePlanningKw * (fullBandMinutes / 60)).toFixed(2) : 'n/a';
-    this.log.warn('GivHome evidence Octopus Flux Export intent: eligiblePeakWindow=%s-%s selectedWindow=%s-%s plannedMinutes=%s mode=fixed-peak-window daysToRun=%s soc=%s availableKwh=%s fullBandKwhAtRequestedPower=%s fullBandKwhAtEffectivePower=%s plannedSlotKwh=%s energyBudgetBasis=observed-effective-power-not-HR112-assumption reserveKwh=%s reserveSoc=%s marginSoc=%s batteryCapacityKwh=%s maxPvKw=%s pvNowW=%s pvTodayRaw=%s requestedExportKw=%s effectivePlanningKw=%s powerRatioRegister=HR112 powerRatioValue=%s powerRatioAuthority=%s HR112PowerRatioObeyed=%s expectedGridExportKw=%s source=octopus-flux-peak-planner willQueue=yes', this.applianceControl.octopusFluxExportStartTime, this.applianceControl.octopusFluxExportEndTime, dateToHmm(now), dateToHmm(end), minutes, this.formatOctopusFluxDaysToRun(), model.socPercent, availableKwh.toFixed(2), fullBandKwhAtRequestedPower, fullBandKwhAtEffectivePower, selectedSlotKwh.toFixed(2), reserveKwh.toFixed(2), reserveSoc, this.applianceControl.octopusFluxSafetyMarginSoc, batteryCapacityKwh, this.maxPvKw || 'n/a', Number.isFinite(model.pvPowerW) ? Math.round(model.pvPowerW) : 'n/a', Number.isFinite(Number(pvTodayRaw)) ? pvTodayRaw : 'n/a', requestedKw.toFixed(1), effectivePlanningKw.toFixed(1), powerDecision.powerPercent, effective.powerRatioAuthority, effective.hr112Obeyed ? 'yes' : 'no', powerDecision.expectedGridExportKw === null ? 'n/a' : powerDecision.expectedGridExportKw);
-    return { start: now, end, minutes, reserveSoc, reserveKwh, availableKwh, powerDecision, requestedPowerKw: requestedKw, effectivePlanningKw, expectedBatteryKwh: selectedSlotKwh, powerRatioAuthority: effective.powerRatioAuthority };
+    this.log.warn('GivHome evidence Octopus Flux Export intent: eligiblePeakWindow=%s-%s selectedWindow=%s-%s plannedMinutes=%s mode=fixed-peak-window daysToRun=%s soc=%s availableKwh=%s fullBandKwhAtRequestedPower=%s fullBandKwhAtEffectivePower=%s requestedEnergyBudgetKwh=%s effectivePhysicalKwhAtPlannedRuntime=%s plannedSlotKwh=%s energyBudgetBasis=requested-power-energy-budget-with-observed-discharge-stop reserveKwh=%s reserveSoc=%s marginSoc=%s batteryCapacityKwh=%s maxPvKw=%s pvNowW=%s pvTodayRaw=%s requestedExportKw=%s effectivePlanningKw=%s powerRatioRegister=HR112 powerRatioValue=%s powerRatioAuthority=%s HR112PowerRatioObeyed=%s expectedGridExportKw=%s source=octopus-flux-peak-planner willQueue=yes', this.applianceControl.octopusFluxExportStartTime, this.applianceControl.octopusFluxExportEndTime, dateToHmm(now), dateToHmm(end), minutes, this.formatOctopusFluxDaysToRun(), model.socPercent, availableKwh.toFixed(2), fullBandKwhAtRequestedPower, fullBandKwhAtEffectivePower, requestedEnergyBudgetKwh.toFixed(2), effectivePhysicalKwhAtPlannedRuntime.toFixed(2), selectedSlotKwh.toFixed(2), reserveKwh.toFixed(2), reserveSoc, this.applianceControl.octopusFluxSafetyMarginSoc, batteryCapacityKwh, this.maxPvKw || 'n/a', Number.isFinite(model.pvPowerW) ? Math.round(model.pvPowerW) : 'n/a', Number.isFinite(Number(pvTodayRaw)) ? pvTodayRaw : 'n/a', requestedKw.toFixed(1), effectivePlanningKw.toFixed(1), powerDecision.powerPercent, effective.powerRatioAuthority, effective.hr112Obeyed ? 'yes' : 'no', powerDecision.expectedGridExportKw === null ? 'n/a' : powerDecision.expectedGridExportKw);
+    return { start: now, end, minutes, reserveSoc, reserveKwh, availableKwh, powerDecision, requestedPowerKw: requestedKw, effectivePlanningKw, expectedBatteryKwh: selectedSlotKwh, requestedEnergyBudgetKwh: selectedSlotKwh, effectivePhysicalKwhAtPlannedRuntime, powerRatioAuthority: effective.powerRatioAuthority };
   }
 
   logEveningExcessExportDecision(message, force = false) {
@@ -3375,43 +4091,58 @@ class GivHomeModbusPlatform {
     return { start: now, end, minutes: Math.max(1, Math.round((end.getTime() - now.getTime()) / 60000)), minSocTarget, triggerSoc, slotsRemaining };
   }
 
-  eveHistoryStatePath() {
-    const base = safeStorageName(this.inverterSerial || 'pending');
-    return `${process.cwd()}/givhome_modbus_${base}_eve_history_totals.json`;
-  }
-
   async recordEveHistory(force = false) {
     if (!this.applianceControl.features.eveHistory || !this.latestModel || this.health.state !== 'online') return;
-    const now = Date.now();
-    const modelAgeMs = this.latestModel.lastUpdatedISO ? now - new Date(this.latestModel.lastUpdatedISO).getTime() : 0;
-    const maxAgeMs = Math.max(this.pollIntervalSeconds * 3 * 1000, this.applianceControl.eveHistorySampleMinutes * 60000);
-    if (Number.isFinite(modelAgeMs) && modelAgeMs > maxAgeMs) {
-      this.log.warn('GivHome evidence Eve history skipped: stale-telemetry ageSeconds=%s staleSamplesNotRecorded=yes', Math.round(modelAgeMs / 1000));
+    if (!this.FakeGatoHistoryService) {
+      if (!this._warnedMissingFakeGato) {
+        this._warnedMissingFakeGato = true;
+        this.log.error('[EveHistory] enabled but fakegato-history is unavailable; no samples recorded');
+      }
       return;
     }
-    const minMs = this.applianceControl.eveHistorySampleMinutes * 60000;
-    if (!force && now - this.eveHistoryLastRecordMs < minMs) return;
-    const statePath = this.eveHistoryStatePath();
-    const state = loadJson(statePath, { version: '1.0.0', totals: {}, updatedAt: null, resetTotalWritesIgnored: true });
-    const elapsedHours = this.eveHistoryLastRecordMs > 0 ? Math.max(0, (now - this.eveHistoryLastRecordMs) / 3600000) : 0;
-    const entries = [
-      { kind: 'solar', power: Math.max(0, this.latestModel.pvPowerW || 0) },
-      { kind: 'import', power: Math.max(0, this.latestModel.gridImportPowerW || 0) },
-      { kind: 'export', power: Math.max(0, this.latestModel.gridExportPowerW || 0) }
-    ];
-    for (const entry of entries) {
-      const previous = Number(state.totals[entry.kind] || 0);
-      const next = previous + (elapsedHours > 0 ? (entry.power * elapsedHours / 1000) : 0);
-      state.totals[entry.kind] = Number(next.toFixed(6));
-      const history = this.eveHistoryServices.get(entry.kind);
-      if (history && typeof history.addEntry === 'function') {
-        try { history.addEntry({ time: Math.round(now / 1000), power: Math.round(entry.power), totalConsumption: Number(next.toFixed(3)) }); } catch (err) { this.log.warn('Eve history addEntry failed: kind=%s error=%s', entry.kind, err && err.message ? err.message : String(err)); }
+    const now = Date.now();
+    const minimumMs = this.eveEnergyHistorySampleMinutes * 60 * 1000;
+    if (!force && now - this.lastEveEnergyHistoryEntryMs < minimumMs) return;
+    const modelAgeMs = this.latestModel.lastUpdatedISO ? now - new Date(this.latestModel.lastUpdatedISO).getTime() : 0;
+    const maxAgeMs = Math.max(this.pollIntervalSeconds * 3 * 1000, minimumMs);
+    if (Number.isFinite(modelAgeMs) && modelAgeMs > maxAgeMs) {
+      const ageBucket = Math.floor(modelAgeMs / Math.max(60000, minimumMs));
+      const signature = `stale:${ageBucket}`;
+      if (signature !== this.lastEveEnergyHistorySkipSignature) {
+        this.lastEveEnergyHistorySkipSignature = signature;
+        this.log.warn('[EveHistory] skipped stale telemetry: ageSeconds=%s', Math.round(modelAgeMs / 1000));
+      }
+      return;
+    }
+    this.lastEveEnergyHistorySkipSignature = '';
+    const elapsedHours = this.eveEnergyRuntimeTotalUpdatedMs > 0 ? Math.max(0, (now - this.eveEnergyRuntimeTotalUpdatedMs) / 3600000) : 0;
+    const recorded = [];
+    for (const kind of this.getDesiredEveEnergyHistoryKinds()) {
+      const accessory = this.accessoryByUUID.get(this.eveHistoryUUID(kind));
+      if (!accessory) continue;
+      const history = this.setupEveEnergyHistoryService(accessory, kind);
+      if (!history || typeof history.addEntry !== 'function') continue;
+      const power = this.getEveEnergyHistoryPower(kind, this.latestModel);
+      const previous = Math.max(0, Number(this.eveEnergyRuntimeTotalsKwh.get(kind) || 0));
+      const next = previous + (elapsedHours > 0 ? Math.max(0, power * elapsedHours / 1000) : 0);
+      this.eveEnergyRuntimeTotalsKwh.set(kind, next);
+      const service = accessory.getServiceById(this.Service.Outlet, kind);
+      if (service) this.seedEveEnergyCharacteristics(service, kind, this.latestModel);
+      const totalKwh = Math.max(0, Number(next.toFixed(3)));
+      try {
+        history.addEntry({ time: Math.round(now / 1000), power, totalConsumption: totalKwh });
+        recorded.push(`${kind}=${power}W total=${totalKwh}kWh`);
+      } catch (err) {
+        this.log.warn('[EveHistory] addEntry failed safely: kind=%s error=%s', kind, err && err.message ? err.message : String(err));
       }
     }
-    state.updatedAt = new Date(now).toISOString();
-    saveJson(statePath, state);
-    this.eveHistoryLastRecordMs = now;
-    this.log.warn('GivHome evidence Eve history recorded: solar=%sW import=%sW export=%sW localTotalsPersisted=yes resetTotalWritesIgnored=yes activeStateFlickerSuppressed=yes fakegato=%s', Math.round(entries[0].power), Math.round(entries[1].power), Math.round(entries[2].power), this.fakeGatoHistoryService ? 'yes' : 'not-available');
+    this.eveEnergyRuntimeTotalUpdatedMs = now;
+    if (recorded.length > 0) {
+      this.persistEveEnergyRuntimeTotals();
+      this.lastEveEnergyHistoryEntryMs = now;
+      this.updateEveEnergyHistoryAccessories(this.latestModel);
+      this.log.info('[EveHistory] recorded %s', recorded.join(' | '));
+    }
   }
 
   configureAccessoryServices(accessory, definition) {
@@ -3707,7 +4438,10 @@ class GivHomeModbusPlatform {
     this.health.lastErrorReason = '';
     this.health.lastResponseMeta = response.lastUnexpectedResponse || null;
 
-    this.updateAccessories(model);
+    const publishStarted = this.beta9PerfNowMs();
+    const publishStats = this.updateAccessories(model);
+    const publishDurationMs = this.beta9PerfNowMs() - publishStarted;
+    this.log.info('[Beta9Perf] poll modbusMs=%s publishMs=%s characteristicUpdates=%s', durationMs, publishDurationMs.toFixed(1), publishStats?.attempts ?? 'unknown');
 
     if (this.advancedDiagnostics || previousFailures > 0) {
       this.log.info(
@@ -3772,34 +4506,36 @@ class GivHomeModbusPlatform {
   }
 
   updateAccessories(model) {
+    let attempts = 0;
+    const publish = (service, characteristic, value) => { attempts += 1; service.updateCharacteristic(characteristic, value); };
     const cheapState = this.currentCheapStateForStatusTiles(new Date());
     this.latestCheapState = cheapState;
 
     for (const accessory of this.accessoryByUUID.values()) {
       const id = accessory.context.definitionId;
       if (!id) continue;
-      if (id === MANUAL_CHARGE_ACCESSORY_ID) continue;
+      if (id === MANUAL_CHARGE_ACCESSORY_ID || id === PREDICTED_SOLAR_ACCESSORY_ID) continue;
 
       const service = accessory.getService(this.Service.Lightbulb);
       if (!service) continue;
 
       if (id === ACCESSORY_IDS.BATTERY_LEVEL) {
         const level = batteryLevelState(model);
-        service.updateCharacteristic(this.Characteristic.On, true);
-        service.updateCharacteristic(this.Characteristic.Brightness, level);
+        publish(service, this.Characteristic.On, true);
+        publish(service, this.Characteristic.Brightness, level);
         continue;
       }
 
       if (id === ACCESSORY_IDS.TELEMETRY_STATUS) {
-        service.updateCharacteristic(this.Characteristic.On, this.health.state === 'online');
-        service.updateCharacteristic(this.Characteristic.Brightness, telemetryBrightnessState(this.health));
+        publish(service, this.Characteristic.On, this.health.state === 'online');
+        publish(service, this.Characteristic.Brightness, telemetryBrightnessState(this.health));
         continue;
       }
 
       if (id === ACCESSORY_IDS.SOLAR_POWER) {
         const solarEvidence = solarBrightnessEvidence(model, this.maxPvKw);
-        service.updateCharacteristic(this.Characteristic.On, model.active.solar);
-        service.updateCharacteristic(this.Characteristic.Brightness, solarEvidence.brightness);
+        publish(service, this.Characteristic.On, model.active.solar);
+        publish(service, this.Characteristic.Brightness, solarEvidence.brightness);
         if (!solarEvidence.maxPvConfigured && !this.solarCalibrationWarned) {
           this.solarCalibrationWarned = true;
           this.log.warn('Solar Generating brightness held at %s because maxPvKw is not configured; pvPowerW=%s active=%s source=%s fakeSolarBrightness100=no', solarEvidence.brightness, solarEvidence.pvPowerW, solarEvidence.active ? 'yes' : 'no', solarEvidence.source);
@@ -3808,14 +4544,15 @@ class GivHomeModbusPlatform {
       }
 
       const state = this.lightbulbStateFor(id, model, cheapState);
-      service.updateCharacteristic(this.Characteristic.On, state);
+      publish(service, this.Characteristic.On, state);
     }
+    return { attempts };
   }
 
   markAccessoriesInactive() {
     for (const accessory of this.accessoryByUUID.values()) {
       const id = accessory.context.definitionId;
-      if (!id || id === MANUAL_CHARGE_ACCESSORY_ID || id === ACCESSORY_IDS.BATTERY_LEVEL) continue;
+      if (!id || id === MANUAL_CHARGE_ACCESSORY_ID || id === PREDICTED_SOLAR_ACCESSORY_ID || id === ACCESSORY_IDS.BATTERY_LEVEL) continue;
       const service = accessory.getService(this.Service.Lightbulb);
       if (!service) continue;
       service.updateCharacteristic(this.Characteristic.On, false);
@@ -3841,7 +4578,7 @@ class GivHomeModbusPlatform {
       case ACCESSORY_IDS.CHEAP_RATE:
         return Boolean(cheapState && cheapState.cheapActive);
       case ACCESSORY_IDS.SMART_WINDOW:
-        return Boolean(cheapState && cheapState.dispatchActive);
+        return Boolean(cheapState && cheapState.cheapActive);
       case ACCESSORY_IDS.GRACE_PERIOD:
         return Boolean(cheapState && cheapState.graceActive);
       default:

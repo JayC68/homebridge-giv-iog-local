@@ -1,7 +1,7 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.0.0-beta.1",
-  "description": "Direct local GivEnergy integration for Homebridge, with Apple Home telemetry and optional Intelligent Octopus Go, Flux Export and Agile Export features.",
+  "version": "4.0.0",
+  "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
   "keywords": [
@@ -21,7 +21,11 @@
     "battery-export",
     "energy-automation",
     "eve",
-    "energy-history"
+    "energy-history",
+    "eve-energy-graphs",
+    "fakegato-history",
+    "predicted-solar",
+    "solar-forecast"
   ],
   "engines": {
     "node": "^22.0.0 || ^24.0.0",
@@ -31,8 +35,8 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {
-    "test": "node tools/verify-release.js",
-    "verify": "node tools/verify-release.js",
+    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js",
+    "verify": "node tools/verify-release.js && node tools/predicted-solar-harness.js",
     "pack:dry": "npm pack --dry-run"
   },
   "files": [
@@ -48,7 +52,8 @@
     "assets",
     "docs",
     "lib",
-    "tools/verify-release.js"
+    "tools/verify-release.js",
+    "tools/predicted-solar-harness.js"
   ],
   "displayName": "GivHome",
   "homepage": "https://givhome.kernowekconsulting.co.uk/",
@@ -60,11 +65,11 @@
   "bugs": {
     "url": "https://github.com/JayC68/homebridge-giv-iog-local/issues"
   },
-  "optionalDependencies": {
-    "fakegato-history": "^0.6.5"
-  },
   "funding": {
     "type": "website",
     "url": "https://givhome.kernowekconsulting.co.uk/"
+  },
+  "dependencies": {
+    "fakegato-history": "^0.6.5"
   }
 }

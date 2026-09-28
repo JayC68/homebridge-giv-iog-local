@@ -323,7 +323,7 @@
         "title": "Enable Evening Excess Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Enables GivHome\u2019s evening sell-off planner. Once configured here, use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day. Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically before the cheap overnight charge window. Legacy v3.7.5 enableExcessEnergyExport is also honoured."
+        "description": "Optional. Enables GivHome’s evening sell-off planner. Once configured here, use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day. Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically before the cheap overnight charge window. Legacy v3.7.5 enableExcessEnergyExport is also honoured."
       },
       "eveningExportStartTime": {
         "title": "Evening export earliest start",
@@ -923,7 +923,7 @@
           "adaptive"
         ],
         "enumNames": [
-          "Planner only \u2014 no inverter writes",
+          "Planner only — no inverter writes",
           "Single best slot only",
           "Multi-slot trader",
           "Adaptive trader"
@@ -971,7 +971,7 @@
           "custom"
         ],
         "enumNames": [
-          "Auto \u2014 learn how much is spare",
+          "Auto — learn how much is spare",
           "Custom cap"
         ]
       },
@@ -1049,13 +1049,108 @@
           "Custom time window"
         ],
         "description": "Default is Any high-value slot. GivHome searches every published Agile Outgoing half-hour that passes reserve, price and conflict checks. Custom time window is an optional limiter and should normally be left unused."
+      },
+      "enablePredictedSolar": {
+        "title": "Enable Predicted Solar",
+        "type": "boolean",
+        "default": false,
+        "description": "Optional read-only solar forecast. When off, no Predicted Solar accessory is created and no Open-Meteo requests are made."
+      },
+      "predictedSolarLocation": {
+        "title": "Postcode / ZIP / location",
+        "type": "string",
+        "default": "",
+        "description": "Location used only for the solar forecast. UK postcodes are resolved directly; other locations use Open-Meteo geocoding."
+      },
+      "predictedSolarCountryCode": {
+        "title": "Country code",
+        "type": "string",
+        "default": "GB",
+        "pattern": "^[A-Za-z]{2}$",
+        "description": "Two-letter ISO country code, for example GB, IE, US, AU or NZ. Used to disambiguate the postcode/location."
+      },
+      "predictedSolarReferenceKwh": {
+        "title": "100% forecast reference (kWh)",
+        "type": "number",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 1000,
+        "description": "Optional scale for the Home tile. 0 uses 4 kWh per installed kWp as the reference. The tile itself is deliberately clamped to 1–99%."
+      },
+      "predictedSolarRefreshMinutes": {
+        "title": "Forecast refresh interval (minutes)",
+        "type": "integer",
+        "default": 360,
+        "minimum": 60,
+        "description": "Open-Meteo refresh interval. Minimum 60 minutes; 360 minutes is normally sufficient for a next-day forecast."
+      },
+      "predictedSolarArrays": {
+        "title": "PV arrays",
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "title": "PV array",
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Array name",
+              "type": "string",
+              "default": "Array"
+            },
+            "capacityKw": {
+              "title": "Capacity (kWp)",
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000,
+              "default": 2.8
+            },
+            "tiltDegrees": {
+              "title": "Tilt (degrees)",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 90,
+              "default": 35,
+              "description": "0° is horizontal; 90° is vertical."
+            },
+            "azimuthDegrees": {
+              "title": "Azimuth / orientation (degrees)",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 359,
+              "default": 180,
+              "description": "Compass bearing: 0° north, 90° east, 180° south, 270° west. GivHome converts this internally for Open-Meteo."
+            },
+            "shading": {
+              "title": "Shading periods",
+              "type": "array",
+              "items": {
+                "title": "Shading period",
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "title": "Start (HH:MM)",
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    "default": "00:00"
+                  },
+                  "end": {
+                    "title": "End (HH:MM)",
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    "default": "00:00"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "required": [
       "inverterHost",
       "inverterSerial"
     ],
-    "description": "Configure local GivEnergy monitoring and optional HomeKit controls for GivHome Modbus.",
+    "description": "Configure local GivEnergy monitoring and optional HomeKit controls for GivHome.",
     "form": [
       {
         "type": "fieldset",
@@ -1183,7 +1278,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Octopus Flux Export \u2014 advanced",
+      "title": "Octopus Flux Export — advanced",
       "expandable": true,
       "expanded": false,
       "description": "Observed-power Flux settings. Change the eligible peak period only if you deliberately want a shorter or different selling period. A full 16:00-19:00 band at 6 kW would require about 18 kWh before reserves. CH/AIO planning uses observed/effective discharge rather than assuming HR112 limits the slot.",
@@ -1225,7 +1320,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Octopus Agile Export \u2014 advanced",
+      "title": "Octopus Agile Export — advanced",
       "expandable": true,
       "expanded": false,
       "items": [
@@ -1257,7 +1352,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Octopus Agile Export \u2014 custom time limiter",
+      "title": "Octopus Agile Export — custom time limiter",
       "expandable": true,
       "expanded": false,
       "description": "Hidden unless Slot search is Custom time window. Normal Agile mode ignores these values completely and searches the whole day for any worthwhile published Agile half-hour.",
@@ -1282,7 +1377,93 @@
         "enableEveEnergyHistory",
         "manualChargeExpiredSlotFailsafeGate"
       ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Predicted Solar",
+      "expandable": true,
+      "expanded": false,
+      "description": "Optional read-only next-day solar forecast using Open-Meteo Global Tilted Irradiance. It is isolated from inverter control and cannot write Modbus registers.",
+      "items": [
+        "enablePredictedSolar"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Predicted Solar — site",
+      "expandable": true,
+      "expanded": false,
+      "description": "Shown after Predicted Solar is enabled. Configure the forecast location and one or more PV arrays.",
+      "items": [
+        "predictedSolarLocation",
+        "predictedSolarCountryCode",
+        {
+          "key": "predictedSolarArrays",
+          "type": "tabarray",
+          "add": "Add PV array",
+          "title": "{{ value.name || \"PV array\" }}",
+          "notitle": false,
+          "items": [
+            {
+              "type": "div",
+              "notitle": true,
+              "items": [
+                {
+                  "key": "predictedSolarArrays[].name"
+                },
+                {
+                  "key": "predictedSolarArrays[].capacityKw"
+                },
+                {
+                  "key": "predictedSolarArrays[].tiltDegrees"
+                },
+                {
+                  "key": "predictedSolarArrays[].azimuthDegrees"
+                },
+                {
+                  "key": "predictedSolarArrays[].shading",
+                  "type": "array",
+                  "add": "Add shading period",
+                  "buttonText": "Add shading period",
+                  "notitle": false,
+                  "items": [
+                    {
+                      "type": "div",
+                      "notitle": true,
+                      "items": [
+                        {
+                          "key": "predictedSolarArrays[].shading[].start"
+                        },
+                        {
+                          "key": "predictedSolarArrays[].shading[].end"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "condition": {
+        "functionBody": "return model.enablePredictedSolar === true;"
+      }
+    },
+    {
+      "type": "fieldset",
+      "title": "Predicted Solar — advanced",
+      "expandable": true,
+      "expanded": false,
+      "description": "Forecast tuning and request cadence. These settings affect only Predicted Solar.",
+      "items": [
+        "predictedSolarReferenceKwh",
+        "predictedSolarRefreshMinutes"
+      ],
+      "condition": {
+        "functionBody": "return model.enablePredictedSolar === true;"
+      }
     }
   ],
-  "description": "Configure local GivEnergy monitoring and optional Apple Home controls for GivHome."
+  "description": "Configure local GivEnergy monitoring and optional HomeKit controls for GivHome."
 }
