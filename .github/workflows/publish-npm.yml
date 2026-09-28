@@ -14,19 +14,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Use Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
-      - name: Use npm 11
-        run: npm install --global npm@11
+      - name: Use validated npm
+        run: |
+          npm install --global npm@11.20.0
+          test "$(npm --version)" = "11.20.0"
+
+      - name: Verify OIDC publication environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          test -z "${NODE_AUTH_TOKEN:-}"
+          test -z "${NPM_TOKEN:-}"
+          npm config get registry | grep -Fx 'https://registry.npmjs.org/'
 
       - name: Verify release
         run: npm test
 
-      - name: Publish with provenance
+      - name: Publish with OIDC provenance
         run: npm publish --access public --provenance
