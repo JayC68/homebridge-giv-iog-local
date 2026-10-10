@@ -171,9 +171,15 @@
         "title": "Target battery charge %",
         "type": "integer",
         "default": 100,
-        "minimum": 1,
+        "minimum": 4,
         "maximum": 100,
-        "description": "Target battery level used for Cheap Overnight, Intelligent Octopus Go smart-slot home-battery protection and Charge tiles."
+        "description": "Starting target for Cheap Overnight, Intelligent Octopus Go charge-mode protection and Charge tiles. A target saved in Apple Home is used until you change this value or choose another target in Home."
+      },
+      "enableChargeTargetTile": {
+        "title": "Show Charge Target in Apple Home",
+        "type": "boolean",
+        "default": true,
+        "description": "Adds a Charge Target percentage slider when supported charging controls are enabled. Turning this off returns to the configured target after restart."
       },
       "enableTimedChargeTiles": {
         "title": "Enable Charge 30/60/90/120 tiles",
@@ -1205,7 +1211,8 @@
         "enableCheapOvernightCharging",
         "cheapStart",
         "cheapEnd",
-        "targetSoc"
+        "targetSoc",
+        "enableChargeTargetTile"
       ]
     },
     {

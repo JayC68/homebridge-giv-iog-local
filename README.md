@@ -18,11 +18,15 @@ That is exactly what we did not want. Cheap grid electricity should charge the E
 
 Those two ideas shaped GivHome v4: **understand what the inverter is really doing, and understand enough about why energy is moving to do something useful about it.**
 
-## v4 beta identity and installation
+## Version and installation
 
-This package is `homebridge-giv-iog-local` **4.0.0**. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements.
+This is **4.0.1** for `homebridge-giv-iog-local`, based on the published stable **4.0.0** release and the owner's private Charge Target trial. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for the unchanged CH/AIO slot limit and restart-restoration limitations.
 
-For a normal release, install through the Homebridge UI. For this beta, use only a validated package and follow the v3-to-v4 migration and safety notes in `docs/`.
+**Charge Target** brings your preferred charging percentage into Apple Home beside Solar 2mrw. It saves one target for Cheap Overnight, IOG charge-mode protection and timed Charge tiles. See [Charge Target](docs/CHARGE_TARGET.md) for its scope and the remaining slot-limit restriction.
+
+Keep a verified backup and rollback before installation. The [release notes](RELEASE_NOTES.md) and [publication instructions](docs/RELEASING.md) record the verified scope and remaining limitations. Published releases can be installed through the Homebridge UI; v3 users should first read the [v3-to-v4 migration guide](docs/MIGRATION_V3_TO_V4.md).
+
+[Release Notes](RELEASE_NOTES.md) | [Full Changelog](CHANGELOG.md) | [Earlier v3 History](docs/CHANGELOG_V3.md) | [Published GitHub Releases](https://github.com/JayC68/homebridge-giv-iog-local/releases)
 
 Core monitoring and local control use direct local Modbus TCP; GivTCP, MQTT and GivEnergy Cloud are not required for the v4 local-control path.
 

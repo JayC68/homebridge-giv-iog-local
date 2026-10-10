@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -35,8 +35,9 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {
-    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js",
-    "verify": "node tools/verify-release.js && node tools/predicted-solar-harness.js",
+    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js",
+    "verify": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js",
+    "test:hap": "node --test tools/charge-target-hap.test.js",
     "pack:dry": "npm pack --dry-run"
   },
   "files": [
@@ -44,6 +45,7 @@
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
+    "RELEASE_NOTES.md",
     "LICENSE",
     "NOTICE",
     "TRADEMARKS.md",
@@ -53,7 +55,11 @@
     "docs",
     "lib",
     "tools/verify-release.js",
-    "tools/predicted-solar-harness.js"
+    "tools/predicted-solar-harness.js",
+    "tools/verify-release-notes.js",
+    "tools/charge-lifecycle.test.js",
+    "tools/charge-target.test.js",
+    "tools/charge-target-hap.test.js"
   ],
   "displayName": "GivHome",
   "homepage": "https://givhome.kernowekconsulting.co.uk/",

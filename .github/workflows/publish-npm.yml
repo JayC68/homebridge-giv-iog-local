@@ -3,7 +3,7 @@ name: Publish npm
 on:
   push:
     tags:
-      - 'v4.0.0'
+      - 'v4.0.1'
 
 permissions:
   id-token: write
@@ -29,7 +29,16 @@ jobs:
           test "$(npm --version)" = "11.20.0"
 
       - name: Verify release
-        run: npm test
+        run: |
+          test "$(node -p 'require("./package.json").version')" = "4.0.1"
+          npm install --ignore-scripts --package-lock=false
+          npm test
+          npm run test:hap
+
+      - name: Build and verify reviewed package
+        run: |
+          npm pack
+          echo '16c41b777564b335ad75dc75bb1c3748294e5325cf2237e87734744f9fec50f0  homebridge-giv-iog-local-4.0.1.tgz' | sha256sum --check
 
       - name: Publish with trusted publishing
-        run: npm publish --access public --loglevel=silly
+        run: npm publish homebridge-giv-iog-local-4.0.1.tgz --access public --tag latest

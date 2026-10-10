@@ -1,4 +1,16 @@
-# 4.0.0 release provenance
+# Release provenance
+
+## 4.0.1 private trial
+
+Public 4.0.1 promotes the privately tested `.2` correction, derived from the exact npm-published `homebridge-giv-iog-local@4.0.0` tarball. Baseline tarball SHA-256: `198e3f57c002409faf318c5dbe425982edfd8e67af03604d4bbfa9e6bebbd180`. Before the first trial installation on 2026-10-10, all 42 stable baseline files matched the Pi byte-for-byte. The `.2` installation checked all 54 files of the preceding `.1` baseline. All 54 deployed `.2` files subsequently matched the audited source. Public source is committed on a branch based on the published v4.0.0 tag, not the legacy v3 default branch.
+
+The requested production-source ZIP was unavailable in this workspace. The earlier local `4.0.0-beta.1` build is superseded. Neither source is claimed to be the stable baseline here.
+
+Release notes are at root `RELEASE_NOTES.md`; full v4 history is at root `CHANGELOG.md`; public v3 history is archived in `docs/CHANGELOG_V3.md`. `docs/RELEASING.md` records the evidence, unresolved release conditions and eventual publication locations.
+
+The 4.0.0 provenance below is retained as historical evidence. It does not establish validation of the new candidate.
+
+## 4.0.0 release provenance
 
 ## Provenance
 

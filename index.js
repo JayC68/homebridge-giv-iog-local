@@ -91,6 +91,12 @@ const {
   loadJson,
   saveJson
 } = require('./lib/appliance-integrated-control');
+const {
+  buildChargeTargetReconciliationPlan,
+  verifyChargeTargetReconciliation,
+  inferChargeTargetProfile
+} = require('./lib/charge-target-reconciliation');
+const { validateChargeTarget, loadChargeTarget, saveChargeTarget } = require('./lib/charge-target-setting');
 const { PredictedSolarController, validateConfig: validatePredictedSolarConfig } = require('./lib/predicted-solar');
 const {
   buildSlotPlan: buildAgileExportAutopilotSlotPlan,
@@ -104,6 +110,7 @@ const MANUAL_CHARGE_ACCESSORY_ID = 'manual-charge-command';
 const APPLIANCE_COMMAND_ACCESSORY_PREFIX = 'appliance-command';
 const EVE_HISTORY_ACCESSORY_PREFIX = 'eve-history';
 const PREDICTED_SOLAR_ACCESSORY_ID = 'predicted-solar';
+const CHARGE_TARGET_ACCESSORY_ID = 'charge-target';
 const READ_ONLY_ACCESSORY_UX_REVISION = 'givhome-1.1.0-agile-outgoing-status-lightbulb-ux-v2';
 const DEFAULT_MANUAL_CHARGE_COMMAND_DURATION_MINUTES = 30;
 const APPLIANCE_AUTOMATION_INTERVAL_MS = 30000;
@@ -124,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.0',
-      stage: 'GivHome 4.0.0'
+      version: '4.0.1',
+      stage: 'GivHome 4.0.1'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -187,6 +194,21 @@ class GivHomeModbusPlatform {
     this.maxPvKw = Number.isFinite(this.config.maxPvKw) && this.config.maxPvKw > 0 ? this.config.maxPvKw : null;
     this.solarCalibrationWarned = false;
     this.applianceControl = buildApplianceControlConfig(this.config);
+    this.configuredChargeTarget = this.applianceControl.targetSoc;
+    this.chargeTargetIdentity = `${this.name}:${this.inverterSerial}`;
+    this.chargeTargetFile = path.join(this.getStoragePath(), `givhome-charge-target-${this.api.hap.uuid.generate(this.chargeTargetIdentity)}.json`);
+    this.chargeTargetTimer = null;
+    this.chargeTargetReconcileInFlight = null;
+    this.activeChargeTarget = null;
+    this.chargeTargetError = null;
+    try {
+      if (this.chargeTargetTileEnabled()) {
+        const targetSoc = loadChargeTarget(this.chargeTargetFile, this.chargeTargetIdentity, this.configuredChargeTarget);
+        this.applianceControl = Object.freeze({ ...this.applianceControl, targetSoc });
+      }
+    } catch (err) {
+      this.log.warn('Charge Target saved preference unavailable; using configured target: %s', err.message);
+    }
     this.applianceCommandServices = new Map();
     this.applianceCommandTimers = new Map();
     this.applianceCommandInFlight = null;
@@ -325,6 +347,7 @@ class GivHomeModbusPlatform {
     this.log.warn('GivHome evidence smart-window policy: graceMinutes=%s cheapStart=%s cheapEnd=%s octopusPollSeconds=%s scope=Intelligent-Octopus-Go-dispatch-plus-early-termination-billing-grace gracePolicy=ceil-to-next-half-hour-up-to-configured-cap normalDispatchEndExtended=no dynamicDispatchUpdates=yes batteryCareGracePeriodsExcluded=yes automaticMutationPath=absent', this.applianceControl.graceMinutes, this.applianceControl.cheapStart, this.applianceControl.cheapEnd, this.applianceControl.octopusPollSeconds);
     this.log.warn('GivHome evidence v3.7.5 parity policy: octopusAgileOutgoingAutonomousExport=yes octopusAgileOutgoingMpanAudit=yes octopusFluxPeakExportPlanner=yes eveningExcessExportConfigSection=yes eveningExcessExportLegacyAliases=yes eveningExcessExportPlannerIdleReasons=yes eveningExcessExportRecoverySharedSnapshot=yes eveningExcessExportRecovery=yes truthBackedCommandSwitches=yes ceAcPersistentChargeSlotMemory=yes ceAcCleanupLeavesHr96Off=yes eveHistoryHardening=yes normalDispatchEndExtended=no automaticMutationPath=absent');
     this.log.warn('GivHome evidence Battery Care configuration: enabled=%s batteryCapacityKwh=%s maxBatteryChargePowerKw=%s batteryCareMode=%s minimumOvernightMinutes=%s targetSoc=%s route=HR111,HR116,HR94,HR95,HR96 scope=main-overnight-cheap-window-only excludes=short-IOG-dispatches,grace-periods,manual-tiles automaticMutationPath=%s', this.applianceControl.features.batteryCare ? 'yes' : 'no', this.applianceControl.batteryCapacityKwh, this.applianceControl.maxBatteryChargePowerKw, this.applianceControl.batteryCareMode, this.applianceControl.batteryCareMinimumWindowMinutes, this.applianceControl.targetSoc, this.applianceControl.automaticMutationPath);
+    this.log.warn('GivHome evidence AC charge target reconciliation: establishedWrites=HR20,HR116 diagnosticOnly=HR242-on-CH-AIO noUnsafeSpeculativeWrites=yes preservesCustomerPrestate=yes logicalSlotMapping=model-aware');
     this.log.warn('GivHome evidence Octopus Agile Export Autopilot configuration: enabled=%s armed=%s stage=%s dryRun=%s slotSearchMode=%s allowedWindow=%s strategy=%s learningMode=%s dailyExportMode=%s region=%s product=%s tariff=%s daysPreset=%s daysToRun=%s minimumPricePence=%s minimumExtraRewardPence=%s energyCostBaselinePence=%s reserveSoc=%s reserveKwh=%s safetyMarginSoc=%s exportPowerKw=%s dailyExportCapKwh=%s mpanAudit=%s exportMpanConfigured=%s exportMeterSerialConfigured=%s automaticMutationPath=%s', this.applianceControl.features.octopusAgileOutgoingExport ? 'yes' : 'no', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', this.getOctopusAgileOutgoingExecutionStage(), this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no', this.getOctopusAgileOutgoingSlotSearchMode(), this.formatOctopusAgileOutgoingAllowedWindow(), this.applianceControl.octopusAgileOutgoingStrategy, this.applianceControl.octopusAgileOutgoingLearningMode, this.applianceControl.octopusAgileOutgoingDailyExportMode, this.applianceControl.octopusAgileOutgoingRegionCode, this.applianceControl.octopusAgileOutgoingProductCode, this.getOctopusAgileOutgoingTariffCode(), this.applianceControl.octopusAgileOutgoingRunDaysPreset || 'legacy-list', this.formatOctopusAgileOutgoingDaysToRun(), this.applianceControl.octopusAgileOutgoingMinimumExportPricePence, this.applianceControl.octopusAgileOutgoingMinimumGrossMarginPence, this.applianceControl.octopusAgileOutgoingReferenceImportPence, this.applianceControl.octopusAgileOutgoingReserveSoc, this.applianceControl.octopusAgileOutgoingEveningReserveKwh, this.applianceControl.octopusAgileOutgoingSafetyMarginSoc, this.applianceControl.octopusAgileOutgoingExportPowerKw, this.applianceControl.octopusAgileOutgoingDailyExportCapKwh, this.applianceControl.octopusAgileOutgoingEnableMpanAudit ? 'yes' : 'no', this.applianceControl.octopusExportMpan ? 'yes' : 'no', this.applianceControl.octopusExportMeterSerial ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
     const fluxEligibleMinutes = clockWindowDurationMinutes(this.applianceControl.octopusFluxExportStartTime, this.applianceControl.octopusFluxExportEndTime);
     const fluxFullBandKwh = Number.isFinite(fluxEligibleMinutes) ? ((Number(this.applianceControl.octopusFluxExportPowerKw) || 0) * (fluxEligibleMinutes / 60)).toFixed(2) : 'n/a';
@@ -365,6 +388,7 @@ class GivHomeModbusPlatform {
     this.ensureApplianceCommandAccessories();
     this.ensureEveHistoryAccessories();
     this.ensurePredictedSolarAccessory();
+    this.ensureChargeTargetAccessory();
     this.startPredictedSolar();
 
     if (!this.enableReadOnlyPolling) {
@@ -419,6 +443,10 @@ class GivHomeModbusPlatform {
 
   isIntelligentOctopusGoConfigured() {
     return Boolean(this.applianceControl.features.intelligentOctopusGoConfigured);
+  }
+
+  isChAioProfile() {
+    return classifySerialPrefix(this.inverterSerial).family === 'aio';
   }
 
   readOnlyAccessoryDefinitionOptions() {
@@ -536,6 +564,134 @@ class GivHomeModbusPlatform {
 
   predictedSolarAccessoryUUID() {
     return this.api.hap.uuid.generate(`${PLUGIN_NAME}:${this.name}:${PREDICTED_SOLAR_ACCESSORY_ID}`);
+  }
+
+  chargeTargetTileEnabled() {
+    const features = this.applianceControl.features;
+    const profile = inferChargeTargetProfile({ serial: this.inverterSerial });
+    return this.config.enableChargeTargetTile !== false && this.applianceControl.masterGateSatisfied
+      && profile.establishedTargetRegisters.length > 0
+      && (profile.profile !== 'ce-ac-coupled' || features.ceAcCoupledLiveWrites)
+      && (features.cheapOvernightCharging || features.homeBatteryProtectionDuringSmartSlots || features.chargeTiles)
+      && this.applianceControl.targetSoc >= 4;
+  }
+
+  ensureChargeTargetAccessory() {
+    const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${this.name}:${CHARGE_TARGET_ACCESSORY_ID}`);
+    let accessory = this.accessoryByUUID.get(uuid);
+    if (!this.chargeTargetTileEnabled()) {
+      if (accessory) {
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.accessoryByUUID.delete(uuid);
+        this.accessories = this.accessories.filter((candidate) => candidate.UUID !== uuid);
+      }
+      return;
+    }
+    const created = !accessory;
+    if (!accessory) {
+      accessory = new this.api.platformAccessory('Charge Target', uuid);
+      this.accessoryByUUID.set(uuid, accessory);
+      this.accessories.push(accessory);
+    }
+    accessory.context.definitionId = CHARGE_TARGET_ACCESSORY_ID;
+    accessory.context.chargeTarget = true;
+    accessory.displayName = 'Charge Target';
+    const service = accessory.getService(this.Service.Lightbulb) || accessory.addService(this.Service.Lightbulb, 'Charge Target', CHARGE_TARGET_ACCESSORY_ID);
+    service.setCharacteristic(this.Characteristic.Name, 'Charge Target');
+    service.getCharacteristic(this.Characteristic.On).onGet(() => true).onSet((value) => {
+      if (value !== true) throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.INVALID_VALUE_IN_REQUEST);
+    });
+    service.getCharacteristic(this.Characteristic.Brightness)
+      .updateValue(this.applianceControl.targetSoc)
+      .setProps({ minValue: 4, maxValue: 100, minStep: 1 })
+      .onGet(() => {
+        if (this.chargeTargetError) throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+        return this.applianceControl.targetSoc;
+      })
+      .onSet((value) => this.setChargeTargetFromHome(value));
+    service.updateCharacteristic(this.Characteristic.On, true);
+    service.updateCharacteristic(this.Characteristic.Brightness, this.applianceControl.targetSoc);
+    const info = accessory.getService(this.Service.AccessoryInformation);
+    if (info) info.setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting')
+      .setCharacteristic(this.Characteristic.Model, 'Charge Target')
+      .setCharacteristic(this.Characteristic.FirmwareRevision, require('./package.json').version);
+    this.chargeTargetService = service;
+    if (created) this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+    else if (typeof this.api.updatePlatformAccessories === 'function') this.api.updatePlatformAccessories([accessory]);
+  }
+
+  setChargeTargetFromHome(value) {
+    try { validateChargeTarget(value); }
+    catch { throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.INVALID_VALUE_IN_REQUEST); }
+    if (!this.chargeTargetTileEnabled()) throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE);
+    // Home acknowledges a saved preference, not an unverified inverter limit.
+    try { saveChargeTarget(this.chargeTargetFile, this.chargeTargetIdentity, this.configuredChargeTarget, value); }
+    catch (err) {
+      this.log.warn('Charge Target not saved; previous target retained: %s', err.message);
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+    this.applianceControl = Object.freeze({ ...this.applianceControl, targetSoc: value });
+    this.chargeTargetService?.updateCharacteristic(this.Characteristic.Brightness, value);
+    this.log.info('Charge Target saved: targetSoc=%s source=Apple-Home activeCharge=%s inverterVerification=pending-if-owned', value, this.activeChargeTarget ? 'yes' : 'no');
+    if (this.chargeTargetTimer) clearTimeout(this.chargeTargetTimer);
+    this.chargeTargetTimer = setTimeout(() => {
+      this.chargeTargetTimer = null;
+      this.reconcileActiveChargeTarget().catch((err) => this.log.warn('Charge Target update deferred: %s', err.message));
+    }, 750);
+    this.chargeTargetTimer.unref?.();
+  }
+
+  async reconcileActiveChargeTarget() {
+    if (this.chargeTargetReconcileInFlight) return this.chargeTargetReconcileInFlight;
+    if (!this.activeChargeTarget || (this.activeChargeTarget.targetSoc === this.applianceControl.targetSoc && !this.chargeTargetError)
+      || !this.chargeTargetTileEnabled() || this.health.state !== 'online') return;
+    const run = this.withManualChargeTransportGate('GivHome Charge Target update', async () => {
+      const active = this.activeChargeTarget;
+      let targetSoc = this.applianceControl.targetSoc;
+      if (!this.chargeTargetTileEnabled() || this.health.state !== 'online' || !active
+        || (active.targetSoc === targetSoc && !this.chargeTargetError) || this.applianceSnapshots.get('charge')?.source !== active.source) return;
+      const ownerWindowOpen = () => {
+        if (this.activeChargeTarget !== active || !this.chargeTargetTileEnabled()
+          || this.health.state !== 'online' || Date.now() >= active.endAtMs) return false;
+        const cheapState = this.currentCheapStateForStatusTiles();
+        if (active.source === 'Cheap Overnight') return this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive;
+        if (active.source === 'Intelligent Octopus Go Home Battery Protection') {
+          return this.applianceControl.features.homeBatteryProtectionDuringSmartSlots && cheapState.smartActive
+            && !(this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive);
+        }
+        return true;
+      };
+      if (!ownerWindowOpen()) return;
+      const before = await this.readChargePrestate();
+      const owned = (state) => state.HR96 === 1 && state.HR94 === active.startHmm
+        && state.HR95 === active.endHmm && state.HR111 === active.powerPercent;
+      if (!owned(before) || ![0, 1].includes(before.HR20)
+        || !Number.isInteger(before.HR116) || before.HR116 < 0 || before.HR116 > 100) {
+        throw new Error('owned charge settings changed; no target writes sent');
+      }
+      if (!ownerWindowOpen()) return;
+      targetSoc = this.applianceControl.targetSoc;
+      const plan = buildChargeTargetReconciliationPlan(before, { serial: this.inverterSerial, targetSoc });
+      if (!plan.mutationAllowed) throw new Error('unsupported charge target profile; no target writes sent');
+      for (const write of plan.establishedWrites) await this.writeDirectRegister(write.register, write.value, `Charge Target ${write.label}`);
+      const after = await this.readChargePrestate();
+      if (!owned(after) || !verifyChargeTargetReconciliation(after, plan).ok) throw new Error('Charge Target readback failed; saved preference retained for retry');
+      active.targetSoc = targetSoc;
+      this.log.info('Charge Target verified: targetSoc=%s owner=%s HR20=%s HR116=%s HR242=%s slotLimit=diagnostic-only originalSnapshot=preserved', targetSoc, active.source, after.HR20, after.HR116, after.HR242 ?? 'n/a');
+      return true;
+    });
+    this.chargeTargetReconcileInFlight = run;
+    try {
+      if (await run) this.chargeTargetError = null;
+    } catch (err) {
+      this.chargeTargetError = err;
+      this.chargeTargetService?.getCharacteristic(this.Characteristic.Brightness)
+        .updateValue(new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE));
+      throw err;
+    } finally {
+      this.chargeTargetReconcileInFlight = null;
+    }
+    if (!this.chargeTargetError) this.chargeTargetService?.updateCharacteristic(this.Characteristic.Brightness, this.applianceControl.targetSoc);
   }
 
   ensurePredictedSolarAccessory() {
@@ -2443,6 +2599,11 @@ class GivHomeModbusPlatform {
       else await this.cleanupExportFromSnapshot(snapshot, reason);
     });
     this.applianceSnapshots.delete(snapshotKey);
+    if (family === 'charge') {
+      this.activeChargeTarget = null;
+      this.chargeTargetError = null;
+      this.chargeTargetService?.updateCharacteristic(this.Characteristic.Brightness, this.applianceControl.targetSoc);
+    }
     for (const tile of COMMAND_TILES.filter((t) => t.family === family)) {
       this.setApplianceCommandState(tile.kind, false);
       if (this.applianceCommandTimers.has(tile.kind)) {
@@ -2479,9 +2640,18 @@ class GivHomeModbusPlatform {
   }
 
   async readChargePrestate() {
+    const chargeTargetEnable = await this.readHoldingRegisters(20, 1, 'charge-target-enable');
     const core = await this.readHoldingRegisters(94, 3, 'charge-core');
     const powerTarget = await this.readHoldingRegisters(111, 6, 'charge-power-target');
-    return { HR94: core[0], HR95: core[1], HR96: core[2], HR111: powerTarget[0], HR116: powerTarget[5] };
+    let slot1Target = null;
+    if (this.isChAioProfile()) {
+      try {
+        slot1Target = (await this.readHoldingRegisters(242, 1, 'charge-slot1-target-diagnostic'))[0];
+      } catch (err) {
+        this.log.warn('GivHome AC charge target reconciliation: HR242 diagnostic read failed profile=ch-aio error=%s action=continue-established-HR20-HR116-only', err && err.message ? err.message : String(err));
+      }
+    }
+    return { HR20: chargeTargetEnable[0], HR94: core[0], HR95: core[1], HR96: core[2], HR111: powerTarget[0], HR116: powerTarget[5], HR242: slot1Target };
   }
 
   async readPausePrestate() {
@@ -2500,7 +2670,9 @@ class GivHomeModbusPlatform {
       this.log.warn('GivHome Intelligent Octopus Go pause protection preserved manual pause: requestedMode=%s currentHR318=%s manualPauseIntent=%s source=iog-home-battery-protection', modeText, original.HR318, this.manualPauseIntent);
       return;
     }
-    this.applianceSnapshots.set('pause', { ...original, source: options.label || 'Intelligent Octopus Go Home Battery Protection', hr318Only: true, iog: true });
+    if (!this.applianceSnapshots.has('pause')) {
+      this.applianceSnapshots.set('pause', { ...original, source: options.label || 'Intelligent Octopus Go Home Battery Protection', hr318Only: true, iog: true });
+    }
     this.log.warn('GivHome Intelligent Octopus Go pause protection start executing: mode=%s HR318=%s writePlan=HR318-only willNotWrite=HR319,HR320 currentHR318=%s currentHR319=%s currentHR320=%s source=iog-home-battery-protection automaticMutationPath=%s', modeText, pauseModeValue, original.HR318, original.HR319, original.HR320, this.applianceControl.automaticMutationPath);
     await this.writeDirectRegister(318, pauseModeValue, `GivHome IOG pause HR318 only ${mode}`);
     const post = await this.readPausePrestate();
@@ -2587,23 +2759,48 @@ class GivHomeModbusPlatform {
     const startHmm = dateToHmm(now);
     const endHmm = dateToHmm(end);
     const original = await this.readChargePrestate();
-    if (this.isCeAcCoupledProfile()) this.persistCeAcChargeSlotSnapshot(original, options.label || tileOrPlan.displayName || 'temporary-charge');
     if (original.HR96 !== 0 && !options.automatic) throw new Error(`charge start refused: HR96 already enabled (${original.HR96})`);
     const carePlan = options.batteryCarePlan;
     const powerPercent = carePlan?.active ? carePlan.chargeRatePercent : validPercentOrDefault(options.powerPercent ?? original.HR111, 100);
     const targetSoc = validPercentOrDefault(options.targetSoc ?? this.applianceControl.targetSoc ?? original.HR116, 100);
-    this.applianceSnapshots.set('charge', { ...original, source: options.label || tileOrPlan.displayName || 'Charge' });
-    this.log.warn('GivHome command charge start executing: label=%s HR111=%s HR116=%s HR94=%s HR95=%s HR96=1 route=core batteryCare=%s automaticMutationPath=%s', options.label || tileOrPlan.displayName || 'Charge', powerPercent, targetSoc, startHmm, endHmm, carePlan?.active ? 'yes' : 'no', options.automatic ? this.applianceControl.automaticMutationPath : 'homekit-explicit');
+    const targetPlan = buildChargeTargetReconciliationPlan(original, {
+      serial: this.inverterSerial,
+      targetSoc
+    });
+    if (!targetPlan.mutationAllowed) throw new Error(`charge start refused: target writes are not supported for ${targetPlan.profile}`);
+    if (![0, 1].includes(original.HR20) || ![0, 1].includes(original.HR96)
+      || ![original.HR94, original.HR95].every((value) => Number.isInteger(value) && value >= 0 && value <= 2359 && value % 100 <= 59)
+      || ![original.HR111, original.HR116].every((value) => Number.isInteger(value) && value >= 0 && value <= 100)) {
+      throw new Error('charge start refused: fresh charge settings are incomplete or invalid');
+    }
+    const source = options.label || tileOrPlan.displayName || 'Charge';
+    const saved = this.applianceSnapshots.get('charge');
+    if (saved && saved.source !== source) throw new Error('charge start refused: previous charge owner must finish cleanup before handover');
+    if (!saved) {
+      if (this.isCeAcCoupledProfile()) this.persistCeAcChargeSlotSnapshot(original, source);
+      this.applianceSnapshots.set('charge', { ...original, source, chargeTargetPlan: targetPlan });
+    }
+    this.log.warn('GivHome command charge start executing: label=%s HR111=%s HR20=%s HR116=%s HR242=%s HR94=%s HR95=%s HR96=1 route=core batteryCare=%s targetProfile=%s diagnosticOnly=%s automaticMutationPath=%s', options.label || tileOrPlan.displayName || 'Charge', powerPercent, targetPlan.expected.HR20, targetPlan.expected.HR116, original.HR242 === null ? 'n/a' : original.HR242, startHmm, endHmm, carePlan?.active ? 'yes' : 'no', targetPlan.profile, targetPlan.unsafeSpeculativeWrites.join(',') || 'none', options.automatic ? this.applianceControl.automaticMutationPath : 'homekit-explicit');
     await this.writeDirectRegister(111, powerPercent, 'GivHome command charge HR111');
-    await this.writeDirectRegister(116, targetSoc, 'GivHome command charge HR116');
+    for (const write of targetPlan.establishedWrites) {
+      await this.writeDirectRegister(write.register, write.value, `GivHome command charge target ${write.label}`);
+    }
     await this.writeDirectRegister(94, startHmm, 'GivHome command charge HR94');
     await this.writeDirectRegister(95, endHmm, 'GivHome command charge HR95');
     const pre = await this.readChargePrestate();
-    if (pre.HR94 !== startHmm || pre.HR95 !== endHmm || pre.HR111 !== powerPercent || pre.HR116 !== targetSoc) throw new Error('charge pre-enable readback did not match');
+    const targetVerification = verifyChargeTargetReconciliation(pre, targetPlan);
+    if (pre.HR94 !== startHmm || pre.HR95 !== endHmm || pre.HR111 !== powerPercent || !targetVerification.ok) throw new Error(`charge pre-enable readback did not match target=${JSON.stringify(targetVerification.mismatches)}`);
+    if (targetVerification.unsafeSpeculativeWrites.length > 0) {
+      this.log.warn('GivHome AC charge target diagnostic: label=%s profile=%s mismatch=%s action=no-unsafe-speculative-write establishedControlsVerified=yes', options.label || tileOrPlan.displayName || 'Charge', targetPlan.profile, targetVerification.unsafeSpeculativeWrites.join(','));
+    }
     await this.writeDirectRegister(96, 1, 'GivHome command charge HR96');
     const post = await this.readChargePrestate();
-    if (post.HR96 !== 1) throw new Error('charge enable readback did not confirm HR96=1');
+    if (post.HR96 !== 1 || post.HR94 !== startHmm || post.HR95 !== endHmm
+      || post.HR111 !== powerPercent || !verifyChargeTargetReconciliation(post, targetPlan).ok) {
+      throw new Error('charge enable readback did not confirm the complete charge settings');
+    }
     this.log.warn('GivHome command charge start complete: label=%s durationMinutes=%s', options.label || tileOrPlan.displayName || 'Charge', minutes);
+    this.activeChargeTarget = { source, targetSoc, startHmm, endHmm, powerPercent, endAtMs: end.getTime() };
   }
 
   async cleanupChargeFromSnapshot(snapshot, reason) {
@@ -2615,16 +2812,22 @@ class GivHomeModbusPlatform {
       await this.writeDirectRegister(94, restore.HR94, 'GivHome command charge restore HR94');
       await this.writeDirectRegister(95, restore.HR95, 'GivHome command charge restore HR95');
       await this.writeDirectRegister(111, restore.HR111, 'GivHome command charge restore HR111');
+      if (Number.isInteger(restore.HR20)) await this.writeDirectRegister(20, restore.HR20, 'GivHome command charge restore HR20');
       await this.writeDirectRegister(116, restore.HR116, 'GivHome command charge restore HR116');
       if (this.isCeAcCoupledProfile() && Number(restore.HR96) !== 0) {
         this.log.warn('GivHome evidence CE/AC cleanup policy: original HR96=%s observed, but cleanup keeps HR96=0 after stop; stored times/power are restored without re-enabling the charge schedule.', restore.HR96);
       }
-      if (this.isCeAcCoupledProfile()) this.clearCeAcChargeSlotMemory();
     }
     const post = await this.readChargePrestate();
     if (post.HR96 !== 0) throw new Error('charge cleanup did not confirm HR96=0');
+    if (restore) {
+      const mismatches = ['HR20', 'HR94', 'HR95', 'HR111', 'HR116']
+        .filter((label) => Number.isInteger(restore[label]) && post[label] !== restore[label]);
+      if (mismatches.length > 0) throw new Error(`charge cleanup did not restore saved settings: ${mismatches.join(',')}`);
+      if (this.isCeAcCoupledProfile()) this.clearCeAcChargeSlotMemory();
+    }
     const storedWindowState = Number(post.HR94) !== 0 || Number(post.HR95) !== 0 ? 'stored-window-disabled' : 'empty-disabled';
-    this.log.warn('GivHome command charge cleanup complete: reason=%s HR94=%s HR95=%s HR96=%s storedChargeWindowState=%s ceAcPersistentMemoryRestored=%s ceAcOriginalEnableRestored=no', reason, post.HR94, post.HR95, post.HR96, storedWindowState, memorySnapshot ? 'yes' : 'no');
+    this.log.warn('GivHome command charge cleanup complete: reason=%s HR20=%s HR94=%s HR95=%s HR96=%s HR116=%s HR242=%s storedChargeWindowState=%s ceAcPersistentMemoryRestored=%s ceAcOriginalEnableRestored=no', reason, post.HR20, post.HR94, post.HR95, post.HR96, post.HR116, post.HR242 === null ? 'n/a' : post.HR242, storedWindowState, memorySnapshot ? 'yes' : 'no');
   }
 
   buildExportPowerDecision(tileOrPlan = {}, options = {}) {
@@ -2979,6 +3182,7 @@ class GivHomeModbusPlatform {
   async applyApplianceAutomation() {
     const model = this.latestModel;
     if (!model || this.health.state !== 'online') return;
+    await this.reconcileActiveChargeTarget();
     const now = new Date();
     const cheapState = getMergedCheapState(now, this.octopusState.dispatches, this.applianceControl, this.octopusState);
     // GivHome evidence: do not create grace by adding time to normal dispatch ends.
@@ -3000,13 +3204,15 @@ class GivHomeModbusPlatform {
     this.logBatteryCarePlan(batteryCarePlanForEvidence, cheapState, model, now, signatureChanged ? 'automation-evaluation' : 'automation-supervisor-repeat');
 
     const socBelowTarget = Number.isFinite(model.socPercent) && model.socPercent < this.applianceControl.targetSoc;
-    const hasWindowEnd = cheapState.cheapWindowEnd instanceof Date && !Number.isNaN(cheapState.cheapWindowEnd.getTime());
+    const overnightEnd = cheapState.fallbackWindowEnd;
+    const hasWindowEnd = overnightEnd instanceof Date && !Number.isNaN(overnightEnd.getTime());
     const iogProtectedEnd = cheapState.protectedEnd instanceof Date && !Number.isNaN(cheapState.protectedEnd.getTime()) ? cheapState.protectedEnd : null;
     const smartProtectionActive = Boolean(this.applianceControl.features.homeBatteryProtectionDuringSmartSlots && cheapState.smartActive && iogProtectedEnd);
+    const cheapOvernightOwnsWindow = Boolean(this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive);
     const chargeEnd = smartProtectionActive ? iogProtectedEnd : cheapState.cheapWindowEnd;
     const minutes = chargeEnd instanceof Date ? Math.max(1, Math.ceil((chargeEnd.getTime() - now.getTime()) / 60000)) : 0;
-    const isIogAutoCharge = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection';
-    const isIogAutoPause = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection Pause';
+    let isIogAutoCharge = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection';
+    let isIogAutoPause = this.autoChargeActive && this.autoChargeLabel === 'Intelligent Octopus Go Home Battery Protection Pause';
     const isIogAutoProtection = isIogAutoCharge || isIogAutoPause;
     const batteryDischargeW = Number.isFinite(model.batteryDischargePowerW) ? model.batteryDischargePowerW : 0;
     const evSizedLoadW = Number.isFinite(model.loadPowerW) ? model.loadPowerW : 0;
@@ -3015,37 +3221,40 @@ class GivHomeModbusPlatform {
 
     if (this.autoChargeActive) {
       if (isIogAutoProtection) {
-        if (!smartProtectionActive) {
-          const reason = 'Intelligent Octopus Go smart/grace window ended';
+        if (cheapOvernightOwnsWindow || !smartProtectionActive) {
+          const reason = cheapOvernightOwnsWindow ? 'Cheap Overnight took command ownership' : 'Intelligent Octopus Go smart/grace window ended';
           const protectionFamily = isIogAutoPause ? 'pause' : 'charge';
-          this.log.warn('GivHome evidence Intelligent Octopus Go restore queued: reason=%s protectionMode=%s family=%s automaticMutationPath=%s', reason, this.applianceControl.iogHomeBatteryProtectionModeText || 'Charge mode', protectionFamily, this.applianceControl.automaticMutationPath);
+          this.log.warn('GivHome evidence Intelligent Octopus Go restore queued: reason=%s protectionMode=%s family=%s cheapOvernightOwnsWindow=%s automaticMutationPath=%s', reason, this.applianceControl.iogHomeBatteryProtectionModeText || 'Charge mode', protectionFamily, cheapOvernightOwnsWindow ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
           await this.cleanupApplianceCommandFamily(protectionFamily, reason);
-          this.log.warn('GivHome evidence Intelligent Octopus Go restore verified: family=%s reason=%s automaticMutationPath=%s', protectionFamily, reason, this.applianceControl.automaticMutationPath);
-          return;
+          isIogAutoCharge = false;
+          isIogAutoPause = false;
+          this.log.warn('GivHome evidence Intelligent Octopus Go restore verified: family=%s reason=%s handoff=%s automaticMutationPath=%s', protectionFamily, reason, cheapOvernightOwnsWindow ? 'cheap-overnight' : 'eco-or-next-control', this.applianceControl.automaticMutationPath);
+          if (!cheapOvernightOwnsWindow && !smartProtectionActive) return;
         }
-      } else if (!cheapState.cheapActive || !socBelowTarget) {
-        const reason = !cheapState.cheapActive ? 'cheap window ended' : 'target SOC reached';
+      } else if (!cheapOvernightOwnsWindow || !socBelowTarget) {
+        const reason = !cheapOvernightOwnsWindow ? 'configured overnight window ended' : 'target SOC reached';
         this.log.warn('GivHome evidence Cheap Overnight restore queued: reason=%s autoChargeLabel=%s automaticMutationPath=%s', reason, this.autoChargeLabel || 'unknown', this.applianceControl.automaticMutationPath);
         await this.cleanupApplianceCommandFamily('charge', reason);
-        this.log.warn('GivHome evidence Cheap Overnight restore verified: HR96=0 reason=%s automaticMutationPath=%s', reason, this.applianceControl.automaticMutationPath);
-        return;
+        this.log.warn('GivHome evidence Cheap Overnight restore verified: HR96=0 reason=%s handoff=%s automaticMutationPath=%s', reason, smartProtectionActive ? 'intelligent-octopus-go' : 'eco', this.applianceControl.automaticMutationPath);
+        if (!smartProtectionActive) return;
       }
     }
 
-    if (this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive && !cheapState.smartActive && !cheapState.graceActive && socBelowTarget && hasWindowEnd && !this.autoChargeActive) {
+    if (this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive && socBelowTarget && hasWindowEnd && !this.autoChargeActive) {
       const carePlan = getBatteryCarePlan({ model, cheapState, config: this.applianceControl, now });
-      this.logCheapOvernightPlan({ active: true, reason: 'main-overnight-cheap-window', cheapState, model, minutes, carePlan, trigger: 'fallback-cheap-window-supervisor' });
+      const cheapMinutes = Math.max(1, Math.ceil((overnightEnd.getTime() - now.getTime()) / 60000));
+      this.logCheapOvernightPlan({ active: true, reason: cheapState.smartActive || cheapState.graceActive ? 'user-configured-cheap-overnight-owns-iog-overlap' : 'main-overnight-cheap-window', cheapState, model, minutes: cheapMinutes, carePlan, trigger: 'fallback-cheap-window-supervisor' });
       await this.withManualChargeTransportGate('GivHome Cheap Overnight fallback charge', async () => {
-        this.log.warn('GivHome evidence Cheap Overnight command started: source=fallback-cheap-window minutes=%s batteryCare=%s automaticMutationPath=%s', minutes, carePlan.active ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
-        await this.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes }, { automatic: true, label: 'Cheap Overnight', startDate: now, endDate: cheapState.cheapWindowEnd, targetSoc: this.applianceControl.targetSoc, batteryCarePlan: carePlan });
+        this.log.warn('GivHome evidence Cheap Overnight command started: source=fallback-cheap-window minutes=%s batteryCare=%s smartActive=%s graceActive=%s iogCommandWritesSuppressed=yes automaticMutationPath=%s', cheapMinutes, carePlan.active ? 'yes' : 'no', cheapState.smartActive ? 'yes' : 'no', cheapState.graceActive ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
+        await this.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: cheapMinutes }, { automatic: true, label: 'Cheap Overnight', startDate: now, endDate: overnightEnd, targetSoc: this.applianceControl.targetSoc, batteryCarePlan: carePlan });
       });
       this.autoChargeActive = true;
       this.autoChargeLabel = 'Cheap Overnight';
-      this.autoChargeProtectedUntilMs = cheapState.cheapWindowEnd.getTime();
+      this.autoChargeProtectedUntilMs = overnightEnd.getTime();
       const verify = await this.readChargePrestate();
-      this.log.warn('GivHome evidence Cheap Overnight command verified: HR94=%s HR95=%s HR96=%s HR111=%s HR116=%s minutes=%s source=fallback-cheap-window automaticMutationPath=%s', verify.HR94, verify.HR95, verify.HR96, verify.HR111, verify.HR116, minutes, this.applianceControl.automaticMutationPath);
+      this.log.warn('GivHome evidence Cheap Overnight command verified: HR20=%s HR94=%s HR95=%s HR96=%s HR111=%s HR116=%s HR242=%s minutes=%s source=fallback-cheap-window iogObservesOnlyDuringCheapOvernight=yes automaticMutationPath=%s', verify.HR20, verify.HR94, verify.HR95, verify.HR96, verify.HR111, verify.HR116, verify.HR242 === null ? 'n/a' : verify.HR242, cheapMinutes, this.applianceControl.automaticMutationPath);
       if (verify.HR96 !== 1) throw new Error(`Cheap Overnight verification failed: expected HR96=1 actual=${verify.HR96}`);
-      this.log.warn('GivHome evidence Cheap Overnight charging requested: source=fallback-cheap-window soc=%s targetSoc=%s chargeRatePercent=%s estimatedChargeKw=%s windowEnd=%s automaticMutationPath=%s', model.socPercent, this.applianceControl.targetSoc, carePlan.active ? carePlan.chargeRatePercent : 'prestate-or-default', carePlan.active && Number.isFinite(carePlan.estimatedChargeKw) ? carePlan.estimatedChargeKw.toFixed(2) : 'n/a', cheapState.cheapWindowEnd.toISOString(), this.applianceControl.automaticMutationPath);
+      this.log.warn('GivHome evidence Cheap Overnight charging requested: source=fallback-cheap-window soc=%s targetSoc=%s chargeRatePercent=%s estimatedChargeKw=%s windowEnd=%s automaticMutationPath=%s', model.socPercent, this.applianceControl.targetSoc, carePlan.active ? carePlan.chargeRatePercent : 'prestate-or-default', carePlan.active && Number.isFinite(carePlan.estimatedChargeKw) ? carePlan.estimatedChargeKw.toFixed(2) : 'n/a', overnightEnd.toISOString(), this.applianceControl.automaticMutationPath);
       return;
     }
 
@@ -3065,7 +3274,12 @@ class GivHomeModbusPlatform {
       this.iogPauseSuppressedUntilMs = 0;
     }
 
-    if (smartProtectionActive && (!isIogAutoProtection || protectedUntilChanged || repairBecauseDischarging)) {
+    if (smartProtectionActive && cheapOvernightOwnsWindow) {
+      this.log.warn('GivHome evidence Intelligent Octopus Go observes only: smartActive=%s graceActive=%s protectedUntil=%s CheapOvernightActive=yes commandWrites=no handoffAtCheapEnd=yes automaticMutationPath=%s', cheapState.smartActive ? 'yes' : 'no', cheapState.graceActive ? 'yes' : 'no', iogProtectedEnd ? dateToDisplayHmm(iogProtectedEnd) : 'none', this.applianceControl.automaticMutationPath);
+      return;
+    }
+
+    if (smartProtectionActive && (!(isIogAutoCharge || isIogAutoPause) || protectedUntilChanged || repairBecauseDischarging)) {
       const carePlan = { active: false, reason: 'home-battery-protection-not-battery-care' };
       const trigger = !isIogAutoProtection ? 'smart-slot-home-battery-protection-start' : protectedUntilChanged ? 'smart-slot-home-battery-protection-extend' : 'smart-slot-home-battery-protection-repair-discharge';
       const protectionMode = this.applianceControl.iogHomeBatteryProtectionMode || 'charge';
@@ -4519,6 +4733,11 @@ class GivHomeModbusPlatform {
       const service = accessory.getService(this.Service.Lightbulb);
       if (!service) continue;
 
+      if (id === CHARGE_TARGET_ACCESSORY_ID) {
+        publish(service, this.Characteristic.On, true);
+        continue;
+      }
+
       if (id === ACCESSORY_IDS.BATTERY_LEVEL) {
         const level = batteryLevelState(model);
         publish(service, this.Characteristic.On, true);
@@ -4552,7 +4771,7 @@ class GivHomeModbusPlatform {
   markAccessoriesInactive() {
     for (const accessory of this.accessoryByUUID.values()) {
       const id = accessory.context.definitionId;
-      if (!id || id === MANUAL_CHARGE_ACCESSORY_ID || id === PREDICTED_SOLAR_ACCESSORY_ID || id === ACCESSORY_IDS.BATTERY_LEVEL) continue;
+      if (!id || id === MANUAL_CHARGE_ACCESSORY_ID || id === PREDICTED_SOLAR_ACCESSORY_ID || id === CHARGE_TARGET_ACCESSORY_ID || id === ACCESSORY_IDS.BATTERY_LEVEL) continue;
       const service = accessory.getService(this.Service.Lightbulb);
       if (!service) continue;
       service.updateCharacteristic(this.Characteristic.On, false);
