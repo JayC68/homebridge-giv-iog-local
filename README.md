@@ -20,9 +20,9 @@ Those two ideas shaped GivHome v4: **understand what the inverter is really doin
 
 ## Version and installation
 
-This is **4.0.1** for `homebridge-giv-iog-local`, based on the published stable **4.0.0** release and the owner's private Charge Target trial. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for the unchanged CH/AIO slot limit and restart-restoration limitations.
+This is **4.0.2** for `homebridge-giv-iog-local`, based on the canonical **4.0.1** release. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for the unchanged CH/AIO slot limit and restart-restoration limitations.
 
-**Charge Target** brings your preferred charging percentage into Apple Home beside Solar 2mrw. It saves one target for Cheap Overnight, IOG charge-mode protection and timed Charge tiles. See [Charge Target](docs/CHARGE_TARGET.md) for its scope and the remaining slot-limit restriction.
+**Charge Target** brings your preferred charging percentage into Apple Home beside Solar 2mrw. It saves the target for Cheap Overnight only. IOG charge-mode protection uses an independent target, defaulting to 100%; timed Charge tiles retain the configured target. See [Charge Target](docs/CHARGE_TARGET.md) for its scope and the remaining slot-limit restriction.
 
 Keep a verified backup and rollback before installation. The [release notes](RELEASE_NOTES.md) and [publication instructions](docs/RELEASING.md) record the verified scope and remaining limitations. Published releases can be installed through the Homebridge UI; v3 users should first read the [v3-to-v4 migration guide](docs/MIGRATION_V3_TO_V4.md).
 

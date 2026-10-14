@@ -173,7 +173,7 @@
         "default": 100,
         "minimum": 4,
         "maximum": 100,
-        "description": "Starting target for Cheap Overnight, Intelligent Octopus Go charge-mode protection and Charge tiles. A target saved in Apple Home is used until you change this value or choose another target in Home."
+        "description": "Starting target for Cheap Overnight and configured target for timed Charge tiles. Apple Home saves a Cheap Overnight-only override. IOG uses its separate target."
       },
       "enableChargeTargetTile": {
         "title": "Show Charge Target in Apple Home",
@@ -1150,6 +1150,14 @@
             }
           }
         }
+      },
+      "iogChargeTargetSoc": {
+        "title": "IOG battery charge target %",
+        "type": "integer",
+        "default": 100,
+        "minimum": 4,
+        "maximum": 100,
+        "description": "Independent target for IOG charge-mode battery protection. The Cheap Overnight Charge Target slider never changes this value."
       }
     },
     "required": [
@@ -1227,6 +1235,7 @@
         "octopusAccountNumber",
         "enableEvSmartWindowBatteryProtection",
         "iogHomeBatteryProtectionMode",
+        "iogChargeTargetSoc",
         "graceMinutes"
       ]
     },

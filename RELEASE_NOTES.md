@@ -1,63 +1,23 @@
-# GivHome 4.0.1 - Taking more care with overnight charging
+# GivHome 4.0.2 - Independent IOG charging target
 
-Released 10 October 2026. This promotes the privately tested Charge Target build to GivHome 4.0.1, with its charging controls unchanged.
+Release date: 14 October 2026.
 
-Charge Target now stays On when battery readings refresh or the inverter connection becomes stale. The tile is a saved target, not a charging-status indicator; these updates must not switch it Off. Your chosen percentage and the guarded inverter controls are unchanged.
+Cheap Overnight's Charge Target slider now controls Cheap Overnight only. In 4.0.1 the saved percentage was also passed to IOG, and slider changes could rewrite an active IOG charge. That unintended coupling is corrected in both paths.
 
-Cheap Overnight has a straightforward job: use the overnight period you have chosen to charge towards your chosen Battery Level.
+With a 45% overnight target, battery at 46% and an active IOG Smart Window, IOG requests its own 100% target. Moving the slider to 95% during that IOG session saves the next overnight choice without writing IOG's target.
 
-Intelligent Octopus Go also needs to follow the EV's charging periods and protect the home battery. When those periods overlap, the two need to work together.
+IOG charge-mode protection uses the independent `iogChargeTargetSoc` setting, default 100%. Existing `targetSoc` and saved Apple Home preferences are never used as an IOG target. Timed Charge tiles use the configured `targetSoc`, without the slider override. The engineering Manual Charge switch, IOG pause modes and export controls are unchanged.
 
-That is the focus of 4.0.1: giving Cheap Overnight its own time and checking the inverter's charging settings more carefully.
+Enabled Cheap Overnight retains priority throughout its configured window, including after reaching its target. At the end, verified cleanup restores the saved general settings before IOG starts with its independent target if its Smart Window remains active. A queued slider update rechecks ownership before writing.
 
-## Your target, right in Home
+CH/AIO, CE and ED use the established model-aware HR20/HR116 plan and fresh readback before enabling charge. HR242 remains read-only diagnostic information; a lower CH/AIO slot ceiling can still limit charging. Failed verification must not claim a successful target or enable a newly started charge. The original in-memory snapshot is retained for cleanup and same-owner extension.
 
-Tomorrow looks sunny. You may prefer to leave a little more room in the battery.
+Validation covers the 45% slider / 46% battery / IOG100 regression on CH/AIO, CE and ED; no IOG target writes after slider changes; overlap and end-of-window handover; saved preferences and independent configuration after restart; readback failure; unsupported profiles; queued ownership changes; and native HomeKit behavior. The release evidence records actual check results and independent review. No live inverter or Pi deployment is part of this release.
 
-The new **Charge Target** tile brings that choice into Apple Home. Its percentage is the battery level you want GivHome's charging controls to work towards. The saved choice is shared by Cheap Overnight, IOG charge-mode protection and timed Charge tiles, and survives a restart.
+Remaining limitations from 4.0.1 still apply: original CH pre-session snapshot restoration across restart is unproved, HR242 is not automatically corrected or restored, cleanup leaves HR96 disabled, and a complete live overnight boundary and original failure-recording replay remain unverified. Offline verification does not establish every model/firmware combination.
 
-Choosing a target does not start charging or change your overnight times. During a charge owned by this running GivHome instance, it checks changes to the supported general limits and keeps the original settings for cleanup. Rapid slider movements are combined into one update. The separate CH/AIO slot limit remains unchanged, so the chosen percentage is not a promise that every inverter will reach it.
+Before a separately authorised installation, keep a verified backup of the plugin, configuration, cached accessories, Eve history and flight recorder. To return to 4.0.1, stop Homebridge, restore that verified backup (or install the exact `homebridge-giv-iog-local@4.0.1` package using the existing installation method), then restart and verify logs and telemetry. Version 4.0.1 retains the slider/IOG coupling; rollback does not correct it. Restoring plugin files cannot by itself restore inverter state from a lost in-memory snapshot.
 
-## Giving Cheap Overnight its own time
+See [Charge Target](docs/CHARGE_TARGET.md), [release preparation and rollback](docs/RELEASING.md), [safety notes](docs/SAFETY.md), and [Full Changelog](CHANGELOG.md).
 
-During the configured overnight period, this build gives Cheap Overnight priority. Intelligent Octopus Go continues to follow its charging information, while holding back new battery-protection commands during that period.
-
-When Cheap Overnight finishes, GivHome ends its command and puts the saved general charging settings back before handing over to Intelligent Octopus Go if a suitable Smart Window is still active. Otherwise, charging is left off. Offline tests cover both handovers; a complete overnight boundary still needs live validation.
-
-## Checking the charging settings
-
-An inverter can hold more than one AC charging limit. Changing the general target does not necessarily change the limit attached to an individual charging period.
-
-Before temporary charging, this build reads the existing settings, compares the general AC charging controls with the requested Battery Level and checks any changes before enabling charging. It also saves the previous limit settings, writes them back when the temporary command ends and checks that they have been restored. Extending an IOG command keeps the original saved settings.
-
-On CH/All-in-One systems, GivHome also reads the separate AC Charge 1 limit (`HR242`) and reports when it differs from the requested target. We have not yet established a safe way for this build to change that limit, so it leaves it alone.
-
-**This release does not correct the separate CH/AIO slot limit.** In the owner's trial, changing HR242 from 80% to 100% through the official app restored approximately 5.7 kW of charging with the IOG schedule unchanged. This is strong evidence of that limit's effect on this inverter, not validation of automatic writes across inverter families. GivHome continues to leave HR242 unchanged, including during cleanup.
-
-## What we have checked
-
-The existing software checks, Predicted Solar tests and package checks have passed. New offline tests run the charge and restoration methods with a simulated inverter, including the 05:30 overnight boundary, overlaps with IOG, protection by charging or pausing, and refusal of unsupported target writes.
-
-Charge Target also passes tests for saved choices, slider changes, active general-limit updates and recovery from failed verification. All 36 runtime and native HomeKit tests passed on the Pi, along with five private-installer safety tests. The owner exercised the Apple Home slider, and general-limit changes were confirmed by inverter readback. Charge Target stayed lit after the telemetry-display correction; its lit state represents the saved setting, not actual charging.
-
-IOG resumed its command after two live-session restarts and used the current 15:30 dispatch end. The charge schedule was subsequently observed disabled. That does not prove restoration of the original pre-session settings across restart: the CH charge snapshot is held in memory, so resumed ownership may capture temporary settings. Cleanup deliberately leaves charging disabled rather than reinstating a previously enabled customer schedule.
-
-These checks do not prove a whole night's charging or every model and firmware combination. Before the first trial, all 42 installed stable source files matched the published 4.0.0 package. A complete replay of the original failure remains outstanding.
-
-The [release preparation notes](docs/RELEASING.md) record the remaining checks in detail.
-
-## Your existing Home
-
-This build keeps the existing accessory identities, Eve Energy history and Predicted Solar implementation from 4.0.0. Charge Target has its own new identity and appears when supported charging controls are enabled. You can hide it in Homebridge settings. Apple Home supplies the standard dimmer interface; it is a target selector, not a charging on/off switch.
-
-Before an approved installation, keep a verified backup of the current plugin, Homebridge settings, accessories, energy history and flight recorder, with a way to return to the previous version.
-
-If you are moving from v3, start with the [migration guide](docs/MIGRATION_V3_TO_V4.md), [safety notes](docs/SAFETY.md) and [troubleshooting guide](docs/TROUBLESHOOTING.md).
-
-## Full Changelog
-
-[Full Changelog](CHANGELOG.md) tells the story of v4 and the direct-Modbus work that led to it. The [earlier v3 history](docs/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) are also available.
-
-**Full Changelog comparison:** [v4.0.0...v4.0.1](https://github.com/JayC68/homebridge-giv-iog-local/compare/v4.0.0...v4.0.1).
-
-The comparison links the published stable 4.0.0 source to this release.
+**Full Changelog comparison:** [v4.0.1...v4.0.2](https://github.com/JayC68/homebridge-giv-iog-local/compare/v4.0.1...v4.0.2).

@@ -131,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.1',
-      stage: 'GivHome 4.0.1'
+      version: '4.0.2',
+      stage: 'GivHome 4.0.2'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -643,23 +643,18 @@ class GivHomeModbusPlatform {
 
   async reconcileActiveChargeTarget() {
     if (this.chargeTargetReconcileInFlight) return this.chargeTargetReconcileInFlight;
-    if (!this.activeChargeTarget || (this.activeChargeTarget.targetSoc === this.applianceControl.targetSoc && !this.chargeTargetError)
+    if (this.activeChargeTarget?.source !== 'Cheap Overnight' || (this.activeChargeTarget.targetSoc === this.applianceControl.targetSoc && !this.chargeTargetError)
       || !this.chargeTargetTileEnabled() || this.health.state !== 'online') return;
     const run = this.withManualChargeTransportGate('GivHome Charge Target update', async () => {
       const active = this.activeChargeTarget;
       let targetSoc = this.applianceControl.targetSoc;
-      if (!this.chargeTargetTileEnabled() || this.health.state !== 'online' || !active
+      if (!this.chargeTargetTileEnabled() || this.health.state !== 'online' || active?.source !== 'Cheap Overnight'
         || (active.targetSoc === targetSoc && !this.chargeTargetError) || this.applianceSnapshots.get('charge')?.source !== active.source) return;
       const ownerWindowOpen = () => {
         if (this.activeChargeTarget !== active || !this.chargeTargetTileEnabled()
           || this.health.state !== 'online' || Date.now() >= active.endAtMs) return false;
         const cheapState = this.currentCheapStateForStatusTiles();
-        if (active.source === 'Cheap Overnight') return this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive;
-        if (active.source === 'Intelligent Octopus Go Home Battery Protection') {
-          return this.applianceControl.features.homeBatteryProtectionDuringSmartSlots && cheapState.smartActive
-            && !(this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive);
-        }
-        return true;
+        return this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive;
       };
       if (!ownerWindowOpen()) return;
       const before = await this.readChargePrestate();
@@ -2762,7 +2757,11 @@ class GivHomeModbusPlatform {
     if (original.HR96 !== 0 && !options.automatic) throw new Error(`charge start refused: HR96 already enabled (${original.HR96})`);
     const carePlan = options.batteryCarePlan;
     const powerPercent = carePlan?.active ? carePlan.chargeRatePercent : validPercentOrDefault(options.powerPercent ?? original.HR111, 100);
-    const targetSoc = validPercentOrDefault(options.targetSoc ?? this.applianceControl.targetSoc ?? original.HR116, 100);
+    const source = options.label || tileOrPlan.displayName || 'Charge';
+    const ownerTarget = source === 'Cheap Overnight' ? this.applianceControl.targetSoc
+      : source === 'Intelligent Octopus Go Home Battery Protection' ? this.applianceControl.iogChargeTargetSoc ?? 100
+        : this.configuredChargeTarget ?? 100;
+    const targetSoc = validPercentOrDefault(options.targetSoc ?? ownerTarget, 100);
     const targetPlan = buildChargeTargetReconciliationPlan(original, {
       serial: this.inverterSerial,
       targetSoc
@@ -2773,7 +2772,6 @@ class GivHomeModbusPlatform {
       || ![original.HR111, original.HR116].every((value) => Number.isInteger(value) && value >= 0 && value <= 100)) {
       throw new Error('charge start refused: fresh charge settings are incomplete or invalid');
     }
-    const source = options.label || tileOrPlan.displayName || 'Charge';
     const saved = this.applianceSnapshots.get('charge');
     if (saved && saved.source !== source) throw new Error('charge start refused: previous charge owner must finish cleanup before handover');
     if (!saved) {
@@ -3285,10 +3283,10 @@ class GivHomeModbusPlatform {
       const protectionMode = this.applianceControl.iogHomeBatteryProtectionMode || 'charge';
       const protectionModeText = this.applianceControl.iogHomeBatteryProtectionModeText || 'Charge mode';
       this.logBatteryCarePlan(getBatteryCarePlan({ model, cheapState, config: this.applianceControl, now }), cheapState, model, now, trigger);
-      this.log.warn('GivHome evidence Intelligent Octopus Go protection decision: trigger=%s protectionMode=%s smartActive=%s graceActive=%s soc=%s targetSoc=%s batteryDischargeW=%s loadW=%s protectedUntil=%s previousProtectedUntil=%s willQueue=yes reason=continuous-enforcement automaticMutationPath=%s', trigger, protectionModeText, cheapState.smartActive ? 'yes' : 'no', cheapState.graceActive ? 'yes' : 'no', model.socPercent, this.applianceControl.targetSoc, batteryDischargeW, evSizedLoadW, iogProtectedEnd ? dateToDisplayHmm(iogProtectedEnd) : 'none', this.autoChargeProtectedUntilMs ? dateToDisplayHmm(new Date(this.autoChargeProtectedUntilMs)) : 'none', this.applianceControl.automaticMutationPath);
+      this.log.warn('GivHome evidence Intelligent Octopus Go protection decision: trigger=%s protectionMode=%s smartActive=%s graceActive=%s soc=%s targetSoc=%s batteryDischargeW=%s loadW=%s protectedUntil=%s previousProtectedUntil=%s willQueue=yes reason=continuous-enforcement automaticMutationPath=%s', trigger, protectionModeText, cheapState.smartActive ? 'yes' : 'no', cheapState.graceActive ? 'yes' : 'no', model.socPercent, this.applianceControl.iogChargeTargetSoc ?? 100, batteryDischargeW, evSizedLoadW, iogProtectedEnd ? dateToDisplayHmm(iogProtectedEnd) : 'none', this.autoChargeProtectedUntilMs ? dateToDisplayHmm(new Date(this.autoChargeProtectedUntilMs)) : 'none', this.applianceControl.automaticMutationPath);
       if (protectionMode === 'charge') {
         await this.withManualChargeTransportGate('GivHome evidence smart-slot home-battery protection charge-mode enforce', async () => {
-          await this.startTimedChargeCommand({ displayName: 'Intelligent Octopus Go Home Battery Protection', minutes }, { automatic: true, label: 'Intelligent Octopus Go Home Battery Protection', startDate: now, endDate: iogProtectedEnd, targetSoc: this.applianceControl.targetSoc, powerPercent: 100, batteryCarePlan: carePlan });
+          await this.startTimedChargeCommand({ displayName: 'Intelligent Octopus Go Home Battery Protection', minutes }, { automatic: true, label: 'Intelligent Octopus Go Home Battery Protection', startDate: now, endDate: iogProtectedEnd, targetSoc: this.applianceControl.iogChargeTargetSoc ?? 100, powerPercent: 100, batteryCarePlan: carePlan });
         });
         this.autoChargeLabel = 'Intelligent Octopus Go Home Battery Protection';
       } else {

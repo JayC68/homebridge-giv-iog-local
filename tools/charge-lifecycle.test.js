@@ -161,3 +161,41 @@ test('an active IOG command is cleaned before Cheap Overnight takes ownership', 
   assert.equal(registers.HR95, 530);
   assert.equal(platform.applianceSnapshots.get('charge').HR116, 40);
 });
+
+for (const serial of ['CH2344G083', 'CE2225G298', 'ED2151G182']) {
+  test(`${serial}: overnight45 to IOG100 handover verifies new limits after restoration`, async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-14T01:00:00+01:00').getTime() });
+    const { platform: p, registers, writes } = fixture(serial);
+    p.applianceControl.targetSoc = 45;
+    p.applianceControl.iogChargeTargetSoc = 100;
+    p.octopusState.dispatches = [{ start: new Date('2026-10-14T00:30:00+01:00'), end: new Date('2026-10-14T06:00:00+01:00') }];
+    await p.applyApplianceAutomation();
+    assert.equal(registers.HR116, 45);
+    const count = writes.length;
+    t.mock.timers.setTime(new Date('2026-10-14T05:30:00+01:00').getTime());
+    p.latestModel.socPercent = 46;
+    await p.applyApplianceAutomation();
+    assert.equal(p.autoChargeLabel, 'Intelligent Octopus Go Home Battery Protection');
+    assert.equal(registers.HR116, 100);
+    assert.equal(registers.HR20, 0);
+    assert.equal(registers.HR96, 1);
+    assert.deepEqual(writes[count], [96, 0]);
+    assert.equal(p.applianceSnapshots.get('charge').HR116, 40);
+    assert.equal(registers.HR242, 80);
+  });
+}
+
+test('failed IOG target readback cannot enable charging or claim active ownership', async () => {
+  const { platform: p, registers, writes } = fixture();
+  p.applianceControl.targetSoc = 45;
+  const normalWrite = p.writeDirectRegister;
+  p.writeDirectRegister = async (register, value) => { if (register !== 116) await normalWrite(register, value); };
+  await assert.rejects(p.startTimedChargeCommand({ minutes: 30 }, { automatic: true, label: 'Intelligent Octopus Go Home Battery Protection' }), /pre-enable readback/);
+  assert.equal(registers.HR96, 0);
+  assert.ok(!writes.some(([register, value]) => register === 96 && value === 1));
+  assert.equal(p.activeChargeTarget, undefined);
+  assert.equal(p.applianceSnapshots.get('charge').HR116, 40);
+  p.writeDirectRegister = normalWrite;
+  await p.cleanupApplianceCommandFamily('charge', 'failed IOG start');
+  assert.equal(registers.HR116, 40);
+});

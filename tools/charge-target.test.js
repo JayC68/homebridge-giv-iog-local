@@ -57,6 +57,7 @@ function fixture(t, serial = 'CH2344G083') {
       updatePlatformAccessories() {},
       unregisterPlatformAccessories(_plugin, _platform, items) { removals.push(...items); }
     },
+    currentCheapStateForStatusTiles: () => ({ fallbackActive: true }),
     readChargePrestate: async () => ({ ...registers }),
     writeDirectRegister: async (register, value) => { writes.push([register, value]); registers[`HR${register}`] = value; },
     withManualChargeTransportGate: async (_label, run) => run(),
@@ -152,7 +153,7 @@ for (const serial of ['CH2344G083', 'CE2225G298', 'ED2151G182']) {
   test(`${serial}: active target changes verify only general limits and preserve cleanup snapshot`, async (t) => {
     const { platform: p, registers, writes } = fixture(t, serial);
     const original = { ...registers };
-    await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+    await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
     const saved = p.applianceSnapshots.get('charge');
     const before = writes.length;
     p.setChargeTargetFromHome(60);
@@ -180,7 +181,7 @@ test('offline and unowned sessions accept a preference without inverter writes',
   p.setChargeTargetFromHome(75);
   await p.reconcileActiveChargeTarget();
   assert.deepEqual(writes, []);
-  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
   p.setChargeTargetFromHome(65);
   p.health.state = 'stale';
   const count = writes.length;
@@ -194,7 +195,7 @@ test('offline and unowned sessions accept a preference without inverter writes',
 
 test('externally changed charge times refuse target writes', async (t) => {
   const { platform: p, registers, writes } = fixture(t);
-  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
   p.setChargeTargetFromHome(65);
   registers.HR95 = 2359;
   const count = writes.length;
@@ -207,7 +208,7 @@ test('externally changed charge times refuse target writes', async (t) => {
 test('failed readback exposes a fault, preserves preference and retries without replacing prestate', async (t) => {
   const { platform: p, registers } = fixture(t);
   p.ensureChargeTargetAccessory();
-  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
   p.setChargeTargetFromHome(65);
   const write = p.writeDirectRegister;
   p.writeDirectRegister = async (register, value) => { if (register !== 116) await write(register, value); };
@@ -225,7 +226,7 @@ test('failed readback exposes a fault, preserves preference and retries without 
 
 test('a queued slider update rechecks ownership and newest preference before writing', async (t) => {
   const { platform: p, writes } = fixture(t);
-  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
   p.setChargeTargetFromHome(75);
   let release;
   p.withManualChargeTransportGate = async (_label, run) => { await new Promise((resolve) => { release = resolve; }); return run(); };
@@ -239,7 +240,7 @@ test('a queued slider update rechecks ownership and newest preference before wri
 
 test('selecting the previous target after a partial failure still reconciles the enable flag', async (t) => {
   const { platform: p, registers } = fixture(t);
-  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
   p.setChargeTargetFromHome(65);
   const write = p.writeDirectRegister;
   p.writeDirectRegister = async (register, value) => { if (register !== 116) await write(register, value); };
@@ -263,7 +264,7 @@ test('IOG target edits do not write during Cheap Overnight ownership', async (t)
   assert.equal(writes.length, count);
 });
 
-test('IOG charge-mode protection adopts the slider target without taking a new snapshot', async (t) => {
+test('IOG charge-mode protection ignores slider changes and preserves its original snapshot', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-10T13:00:00+01:00').getTime() });
   const { platform: p, registers, writes } = fixture(t);
   p.octopusState.dispatches = [{ start: new Date('2026-10-10T13:00:00+01:00'), end: new Date('2026-10-10T16:00:00+01:00') }];
@@ -272,7 +273,9 @@ test('IOG charge-mode protection adopts the slider target without taking a new s
   p.setChargeTargetFromHome(65);
   const count = writes.length;
   await p.applyApplianceAutomation();
-  assert.deepEqual(writes.slice(count), [[20, 1], [116, 65]]);
+  assert.deepEqual(writes.slice(count), []);
+  assert.equal(registers.HR116, 100);
+  assert.equal(registers.HR20, 0);
   assert.equal(p.autoChargeLabel, 'Intelligent Octopus Go Home Battery Protection');
   assert.equal(p.applianceSnapshots.get('charge'), snapshot);
   assert.equal(registers.HR96, 1);
@@ -299,7 +302,7 @@ test('IOG window crossing into Cheap Overnight during a read suppresses target w
 test('expired timed charge refuses a late target update', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-10T13:00:00+01:00').getTime() });
   const { platform: p, writes } = fixture(t);
-  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
   p.setChargeTargetFromHome(65);
   t.mock.timers.setTime(new Date('2026-10-10T13:30:00+01:00').getTime());
   const count = writes.length;
@@ -321,4 +324,67 @@ test('lowering overnight target below SOC cleans up; raising it starts with the 
   assert.equal(registers.HR116, 70);
   assert.equal(registers.HR96, 1);
   assert.equal(p.applianceSnapshots.get('charge').HR116, 40);
+});
+
+for (const serial of ['CH2344G083', 'CE2225G298', 'ED2151G182']) {
+  test(`${serial}: SOC46 slider45 starts IOG100; slider95 sends no target writes`, async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-14T13:00:00+01:00').getTime() });
+    const { platform: p, registers, writes } = fixture(t, serial);
+    p.latestModel.socPercent = 46;
+    p.setChargeTargetFromHome(45);
+    p.octopusState.dispatches = [{ start: new Date('2026-10-14T12:00:00+01:00'), end: new Date('2026-10-14T16:00:00+01:00') }];
+    await p.applyApplianceAutomation();
+    assert.equal(p.autoChargeLabel, 'Intelligent Octopus Go Home Battery Protection');
+    assert.equal(registers.HR116, 100);
+    assert.equal(registers.HR20, 0);
+    assert.equal(registers.HR96, 1);
+    const count = writes.length;
+    p.setChargeTargetFromHome(95);
+    await p.reconcileActiveChargeTarget();
+    await p.applyApplianceAutomation();
+    assert.deepEqual(writes.slice(count), []);
+    assert.equal(registers.HR242, 80);
+    assert.ok(!writes.some(([register]) => register === 242));
+  });
+}
+
+test('IOG explicit target is independent of saved preference and survives rebuilding configuration', async (t) => {
+  const { platform: p, registers } = fixture(t);
+  p.applianceControl = { ...p.applianceControl, targetSoc: 70, iogChargeTargetSoc: buildApplianceControlConfig({ iogChargeTargetSoc: 90 }).iogChargeTargetSoc };
+  p.configuredChargeTarget = 70;
+  p.setChargeTargetFromHome(45);
+  const restored = buildApplianceControlConfig({ targetSoc: 70, iogChargeTargetSoc: 90 });
+  assert.equal(loadChargeTarget(p.chargeTargetFile, p.chargeTargetIdentity, 70), 45);
+  assert.equal(restored.iogChargeTargetSoc, 90);
+  assert.equal(buildApplianceControlConfig({ targetSoc: 45 }).iogChargeTargetSoc, 100);
+  await p.startTimedChargeCommand({ minutes: 30 }, { automatic: true, label: 'Intelligent Octopus Go Home Battery Protection' });
+  assert.equal(registers.HR116, 90);
+});
+
+test('timed Charge keeps configured target and ignores Cheap Overnight slider edits', async (t) => {
+  const { platform: p, registers, writes } = fixture(t);
+  p.configuredChargeTarget = 80;
+  p.setChargeTargetFromHome(45);
+  await p.startTimedChargeCommand({ displayName: 'Charge 30m', minutes: 30 });
+  assert.equal(registers.HR116, 80);
+  const count = writes.length;
+  p.setChargeTargetFromHome(95);
+  await p.reconcileActiveChargeTarget();
+  assert.equal(registers.HR116, 80);
+  assert.equal(writes.length, count);
+});
+
+test('queued Cheap Overnight reconciliation rechecks owner after handover to IOG', async (t) => {
+  const { platform: p, writes } = fixture(t);
+  await p.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: 30 });
+  p.setChargeTargetFromHome(45);
+  let release;
+  p.withManualChargeTransportGate = async (_label, run) => { await new Promise(resolve => { release = resolve; }); return run(); };
+  const pending = p.reconcileActiveChargeTarget();
+  p.activeChargeTarget = { ...p.activeChargeTarget, source: 'Intelligent Octopus Go Home Battery Protection' };
+  p.applianceSnapshots.set('charge', { source: p.activeChargeTarget.source });
+  const count = writes.length;
+  release();
+  await pending;
+  assert.equal(writes.length, count);
 });

@@ -10,7 +10,7 @@ const notes = read('RELEASE_NOTES.md');
 const changelog = read('CHANGELOG.md');
 const archive = read('docs/CHANGELOG_V3.md');
 const readme = read('README.md');
-const tagBase = 'https://github.com/JayC68/homebridge-giv-iog-local/blob/v4.0.1/';
+const tagBase = 'https://github.com/JayC68/homebridge-giv-iog-local/blob/v4.0.2/';
 
 // A GitHub release body needs absolute file links into its tagged source tree.
 const githubBody = notes.replace(/\]\(([^)]+)\)/g, (link, target) => {
@@ -21,22 +21,14 @@ const githubBody = notes.replace(/\]\(([^)]+)\)/g, (link, target) => {
 if (process.argv.includes('--github-body')) {
   process.stdout.write(githubBody);
 } else {
-  assert.ok(['4.0.1-unreleased.2', '4.0.1'].includes(pkg.version), 'unexpected release version');
-  assert.match(notes, /^# GivHome 4\.0\.1 /);
-  assert.match(changelog, /^## 4\.0\.1 /m);
-  if (pkg.version === '4.0.1-unreleased.2') {
-    assert.match(notes, /\*\*Unreleased\.\*\*/);
-    assert.ok(notes.includes(pkg.version), 'release notes must name the exact candidate');
-    assert.match(changelog, /^## 4\.0\.1 - Unreleased$/m);
-    assert.ok(readme.includes(`**${pkg.version}**`), 'README must name the exact candidate');
-  } else {
-    assert.doesNotMatch(notes, /4\.0\.1-(?:offline|unreleased)|Unreleased|date is pending/);
-    assert.doesNotMatch(changelog.split(/^## 4\.0\.0 /m)[0], /4\.0\.1-(?:offline|unreleased)|Unreleased/);
-    assert.doesNotMatch(readme, /4\.0\.1-(?:offline|unreleased)|offline review/);
-  }
+  assert.equal(pkg.version, '4.0.2');
+  assert.match(notes, /^# GivHome 4\.0\.2 /);
+  assert.match(changelog, /^## 4\.0\.2 /m);
+  assert.ok(readme.includes('**4.0.2**'));
+  assert.doesNotMatch(notes, /Unreleased|date is pending/);
   assert.match(readme, /\[Release Notes\]\(RELEASE_NOTES\.md\)/);
   assert.match(readme, /\[Full Changelog\]\(CHANGELOG\.md\)/);
-  assert.match(notes, /compare\/v4\.0\.0\.\.\.v4\.0\.1/);
+  assert.match(notes, /compare\/v4\.0\.1\.\.\.v4\.0\.2/);
   assert.match(notes, /HR242|slot-specific limit/);
   for (const version of ['4.0.0', '4.0.0-beta.3', '1.3.1', '1.3.0', '1.2.0']) {
     assert.ok(changelog.includes(`## ${version} `), `missing history ${version}`);
@@ -54,6 +46,6 @@ if (process.argv.includes('--github-body')) {
       assert.ok(fs.existsSync(path.join(root, target)), `broken local link in ${file}: ${target}`);
     }
   }
-  assert.equal(read('docs/GITHUB_RELEASE_v4.0.1.md'), githubBody, 'GitHub body differs from release notes');
+  assert.equal(read('docs/GITHUB_RELEASE_v4.0.2.md'), githubBody, 'GitHub body differs from release notes');
   console.log('PASS release notes, full changelog, archived history, links and GitHub release body');
 }

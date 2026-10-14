@@ -1,3 +1,21 @@
+# GivHome 4.0.2 release record
+
+The owner authorises design, implementation, regression testing, independent audit, GitHub push and npm publication. No live Pi deployment or inverter writes are authorised. Baseline is canonical `release/v4.0.1` commit `39681e6e0ffa7594b0c951a0003304d9d39407fc`; legacy main is outdated.
+
+Build `release/v4.0.2` and tag `v4.0.2` only after syntax, runtime, native HAP, documentation, package and dependency audit checks pass and independent review is resolved. The trusted-publishing workflow reruns checks and verifies the exact reviewed tarball SHA-256 before npm publication. Verify the remote commit/tag, workflow success, registry version/latest, and byte-identical public tarball. GitHub publication alone does not establish npm publication.
+
+The evidence bundle records design, test output, independent review, source diff, package manifest and integrity. Retain baseline and source archives without secrets, dependencies or live recordings.
+
+## Rollback for a separately authorised installation
+
+Before installing, stop Homebridge and make a verified backup of plugin files, configuration, cached accessories, Eve history and flight recorder. Record inverter settings using the established read-only procedure. Keep the exact previous npm package or backup accessible. Installation is a separate task.
+
+If rollback is needed, stop Homebridge, restore the verified previous plugin and associated backup as required, or install exact `homebridge-giv-iog-local@4.0.1` via the existing installation method. Restart and inspect logs, telemetry and settings. Preserve evidence before replacing files. Do not assume a package rollback restores an inverter snapshot lost at restart; do not improvise register writes. 4.0.1 still contains the slider/IOG coupling.
+
+HR242 remains diagnostic-only. Original CH pre-session restoration across restart, full live overnight boundary and complete failure-recording replay remain unproved. Cleanup keeps HR96 disabled.
+
+## Previous 4.0.1 release record
+
 # GivHome 4.0.1 release record
 
 The owner authorised promotion of the privately tested Charge Target correction, GitHub publication and npm publication on 10 October 2026. Version 4.0.1 changes runtime identity and release documentation from the tested private build; it does not add HR242 writes or change charge ownership policy. Publication does not authorise another Pi installation.

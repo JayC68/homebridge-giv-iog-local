@@ -112,3 +112,18 @@ test('real platform contains a corrupt preference without losing telemetry setup
   restored.ensureChargeTargetAccessory();
   assert.ok(restored.chargeTargetService);
 });
+
+test('real constructor reload isolates default and explicit IOG targets from saved overnight slider', (t) => {
+  const directory = storage(t);
+  const first = makePlatform(t, directory, { targetSoc: 70, iogChargeTargetSoc: 90 }).platform;
+  first.setChargeTargetFromHome(45);
+  const restored = makePlatform(t, directory, { targetSoc: 70, iogChargeTargetSoc: 90 }).platform;
+  assert.equal(restored.applianceControl.targetSoc, 45);
+  assert.equal(restored.configuredChargeTarget, 70);
+  assert.equal(restored.applianceControl.iogChargeTargetSoc, 90);
+  const defaultIog = makePlatform(t, directory, { targetSoc: 70 }).platform;
+  assert.equal(defaultIog.applianceControl.targetSoc, 45);
+  assert.equal(defaultIog.applianceControl.iogChargeTargetSoc, 100);
+  defaultIog.setChargeTargetFromHome(95);
+  assert.equal(defaultIog.applianceControl.iogChargeTargetSoc, 100);
+});

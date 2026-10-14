@@ -2,7 +2,13 @@
 
 This is the story of GivHome v4 and the direct-Modbus work that led to it. The [earlier v3 changelog](docs/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) keep the earlier public history available too.
 
-[Release notes for 4.0.1](RELEASE_NOTES.md) explain the current work and what we still need to check. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.2](RELEASE_NOTES.md) explain the current work and what we still need to check. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.2 - 2026-10-14
+
+Corrected the unintended sharing of Cheap Overnight's saved Charge Target with IOG. IOG now uses independent `iogChargeTargetSoc` (default 100%) for command resolution and decision logging. Slider reconciliation requires an active Cheap Overnight owner and rechecks ownership on the transport queue. Timed Charge uses configured `targetSoc`; engineering Manual Charge and export remain unchanged.
+
+Retained Cheap Overnight window priority, verified cleanup before IOG handover, original snapshots and model-aware HR20/HR116 readback. HR242 stays diagnostic-only. Added regressions for slider45/SOC46/IOG100, slider edits during IOG, queued handover, distinct targets at the overnight boundary, configuration/reload isolation, timed Charge and failed IOG readback. No live Pi deployment or inverter changes are authorised by this release task. Existing restart-restoration and live-boundary limitations remain.
 
 ## 4.0.1 - 2026-10-10
 
