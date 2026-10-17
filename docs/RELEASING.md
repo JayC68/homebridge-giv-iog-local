@@ -1,18 +1,16 @@
-# Beta.3 candidate release gates
+# Beta.3 release preparation
 
-Base: verified remote `v4.0.3-beta.2`, commit `7619bca75416095626ba947db9711f4a2b0dff9c`. Default `main` remains the legacy v3 line. Build branch: `release/v4.0.3-beta-3`. Package identity remains `homebridge-giv-iog-local`.
+Base: verified remote `v4.0.3-beta.2`, commit `7619bca75416095626ba947db9711f4a2b0dff9c`. Default `main` remains the legacy v3 line. Release branch: `release/v4.0.3-beta-3`. Package identity remains `homebridge-giv-iog-local`.
 
-This task authorises implementation, isolated validation and GitHub/npm publication after gates pass. It does not authorise Homebridge installation or live inverter writes. A candidate branch can be pushed for review without a release tag or npm publication.
+On 17 October 2026, the project owner explicitly authorised publishing beta.3 through GitHub and npm without waiting for the physical Pi soak: Homebridge beta participation is opt-in, and local observation is independently off by default. This supersedes the earlier prepublication soak requirement for this specific beta. It does not qualify hardware performance or authorise automatic charging.
 
-Run syntax checks, existing regressions, native HomeKit checks, observation fault/privacy/accuracy tests, accelerated retention, dependency audit, source-to-package review and tests against the packed package. Compare changed control paths with beta.2; preserve the exact prior rollback package.
+Keep `docs/OBSERVATION_QUALIFICATION.json` pending for physical tests. Its separate beta-publication record documents this approval. The verifier's `--beta-publication` mode accepts only this version, matching runtime, default-off foundation, privacy/fault checks and explicit owner approval; it does not relabel pending hardware results as passed. Without that mode, hardware qualification remains required. Prepublication and trusted publishing use the explicit beta mode.
 
-Physical qualification is also required: matched enabled/disabled 72-hour runs on a declared minimum Pi and a representative busier Pi, under normal Homebridge load. Record incremental CPU, retained heap, RSS, event-loop and command latency, bounded storage/queue behaviour, restart recovery and failure responsiveness. Exercise storage faults in an isolated simulator, without modifying a live inverter. Do not fabricate hardware results or count accelerated desktop replay as the soak.
+Before publication: syntax checks, regressions, native HomeKit checks, observation fault/privacy/accuracy tests, accelerated retention, dependency audit, source-to-package review and tests against the packed package. Compare changed control paths with beta.2. Regenerate the GitHub release body, freeze the reviewed tarball SHA-256 and run Node 22/24 CI. Publish only that reviewed tarball through trusted publishing to `beta`; leave `latest` at 4.0.2. Verify remote commit/tag, workflow, GitHub prerelease and byte-identical public npm tarball before reporting completion.
 
-`docs/OBSERVATION_QUALIFICATION.json` is pending until this work is evidenced. `tools/verify-observation-qualification.js` binds the qualification record to a runtime hash and checks the resource budgets. This is a guard against accidental publication, not independent proof of measurements: inspect the referenced raw evidence. npm prepublication and the trusted publishing workflow both require this gate. The candidate CI may run with the gate pending; it must never publish.
+Continue the RSS investigation and paired physical Pi evaluation before claiming resource compliance. Do not count accelerated desktop replay as a real-time soak or change global Node heap limits to hide memory use. Future automatic planning needs its own qualification and explicit activation.
 
-After all checks pass: update the candidate-status wording, regenerate the GitHub body, freeze the reviewed package SHA-256, rerun validation and record the qualification hash. Publish the exact reviewed tarball through trusted publishing to `beta` only. Leave `latest` at 4.0.2. Verify remote commit/tag, successful workflow, GitHub prerelease, npm version/dist-tag and byte-identical downloaded tarball before reporting release completion.
-
-For a separately authorised installation, stop Homebridge and verify backups of package/config/accessory cache/Eve/Agile/flight recorder/charging and Emergency Stop state. Preserve the observation directory too. Beta.2 ignores that directory on rollback; do not delete unrelated state. A package rollback cannot undo inverter registers or bypass an Emergency Stop recovery hold.
+This publication does not install on Homebridge or authorise live inverter testing. For a separately authorised installation, stop Homebridge and verify backups of package/config/accessory cache/Eve/Agile/flight recorder/charging and Emergency Stop state. Preserve the observation directory too. Beta.2 ignores it on rollback; keep other state intact. A package rollback cannot undo inverter registers or bypass an Emergency Stop recovery hold.
 
 ---
 

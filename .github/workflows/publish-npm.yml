@@ -30,7 +30,7 @@ jobs:
 
       - name: Verify release
         run: |
-          node tools/verify-observation-qualification.js
+          node tools/verify-observation-qualification.js --beta-publication
           test "$(node -p 'require("./package.json").version')" = "4.0.3-beta.3"
           npm ci --ignore-scripts
           for file in index.js lib/*.js tools/*.js; do node --check "$file"; done
@@ -41,7 +41,7 @@ jobs:
       - name: Build and verify reviewed package
         run: |
           npm pack
-          echo '683dff4ea202780c1f1a18f1f7fc5cd26e48b90d21976240f7632ab34f265d03  homebridge-giv-iog-local-4.0.3-beta.3.tgz' | sha256sum --check
+          echo '1e4eb35c6df2e0392a79d1dada0198cf788173e7dcf0dd3c46cf9b9058ea9aa7  homebridge-giv-iog-local-4.0.3-beta.3.tgz' | sha256sum --check
 
       - name: Publish with trusted publishing
         run: npm publish homebridge-giv-iog-local-4.0.3-beta.3.tgz --access public --tag beta

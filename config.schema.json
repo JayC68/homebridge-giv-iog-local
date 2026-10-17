@@ -1323,7 +1323,7 @@
     {
       "type": "fieldset",
       "title": "Automatic Solar-Aware: local learning foundation",
-      "description": "Help GivHome learn before it plans. This beta can observe your installation using existing readings; it cannot enable automatic charging. Data stays on your device. Storage and queues are capped, and missing readings are marked as gaps. Pi performance qualification is still required before release. See the local-learning guide for privacy, retention and limits.",
+      "description": "Help GivHome learn before it plans. This beta can observe your installation using existing readings; it cannot enable automatic charging. Data stays on your device. Storage and queues are capped, and missing readings are marked as gaps. Pi CPU and memory performance are still being evaluated in this opt-in beta. See the local-learning guide for privacy, retention and limits.",
       "items": [
         "enableSolarObservation",
         "solarObservationResetKey"

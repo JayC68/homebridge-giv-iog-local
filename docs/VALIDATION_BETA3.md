@@ -1,15 +1,15 @@
-# Beta.3 candidate validation — 17 October 2026
+# Beta.3 validation — 17 October 2026
 
-**Candidate only. Publication is blocked.** Runtime SHA-256: `c85211139c3249ce0c62b2aab36ad825634d3cd0055a7778e3e3ccd2af116cc7`. This hash covers the entry point, configuration schema, package declarations and all runtime library files. Recheck it against the qualification record before publication.
+**Opt-in beta publication authorised; physical Pi qualification remains pending.** Runtime SHA-256: `31308c447c1d5c5b42576fb1c700ad3e3319f105c8cde10397a4d108b42b2df6`. This hash covers the entry point, configuration schema, package declarations and all runtime library files. Recheck it against the qualification record before publication.
 
 ## Automated checks
 
 - Existing charge/ownership regressions: 46 passed.
 - Existing adversarial Solar-Aware/Emergency Stop cases: 52 passed.
-- New local-observation cases: 38 passed, including analytical energy traces, gaps/clock changes/DST, context changes, immutable forecast revisions, corrupt/partial storage, restart/reset, queue pressure, storage backoff, privacy allowlists and network traps.
-- Native HomeKit cases: 9 passed with Homebridge 2.4.0 / HAP 2.2.2; repeated with Homebridge 1.11.1 / HAP 0.14.0. Total: 145 distinct automated cases, with HomeKit exercised on both major lines.
+- New local-observation cases: 41 passed, including analytical energy traces, gaps/clock changes/DST, context changes, immutable forecast revisions, corrupt/partial storage, restart/reset, queue pressure, storage backoff, privacy allowlists and network traps, plus explicit beta publication approval and rejection of stable/default-on/automatic-control misuse.
+- Native HomeKit cases: 9 passed with Homebridge 2.4.0 / HAP 2.2.2; repeated with Homebridge 1.11.1 / HAP 0.14.0. Total: 148 distinct automated cases, with HomeKit exercised on both major lines.
 - Source/release-note/forecast harness checks pass. Existing schema properties and UI groups are unchanged; all existing control, safety, Agile and Eve library modules are byte-identical to beta.2. Entry-point changes add isolated observer hooks and release identity. Forecast request URLs and published results are preserved in the on/off comparison.
-- Node 24.19.0 on macOS arm64 used locally. Node 22/24 Linux candidate CI is required separately. Dependency audit: zero reported vulnerabilities. The prior packed-package pass will be repeated after the final candidate freeze.
+- Node 24.19.0 on macOS arm64 used locally. Node 22/24 Linux CI passed for the foundation candidate; the final publication revision is checked again. Dependency audit: zero reported vulnerabilities. Source and packed-package checks are repeated for the final release archive.
 
 ## Accelerated retention and resource investigation
 
@@ -30,11 +30,11 @@ The accelerated harness includes synthetic object creation, assertions, filesyst
 
 An earlier file-index implementation repeatedly sorted/scanned its complete directory on writes. Replacing it with bounded metadata and incremental quota counters reduced the comparable accelerated run from about 198 seconds to roughly 12–15 seconds. This is a host optimisation result, not a Pi CPU guarantee.
 
-## Outstanding release gates
+## Outstanding physical qualification
 
 - Declared minimum Pi and representative busier Pi, each with paired enabled/disabled 72-hour results and stack/load details.
 - Resolve the RSS investigation; satisfy retained-memory, RSS, CPU, event-loop and control-responsiveness budgets with raw supporting evidence.
 - Confirm physical storage-pressure/recovery behaviour in an isolated test environment; preserve normal Homebridge controls and never test by writing to a live inverter.
-- Review the final package hash, evidence and privacy documentation; complete Node 22/24 candidate CI and packed-package checks.
+- Continue privacy/resource review as the foundation gains field evidence; no automatic controller is qualified by this release.
 
-`docs/OBSERVATION_QUALIFICATION.json` remains pending. Both prepublication and trusted publishing reject it. No release tag or npm publication should be created while pending. A GitHub candidate branch/PR is review material and does not establish deployment.
+`docs/OBSERVATION_QUALIFICATION.json` remains pending for hardware testing. On 17 October 2026 the owner authorised opt-in beta.3 publication without waiting for the Pi soak. The separate publication approval is limited to this default-off foundation and matching runtime; it does not establish Pi performance or automatic-control readiness. The publisher verifies that approval explicitly and publishes to `beta` only.

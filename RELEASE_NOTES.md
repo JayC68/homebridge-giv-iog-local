@@ -18,9 +18,9 @@ Existing Solar-Aware Cheap Overnight continues to use your three chosen charge l
 
 There are no extra inverter polls or weather requests. Queues and storage are capped, writes are batched, and observation faults degrade learning while ordinary controls keep priority. See the [local learning guide](docs/SOLAR_OBSERVATION.md) for retention, privacy, reset and the limits of provisional evidence.
 
-## Candidate status and upgrading
+## Trying this beta
 
-This candidate awaits the agreed 72-hour physical Pi resource and responsiveness qualification. Desktop simulation does not establish Pi performance; npm publication remains blocked until that gate passes.
+This is an opt-in beta, and local observation is also off by default. Pi CPU and memory performance are still being evaluated. Accelerated desktop testing showed a small retained learning model alongside higher process-memory use; it does not establish resource usage on your Pi. If you notice extra load, turn local observation off and restart Homebridge.
 
 Before any upgrade, keep a verified backup and the exact prior package for rollback. Existing model/firmware limitations still apply: HR242 remains diagnostic-only, and CH original pre-session restoration across restart remains unproved. Read the [release preparation](docs/RELEASING.md), [safety notes](docs/SAFETY.md) and [Full Changelog](CHANGELOG.md).
 

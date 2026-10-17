@@ -28,12 +28,7 @@ jobs:
           npm run test:hap
           npm audit --audit-level=low
           npm pack
-      - name: Confirm publication remains blocked
-        run: |
-          if test "$(node -p 'require("./docs/OBSERVATION_QUALIFICATION.json").status')" = "pending"; then
-            if node tools/verify-observation-qualification.js; then exit 1; fi
-          else
-            node tools/verify-observation-qualification.js
-          fi
+      - name: Check opt-in beta publication approval
+        run: node tools/verify-observation-qualification.js --beta-publication
       - name: Accelerated observation smoke
         run: node --expose-gc tools/solar-observation-stress.js --days=2

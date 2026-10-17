@@ -306,3 +306,53 @@ test('unverified responder never reaches observation callback', async () => {
     await p.pollOnce(); assert.equal(failures, 1);
   } finally { DirectLocalReadOnlyClient.prototype.readInputRegisters = original; }
 });
+
+test('owner-approved beta publication is explicit and does not claim hardware qualification', () => {
+  const { publicationDecision } = require('./verify-observation-qualification');
+  const input = { pkg: { version: '4.0.3-beta.3' }, runtimeSha256: 'reviewed',
+    schema: { schema: { properties: { enableSolarObservation: { default: false } } } },
+    foundation: { automaticControl: false, qualified: false },
+    record: { version: '4.0.3-beta.3', runtimeSha256: 'reviewed', status: 'pending',
+      networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: 'local validation',
+      betaPublication: { version: '4.0.3-beta.3', authorizedBy: 'project owner', authorizedOn: '2026-10-17',
+        channel: 'beta', optIn: true, piSoakRequiredBeforeBetaPublication: false } } };
+  assert.equal(publicationDecision(input).allowed, false);
+  assert.deepEqual(publicationDecision(input, true), { allowed: true, hardwareQualified: false });
+});
+
+test('beta approval cannot authorise another version, changed runtime, default-on or automatic control', () => {
+  const { publicationDecision } = require('./verify-observation-qualification');
+  const input = { pkg: { version: '4.0.3-beta.3' }, runtimeSha256: 'reviewed',
+    schema: { schema: { properties: { enableSolarObservation: { default: false } } } },
+    foundation: { automaticControl: false, qualified: false },
+    record: { version: '4.0.3-beta.3', runtimeSha256: 'reviewed', status: 'pending',
+      networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: 'local validation',
+      betaPublication: { version: '4.0.3-beta.3', authorizedBy: 'project owner', authorizedOn: '2026-10-17',
+        channel: 'beta', optIn: true, piSoakRequiredBeforeBetaPublication: false } } };
+  for (const change of [
+    x => { x.runtimeSha256 = 'different'; },
+    x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3'; },
+    x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3-beta.4'; },
+    x => { x.schema.schema.properties.enableSolarObservation.default = true; },
+    x => { x.foundation.automaticControl = true; },
+    x => { x.record.networkIsolationPassed = false; },
+    x => { x.record.status = 'failed'; },
+    x => { delete x.record.betaPublication; }
+  ]) {
+    const changed = structuredClone(input); change(changed);
+    assert.equal(publicationDecision(changed, true).allowed, false);
+  }
+});
+
+test('full qualification still needs matching measured budgets without beta approval', () => {
+  const { publicationDecision } = require('./verify-observation-qualification');
+  const pi = { hardware: 'synthetic test fixture', paired: true, hours: 72, noGrowingRetainedHeap: true,
+    controlsResponsive: true, addedHeapMiB: 2, addedRssMiB: 8, addedOneCoreCpuPercent: .2,
+    addedLoopP95Ms: 1, addedLoopP99Ms: 2 };
+  const input = { pkg: { version: '4.0.3' }, runtimeSha256: 'reviewed', record: { version: '4.0.3',
+    runtimeSha256: 'reviewed', status: 'passed', networkIsolationPassed: true, faultAndRetentionPassed: true,
+    evidence: 'synthetic test fixture', minimumPi: pi, busierPi: pi } };
+  assert.deepEqual(publicationDecision(input), { allowed: true, hardwareQualified: true });
+  input.record.minimumPi = { ...pi, addedRssMiB: 17 };
+  assert.equal(publicationDecision(input).allowed, false);
+});

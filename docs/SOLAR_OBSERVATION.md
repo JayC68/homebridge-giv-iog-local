@@ -41,7 +41,7 @@ Profiles use bounded, gradually decaying summaries. Older raw observations expir
 
 Storage faults or pressure drop/degrade observation work and mark gaps. They cannot acquire the command transport gate or send inverter writes. Repeated storage warnings are rate limited. A corrupt, oversized, incompatible or unexpectedly modified directory may suspend observation while ordinary GivHome operation continues.
 
-The proposed **8 MiB retained-memory**, **16 MiB added RSS**, **below 1% of one core** and latency budgets still require matched tests on a declared minimum Pi and a busier Pi. Accelerated desktop tests do not establish those results. Publication remains gated on the 72-hour hardware qualification recorded in [release preparation](RELEASING.md).
+The proposed **8 MiB retained-memory**, **16 MiB added RSS**, **below 1% of one core** and latency budgets still require matched tests on a declared minimum Pi and a busier Pi. Accelerated desktop tests do not establish those results. This optional foundation is available through the opt-in beta channel while that evaluation continues. If you notice extra load, pause local observation and restart Homebridge. See [release preparation](RELEASING.md) for the publication approval and outstanding qualification.
 
 ## Check or clear local learning
 

@@ -1,11 +1,19 @@
 {
   "version": "4.0.3-beta.3",
   "status": "pending",
-  "runtimeSha256": "c85211139c3249ce0c62b2aab36ad825634d3cd0055a7778e3e3ccd2af116cc7",
+  "runtimeSha256": "31308c447c1d5c5b42576fb1c700ad3e3319f105c8cde10397a4d108b42b2df6",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": null,
-  "reason": "Matched 72-hour physical Pi qualification is outstanding. Accelerated desktop RSS growth exceeds the proposed budget in an unpaired run and needs investigation; this is not cleared for publication."
+  "evidence": "docs/VALIDATION_BETA3.md",
+  "reason": "Physical Pi qualification and the accelerated RSS investigation remain outstanding. The project owner authorised opt-in beta.3 publication without waiting for the Pi soak; no hardware performance qualification is claimed.",
+  "betaPublication": {
+    "version": "4.0.3-beta.3",
+    "authorizedBy": "project owner",
+    "authorizedOn": "2026-10-17",
+    "channel": "beta",
+    "optIn": true,
+    "piSoakRequiredBeforeBetaPublication": false
+  }
 }
