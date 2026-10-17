@@ -26,6 +26,10 @@ if (process.argv.includes('--github-body')) {
   assert.match(changelog, /^## 4\.0\.3-beta\.3 /m);
   assert.ok(readme.includes('**4.0.3-beta.3**'));
   assert.doesNotMatch(notes, /Unreleased|date is pending/);
+  const latestChanges = changelog.split('## 4.0.3-beta.3')[1].split('## 4.0.3-beta.2')[0];
+  const internalDiscussion = /our agreement|project owner|explicitly authori[sz]ed|ChatGPT|Codex|assistant|conversation/i;
+  assert.doesNotMatch(notes, internalDiscussion);
+  assert.doesNotMatch(latestChanges, internalDiscussion);
   assert.match(readme, /\[Release Notes\]\(RELEASE_NOTES\.md\)/);
   assert.match(readme, /\[Full Changelog\]\(CHANGELOG\.md\)/);
   assert.match(notes, /compare\/v4\.0\.3-beta\.2\.\.\.v4\.0\.3-beta\.3/);

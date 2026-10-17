@@ -41,7 +41,7 @@ jobs:
       - name: Build and verify reviewed package
         run: |
           npm pack
-          echo '1e4eb35c6df2e0392a79d1dada0198cf788173e7dcf0dd3c46cf9b9058ea9aa7  homebridge-giv-iog-local-4.0.3-beta.3.tgz' | sha256sum --check
+          echo '69bf9a82e69ede16a98cf7488ce07916c3e94ebfe5724a77ef6298be410e2feb  homebridge-giv-iog-local-4.0.3-beta.3.tgz' | sha256sum --check
 
       - name: Publish with trusted publishing
         run: npm publish homebridge-giv-iog-local-4.0.3-beta.3.tgz --access public --tag beta

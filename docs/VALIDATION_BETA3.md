@@ -1,6 +1,6 @@
 # Beta.3 validation — 17 October 2026
 
-**Opt-in beta publication authorised; physical Pi qualification remains pending.** Runtime SHA-256: `31308c447c1d5c5b42576fb1c700ad3e3319f105c8cde10397a4d108b42b2df6`. This hash covers the entry point, configuration schema, package declarations and all runtime library files. Recheck it against the qualification record before publication.
+**Opt-in beta; physical Pi qualification remains pending.** Runtime SHA-256: `31308c447c1d5c5b42576fb1c700ad3e3319f105c8cde10397a4d108b42b2df6`. This hash covers the entry point, configuration schema, package declarations and all runtime library files. Recheck it against the qualification record before publication.
 
 ## Automated checks
 
@@ -37,4 +37,4 @@ An earlier file-index implementation repeatedly sorted/scanned its complete dire
 - Confirm physical storage-pressure/recovery behaviour in an isolated test environment; preserve normal Homebridge controls and never test by writing to a live inverter.
 - Continue privacy/resource review as the foundation gains field evidence; no automatic controller is qualified by this release.
 
-`docs/OBSERVATION_QUALIFICATION.json` remains pending for hardware testing. On 17 October 2026 the owner authorised opt-in beta.3 publication without waiting for the Pi soak. The separate publication approval is limited to this default-off foundation and matching runtime; it does not establish Pi performance or automatic-control readiness. The publisher verifies that approval explicitly and publishes to `beta` only.
+`docs/OBSERVATION_QUALIFICATION.json` remains pending for hardware testing. The beta publication policy is separate from hardware qualification and is limited to this default-off foundation and matching runtime. It does not establish Pi performance or automatic-control readiness. The publisher verifies the beta policy explicitly and publishes to `beta` only.
