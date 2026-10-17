@@ -1,5 +1,17 @@
 # Solar-Aware Cheap Overnight and Emergency Stop
 
+## Choosing an overnight battery level
+
+The aim is to buy enough cheap electricity for a dull day while leaving more storage space when a brighter day is expected. Set up Cheap Overnight and Predicted Solar first, including the forecast location and solar panels.
+
+Forecast amounts are daily solar energy in kWh. The three charge levels are battery percentages at the end of the cheap period. They are different quantities: do not enter the battery capacity or the panels’ kW rating as though it were the daily forecast.
+
+With the defaults, a forecast below 10 kWh selects 100%; 10 to under 20 kWh selects 80%; 20 kWh or more selects 60%. If you change the higher boundary to 13.5 kWh, the middle band becomes 10 to under 13.5 kWh, and 13.5 kWh or more selects the high-solar level. The chosen target never exceeds your normal Charge Target: a normal target of 70% limits an 80% solar setting to 70%.
+
+Enable the feature to add the Apple Home switch. On uses these choices; Off uses the normal Charge Target. A missing or unusable forecast also uses the normal target. Ordinary Cheap Overnight remains enabled. IOG battery protection, if enabled, retains its own target.
+
+This beta uses the bands you choose. Automatic calculation from battery capacity, generation timing and household demand is a future development direction, not part of this beta.
+
 ## Configuration
 
 Solar settings: `enableSolarAwareCheapOvernight` (default false), `solarAwareLowForecastKwh` (10), `solarAwareHighForecastKwh` (20), `solarAwareLowTargetSoc` (100), `solarAwareMediumTargetSoc` (80), `solarAwareHighTargetSoc` (60). Thresholds must increase; targets must not increase as the forecast improves. Invalid values fall back to the normal saved Charge Target. Threshold equality enters the higher band. The chosen target is capped by the saved Charge Target. Predicted Solar and Cheap Overnight must be configured. The Home switch only enables/disables the solar adjustment; it does not disable ordinary Cheap Overnight.

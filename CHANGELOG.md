@@ -2,17 +2,24 @@
 
 This is the story of GivHome v4 and the direct-Modbus work that led to it. The [earlier v3 changelog](docs/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) keep the earlier public history available too.
 
-[Release notes for 4.0.3-beta.1](RELEASE_NOTES.md) explain the current work and what we still need to check. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.2](RELEASE_NOTES.md) explain the current work and what we still need to check. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.2 - 2026-10-17
+
+Clearer guidance for the choices introduced in beta-1. Charging behaviour, configuration values and defaults are unchanged.
+
+- Reorganised Solar-Aware Cheap Overnight setup into three steps: add the Home switch, choose the daily solar forecast bands, then choose the overnight battery levels. Explained kWh versus battery %, prerequisites, the normal Charge Target cap and fallback, with a worked example.
+- Introduced Emergency Stop by the problem it addresses: an unwanted or unexpected forced battery charge or discharge. Kept the approved Plugin Config description and existing safety controls.
+- Clarified that IOG protection takes over after the overnight window if enabled. Reworked the upgrade guidance and removed internal build-process wording from the release notes.
 
 ## 4.0.3-beta.1 - 2026-10-17
 
-Three additions, with the existing IOG protection, Agile learning and Eve history retained:
+Solar-Aware Cheap Overnight and Emergency Stop, with the existing IOG protection, Agile learning and Eve history retained:
 
-- Corrected the plugin homepage to the Homebridge website agreed in PR #2.
 - Added optional Solar-Aware Cheap Overnight: two editable forecast thresholds, three charge targets, normal-target fallback and a persisted Apple Home on/off switch. Retained the morning forecast across midnight and restart. The normal Charge Target caps the selected target; IOG retains its own target.
 - Added opt-in Emergency Stop with the approved Plugin Config description. Fresh profile-aware reads precede disable-first cancellation, clearing only validated implicated slots, Eco restoration and readback. A durable hold blocks queued commands and supervisors through the affected window; failed verification keeps the hold across restart. Unvalidated active slots report incomplete rather than receiving speculative writes.
 
-No live inverter writes or Homebridge installation were performed for this release. Existing HR242 and CH restart-restoration limitations remain. See the release evidence for check results and publication status.
+Existing HR242 and CH restart-restoration limitations remain. See the release notes for setup guidance and the recovery limitations to understand before upgrading.
 
 ## 4.0.2 - 2026-10-14
 

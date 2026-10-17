@@ -1,3 +1,13 @@
+# GivHome 4.0.3-beta.2 release gates
+
+Wording-only follow-up to beta-1 commit `98a8facd1b59a5c2577580fc31daf4755e3a92d0`. Clarifies release notes, the changelog and Plugin Config guidance. Solar controls are grouped into three setup steps. Configuration keys, types, defaults and limits, accessory identities, charging decisions and Emergency Stop behaviour remain unchanged. Runtime identity advances to 4.0.3-beta.2.
+
+Run the release checks and native HomeKit suites, verify source and packed package, compare the control logic with beta-1, audit dependencies and freeze the package hash before pushing the beta-2 tag. Trusted publishing must check the reviewed hash and use `beta`; leave `latest` at 4.0.2. Verify the public npm tarball against the reviewed package after npm processing completes. Correct beta-1's public GitHub release body separately; do not move its tag or replace its published package.
+
+Keep the beta-1 package and source for rollback evidence, alongside the production 4.0.2 package already retained. No installation is part of the release operation. The existing rollback procedure and model/firmware limitations below continue to apply.
+
+## Earlier release record
+
 # GivHome 4.0.3-beta.1 release gates
 
 Baseline: freshly cloned `release/v4.0.2` / `v4.0.2`, commit `28b781eaa647e7e96e8229cb007e41c28c311abc`. The default branch is legacy v3. PR #2 confirms the homepage. Preserve the established npm package name, platform alias and accessory identifiers. npm requires the valid prerelease version `4.0.3-beta.1` (displayed as beta-1).

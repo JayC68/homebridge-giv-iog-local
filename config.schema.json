@@ -1160,45 +1160,50 @@
         "description": "Independent target for IOG charge-mode battery protection. The Cheap Overnight Charge Target slider never changes this value."
       },
       "enableSolarAwareCheapOvernight": {
-        "title": "Solar-Aware Cheap Overnight",
+        "title": "Show Solar-Aware Cheap Overnight switch",
         "type": "boolean",
         "default": false,
-        "description": "Add an on/off tile in Apple Home. Use the forecast for the morning after the cheap window to choose an overnight target. Enable and configure Predicted Solar below. If no fresh forecast is available, GivHome uses your normal Charge Target. The Charge Target remains the upper limit."
+        "description": "First enable Cheap Overnight, then enable Predicted Solar and enter your location and solar-panel details. Tick this box to add the Apple Home switch. Switch it on to use the forecast-based overnight levels below, or off to use your normal Charge Target. If no usable forecast is available, GivHome uses your normal Charge Target."
       },
       "solarAwareLowForecastKwh": {
-        "title": "Lower forecast threshold (kWh)",
+        "title": "Low solar forecast: below this amount (kWh)",
         "type": "number",
         "default": 10,
         "minimum": 0,
-        "maximum": 1000
+        "maximum": 1000,
+        "description": "Forecasts below this amount use the low-solar overnight battery level. Enter the solar energy expected over a whole day, not your battery size or panel power rating. Default: 10 kWh."
       },
       "solarAwareHighForecastKwh": {
-        "title": "Upper forecast threshold (kWh)",
+        "title": "High solar forecast: from this amount (kWh)",
         "type": "number",
         "default": 20,
         "minimum": 0,
-        "maximum": 1000
+        "maximum": 1000,
+        "description": "Forecasts at or above this amount use the high-solar overnight battery level. Forecasts between the two amounts use the middle level. Enter an amount higher than the first. Default: 20 kWh."
       },
       "solarAwareLowTargetSoc": {
-        "title": "Target below lower threshold (%)",
+        "title": "Overnight battery level for a low solar forecast (%)",
         "type": "integer",
         "default": 100,
         "minimum": 4,
-        "maximum": 100
+        "maximum": 100,
+        "description": "Charge more overnight when little solar is expected. Default: 100%, aiming for a full battery by the end of the cheap period. Your normal Charge Target still sets the maximum."
       },
       "solarAwareMediumTargetSoc": {
-        "title": "Target between thresholds (%)",
+        "title": "Overnight battery level for a middle solar forecast (%)",
         "type": "integer",
         "default": 80,
         "minimum": 4,
-        "maximum": 100
+        "maximum": 100,
+        "description": "Used when the forecast is at least the first amount but below the second. Default: 80%, leaving about 20% of the battery capacity free when overnight charging finishes. Your normal Charge Target still sets the maximum."
       },
       "solarAwareHighTargetSoc": {
-        "title": "Target at or above upper threshold (%)",
+        "title": "Overnight battery level for a high solar forecast (%)",
         "type": "integer",
         "default": 60,
         "minimum": 4,
-        "maximum": 100
+        "maximum": 100,
+        "description": "Used when the forecast reaches or exceeds the second amount. Default: 60%, leaving about 40% of the battery capacity free when overnight charging finishes. Your normal Charge Target still sets the maximum."
       },
       "enableEmergencyStopTile": {
         "title": "Show Emergency Stop tile",
@@ -1273,20 +1278,40 @@
     {
       "type": "fieldset",
       "title": "Solar-Aware Cheap Overnight",
-      "description": "Optional. Forecast thresholds must increase; charge targets must stay level or decrease as the forecast improves. Invalid settings use the normal Charge Target. Existing IOG protection keeps its own target.",
+      "description": "Buy more cheap electricity before a dull day, or leave more room in the battery when sunshine is expected. GivHome uses the forecast to choose one of the three overnight battery levels you set below. Your normal Charge Target remains the maximum; IOG battery protection, if enabled, keeps its separate target.",
       "items": [
-        "enableSolarAwareCheapOvernight",
-        "solarAwareLowForecastKwh",
-        "solarAwareHighForecastKwh",
-        "solarAwareLowTargetSoc",
-        "solarAwareMediumTargetSoc",
-        "solarAwareHighTargetSoc"
+        {
+          "type": "fieldset",
+          "title": "1. Set up and add the Home switch",
+          "items": [
+            "enableSolarAwareCheapOvernight"
+          ]
+        },
+        {
+          "type": "fieldset",
+          "title": "2. Divide the solar forecast into three bands",
+          "description": "These amounts are solar energy expected over the day, in kWh. They are not battery capacity or the panels\u2019 kW rating. Below the first amount is low; between the amounts is middle; at or above the second is high. The second amount must be higher than the first.",
+          "items": [
+            "solarAwareLowForecastKwh",
+            "solarAwareHighForecastKwh"
+          ]
+        },
+        {
+          "type": "fieldset",
+          "title": "3. Choose how full to charge overnight",
+          "description": "Set a battery percentage for each forecast band. Choose the same or a lower level as more solar is expected. For example, 60% leaves about 40% of the battery capacity free when overnight charging finishes. A normal Charge Target of 70% caps an 80% setting at 70%. This beta uses your choices; it does not yet calculate these levels from battery size or household use.",
+          "items": [
+            "solarAwareLowTargetSoc",
+            "solarAwareMediumTargetSoc",
+            "solarAwareHighTargetSoc"
+          ]
+        }
       ]
     },
     {
       "type": "fieldset",
       "title": "Emergency Stop",
-      "description": "A one-time recovery action. A verified stop holds commands through the affected window. Failed verification holds commands until you investigate and retry. Unsupported slot-clear paths are reported; they are never guessed.",
+      "description": "Unwanted or unexpected battery charging or discharging? Add the Apple Home tile below so you can ask GivHome to find and stop the running forced operation and return to Eco. Switch it on for a one-time recovery; it returns to Off afterwards. Check the Homebridge log for the result. An incomplete recovery keeps commands on hold until you investigate and retry.",
       "items": [
         "enableEmergencyStopTile"
       ]
