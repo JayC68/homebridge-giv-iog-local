@@ -1,3 +1,19 @@
+# GivHome 4.0.3-beta.1 release gates
+
+Baseline: freshly cloned `release/v4.0.2` / `v4.0.2`, commit `28b781eaa647e7e96e8229cb007e41c28c311abc`. The default branch is legacy v3. PR #2 confirms the homepage. Preserve the established npm package name, platform alias and accessory identifiers. npm requires the valid prerelease version `4.0.3-beta.1` (displayed as beta-1).
+
+Before publication: syntax checks for all JavaScript; full regression suite; adversarial simulated controls; native HAP checks; dependency audit; package manifest review; tests against the packed package; source diff review. Verify branch, tag and registry state have not changed. Publish only the reviewed SHA-256 tarball through trusted publishing, with the `beta` tag. Keep `latest` at 4.0.2. Verify the remote commit/tag, workflow, GitHub prerelease and registry tarball integrity; report each independently.
+
+## Rollback first
+
+This task authorises no installation or live inverter writes. Before any separately authorised installation, stop Homebridge and make a verified backup of plugin files, configuration, cached accessories, Eve history, flight recorder and the new solar/recovery state files. Retain the exact 4.0.2 npm package and record current inverter settings with the established read-only procedure.
+
+For a separately authorised rollback, stop Homebridge and restore the verified backup or exact `homebridge-giv-iog-local@4.0.2` package through the existing installation method. Restore associated data only as appropriate, restart and inspect logs, telemetry and settings. A package rollback does not restore inverter registers and 4.0.2 cannot enforce the new Emergency Stop hold. Resolve any active recovery failure before rollback; do not delete its evidence to bypass a hold. Do not improvise inverter writes.
+
+HR242 stays diagnostic-only. Original CH pre-session restoration across restart, complete live overnight boundaries and original failure-recording replay remain unproved.
+
+## Earlier release record
+
 # GivHome 4.0.2 release record
 
 The owner authorises design, implementation, regression testing, independent audit, GitHub push and npm publication. No live Pi deployment or inverter writes are authorised. Baseline is canonical `release/v4.0.1` commit `39681e6e0ffa7594b0c951a0003304d9d39407fc`; legacy main is outdated.

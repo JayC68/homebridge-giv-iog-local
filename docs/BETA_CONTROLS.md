@@ -1,0 +1,23 @@
+# Solar-Aware Cheap Overnight and Emergency Stop
+
+## Configuration
+
+Solar settings: `enableSolarAwareCheapOvernight` (default false), `solarAwareLowForecastKwh` (10), `solarAwareHighForecastKwh` (20), `solarAwareLowTargetSoc` (100), `solarAwareMediumTargetSoc` (80), `solarAwareHighTargetSoc` (60). Thresholds must increase; targets must not increase as the forecast improves. Invalid values fall back to the normal saved Charge Target. Threshold equality enters the higher band. The chosen target is capped by the saved Charge Target. Predicted Solar and Cheap Overnight must be configured. The Home switch only enables/disables the solar adjustment; it does not disable ordinary Cheap Overnight.
+
+The morning date comes from the end of the configured cheap window. Use the same local timezone for Homebridge and the solar location. Only a matching forecast fetched no more than 24 hours ago is used. Future timestamps, malformed or negative values and other dates fall back. Forecast preference/cache is scoped to inverter identity and solar configuration. Provider failure can use an already cached matching fresh forecast. The active Cheap Overnight owner uses the existing target reconciliation and original cleanup snapshot. Battery Care uses the selected target; IOG protection does not.
+
+Emergency Stop: `enableEmergencyStopTile` (default false) plus the existing appliance-control acknowledgement. CE/AC also retains its explicit live-write acknowledgement. Unsupported profiles get no tile. CE and hybrid read two core slots per family; CH reads ten per family and HR318. Older profiles also require HR318 when pause tiles, IOG pause protection or a saved pause owner is present. Required missing reads fail closed; HR242 and other target/limit banks are not required or written. Equal nonzero slot times are ambiguous and refused; 00:00–00:00 is disabled. Start is inclusive, end exclusive; overnight slots are supported.
+
+## Recovery and reconciliation
+
+Persist a pending record before queueing; reject earlier queued commands and block both write paths. Capture a register snapshot before writes. Attempt both forced-control disables even if one errors. Only edit schedules after both controls read back off and all schedule times remain unchanged. Clear active slots only where the repository register authority validates both time registers. Preserve targets, power, reserves and future schedule times. Restore HR27=1 (demand-matching Eco); CH also clears supported pause mode without rewriting pause times. Read everything back, including unchanged slots. Never infer success from absent values or the tile returning to Off.
+
+The repository authority validates core slot 1 and CH slot 8 clearing. Other active slots are detected, forced controls disabled and Eco attempted, but recovery reports incomplete and keeps the hold. No new speculative extended-slot writes are authorised. See the [register authority](../lib/register-authority.js) and the [primary command reference](https://github.com/dewet22/givenergy-modbus/blob/master/givenergy_modbus/client/commands.py) for the HR27 demand-matching mapping. Live model/firmware validation is still outstanding.
+
+After verified readback, clear stopped ownership memories and timers, retain configuration/learning/history, and hold all commands until the longest current affected inverter or GivHome window ends (minimum one minute). Future automation is reconsidered by the existing planner once the hold expires. This preserves schedule preferences without immediately restarting the stopped action. Disabled forced-control namespaces are re-enabled only when an existing GivHome action needs them; unrelated inverter-only schedules are preserved but not automatically re-enabled. Review those schedules after recovery.
+
+Failure, corrupt recovery state and interrupted recovery remain held across restart. Retry Emergency Stop after investigating; no automatic retries compete with an external controller. Readback proves register state at that moment, not cessation of physical flow or a guarantee against later third-party changes. No live inverter validation is part of this build.
+
+State files live under Homebridge storage: `givhome-solar-aware-*.json`, `givhome-emergency-*.json` and its `.snapshot`. Keep them with rollback evidence. Removing the tile or changing feature configuration does not clear a recovery hold. A failed durable save sends no inverter writes.
+
+Retries retain the original register snapshot, implicated schedules and latest attempted readback. A partially zeroed implicated pair can finish clearing; a changed nonzero time is refused. Unsupported implicated slots remain incomplete even when a retry finds the forced controls already off.

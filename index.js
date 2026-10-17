@@ -131,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.2',
-      stage: 'GivHome 4.0.2'
+      version: '4.0.3-beta.1',
+      stage: 'GivHome 4.0.3-beta.1'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -328,6 +328,7 @@ class GivHomeModbusPlatform {
     this.predictedSolarController = null;
     this.predictedSolarService = null;
     this.predictedSolarLastResult = null;
+    this.initialiseBetaControls();
 
     this.log.info(STAGE_RUNTIME_MARKER);
     if (this.flightRecorder) {
@@ -389,6 +390,7 @@ class GivHomeModbusPlatform {
     this.ensureEveHistoryAccessories();
     this.ensurePredictedSolarAccessory();
     this.ensureChargeTargetAccessory();
+    this.ensureBetaControlAccessories();
     this.startPredictedSolar();
 
     if (!this.enableReadOnlyPolling) {
@@ -642,16 +644,17 @@ class GivHomeModbusPlatform {
   }
 
   async reconcileActiveChargeTarget() {
+    if (this.emergencyHeld()) return;
     if (this.chargeTargetReconcileInFlight) return this.chargeTargetReconcileInFlight;
-    if (this.activeChargeTarget?.source !== 'Cheap Overnight' || (this.activeChargeTarget.targetSoc === this.applianceControl.targetSoc && !this.chargeTargetError)
-      || !this.chargeTargetTileEnabled() || this.health.state !== 'online') return;
+    if (this.activeChargeTarget?.source !== 'Cheap Overnight' || (this.activeChargeTarget.targetSoc === this.effectiveOvernightTarget() && !this.chargeTargetError)
+      || !this.overnightTargetReconciliationEnabled() || this.health.state !== 'online') return;
     const run = this.withManualChargeTransportGate('GivHome Charge Target update', async () => {
       const active = this.activeChargeTarget;
-      let targetSoc = this.applianceControl.targetSoc;
-      if (!this.chargeTargetTileEnabled() || this.health.state !== 'online' || active?.source !== 'Cheap Overnight'
+      let targetSoc = this.effectiveOvernightTarget();
+      if (!this.overnightTargetReconciliationEnabled() || this.health.state !== 'online' || active?.source !== 'Cheap Overnight'
         || (active.targetSoc === targetSoc && !this.chargeTargetError) || this.applianceSnapshots.get('charge')?.source !== active.source) return;
       const ownerWindowOpen = () => {
-        if (this.activeChargeTarget !== active || !this.chargeTargetTileEnabled()
+        if (this.activeChargeTarget !== active || !this.overnightTargetReconciliationEnabled()
           || this.health.state !== 'online' || Date.now() >= active.endAtMs) return false;
         const cheapState = this.currentCheapStateForStatusTiles();
         return this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive;
@@ -665,7 +668,7 @@ class GivHomeModbusPlatform {
         throw new Error('owned charge settings changed; no target writes sent');
       }
       if (!ownerWindowOpen()) return;
-      targetSoc = this.applianceControl.targetSoc;
+      targetSoc = this.effectiveOvernightTarget();
       const plan = buildChargeTargetReconciliationPlan(before, { serial: this.inverterSerial, targetSoc });
       if (!plan.mutationAllowed) throw new Error('unsupported charge target profile; no target writes sent');
       for (const write of plan.establishedWrites) await this.writeDirectRegister(write.register, write.value, `Charge Target ${write.label}`);
@@ -741,6 +744,7 @@ class GivHomeModbusPlatform {
             ? Math.min(99, Math.max(1, Math.round((forecastKwh / referenceKwh) * 100)))
             : 1;
           this.predictedSolarLastResult = { ...result, brightness: publishedBrightness };
+          this.rememberSolarForecast(result);
           if (this.predictedSolarService) {
             this.predictedSolarService.updateCharacteristic(this.Characteristic.On, true);
             this.predictedSolarService.updateCharacteristic(this.Characteristic.Brightness, publishedBrightness);
@@ -1438,6 +1442,7 @@ class GivHomeModbusPlatform {
   }
 
   async withManualChargeTransportGate(label, fn) {
+    const emergencyGeneration = this.emergencyGeneration || 0;
     const ticket = ++this.commandTransportSequence;
     const queuedAtMs = Date.now();
     const depthAtQueue = this.commandQueueDepth;
@@ -1449,7 +1454,10 @@ class GivHomeModbusPlatform {
     const previous = this.commandQueueTail || Promise.resolve();
     const run = previous.catch(() => undefined).then(async () => {
       try {
-        return await this.enterQueuedCommandTransportGate(label, fn, ticket, queuedAtMs);
+        return await this.enterQueuedCommandTransportGate(label, async () => {
+          if (label !== 'GivHome Emergency Stop' && (emergencyGeneration !== (this.emergencyGeneration || 0) || this.emergencyHeld())) throw new Error('command cancelled or held by Emergency Stop');
+          return fn();
+        }, ticket, queuedAtMs);
       } finally {
         this.commandQueueDepth = Math.max(0, this.commandQueueDepth - 1);
         this.commandIntentPending = this.commandQueueDepth > 0;
@@ -1688,6 +1696,7 @@ class GivHomeModbusPlatform {
   }
 
   async writeManualChargeRegister(register, value, label) {
+    if (this.emergencyHeld()) throw new Error('manual command held by Emergency Stop');
     const frame = buildOfflineWriteSingleRegisterFrame({
       deviceAddress: this.deviceAddress,
       register,
@@ -2698,6 +2707,7 @@ class GivHomeModbusPlatform {
   }
 
   async writeDirectRegister(register, value, label) {
+    if (this.emergencyHeld() && !(this.emergencyWriting && label.startsWith('Emergency Stop '))) throw new Error('command held by Emergency Stop');
     const frame = buildOfflineWriteSingleRegisterFrame({ deviceAddress: this.deviceAddress, register, value });
     const frameVerification = verifyOfflineWriteFrame(frame);
     if (!frameVerification.ok) throw new Error(`${label} Function 06 frame verification failed before live write`);
@@ -2758,7 +2768,7 @@ class GivHomeModbusPlatform {
     const carePlan = options.batteryCarePlan;
     const powerPercent = carePlan?.active ? carePlan.chargeRatePercent : validPercentOrDefault(options.powerPercent ?? original.HR111, 100);
     const source = options.label || tileOrPlan.displayName || 'Charge';
-    const ownerTarget = source === 'Cheap Overnight' ? this.applianceControl.targetSoc
+    const ownerTarget = source === 'Cheap Overnight' ? this.effectiveOvernightTarget()
       : source === 'Intelligent Octopus Go Home Battery Protection' ? this.applianceControl.iogChargeTargetSoc ?? 100
         : this.configuredChargeTarget ?? 100;
     const targetSoc = validPercentOrDefault(options.targetSoc ?? ownerTarget, 100);
@@ -3178,6 +3188,7 @@ class GivHomeModbusPlatform {
   }
 
   async applyApplianceAutomation() {
+    if (this.emergencyHeld()) return;
     const model = this.latestModel;
     if (!model || this.health.state !== 'online') return;
     await this.reconcileActiveChargeTarget();
@@ -3187,7 +3198,8 @@ class GivHomeModbusPlatform {
     // Early-termination grace is armed only by pollOctopusDispatches when an active dispatch disappears before its planned end.
     if (cheapState.dispatchActive && cheapState.protectedEnd) this.octopusState.lastCheapUntil = cheapState.protectedEnd;
 
-    const batteryCarePlanForEvidence = getBatteryCarePlan({ model, cheapState, config: this.applianceControl, now });
+    const overnightTarget = this.effectiveOvernightTarget(cheapState, now);
+    const batteryCarePlanForEvidence = getBatteryCarePlan({ model, cheapState, config: { ...this.applianceControl, targetSoc: overnightTarget }, now });
     const signature = JSON.stringify({ cheap: cheapState.cheapActive, fallback: cheapState.fallbackActive, smart: cheapState.smartActive, grace: cheapState.graceActive, source: cheapState.source, soc: model.socPercent, auto: this.autoChargeActive, autoLabel: this.autoChargeLabel, exportArmed: this.eveningExcessExportArmed });
     const signatureChanged = signature !== this.lastAutomationSignature;
     this.lastAutomationSignature = signature;
@@ -3201,7 +3213,7 @@ class GivHomeModbusPlatform {
      */
     this.logBatteryCarePlan(batteryCarePlanForEvidence, cheapState, model, now, signatureChanged ? 'automation-evaluation' : 'automation-supervisor-repeat');
 
-    const socBelowTarget = Number.isFinite(model.socPercent) && model.socPercent < this.applianceControl.targetSoc;
+    const socBelowTarget = Number.isFinite(model.socPercent) && model.socPercent < overnightTarget;
     const overnightEnd = cheapState.fallbackWindowEnd;
     const hasWindowEnd = overnightEnd instanceof Date && !Number.isNaN(overnightEnd.getTime());
     const iogProtectedEnd = cheapState.protectedEnd instanceof Date && !Number.isNaN(cheapState.protectedEnd.getTime()) ? cheapState.protectedEnd : null;
@@ -3239,12 +3251,12 @@ class GivHomeModbusPlatform {
     }
 
     if (this.applianceControl.features.cheapOvernightCharging && cheapState.fallbackActive && socBelowTarget && hasWindowEnd && !this.autoChargeActive) {
-      const carePlan = getBatteryCarePlan({ model, cheapState, config: this.applianceControl, now });
+      const carePlan = getBatteryCarePlan({ model, cheapState, config: { ...this.applianceControl, targetSoc: overnightTarget }, now });
       const cheapMinutes = Math.max(1, Math.ceil((overnightEnd.getTime() - now.getTime()) / 60000));
       this.logCheapOvernightPlan({ active: true, reason: cheapState.smartActive || cheapState.graceActive ? 'user-configured-cheap-overnight-owns-iog-overlap' : 'main-overnight-cheap-window', cheapState, model, minutes: cheapMinutes, carePlan, trigger: 'fallback-cheap-window-supervisor' });
       await this.withManualChargeTransportGate('GivHome Cheap Overnight fallback charge', async () => {
         this.log.warn('GivHome evidence Cheap Overnight command started: source=fallback-cheap-window minutes=%s batteryCare=%s smartActive=%s graceActive=%s iogCommandWritesSuppressed=yes automaticMutationPath=%s', cheapMinutes, carePlan.active ? 'yes' : 'no', cheapState.smartActive ? 'yes' : 'no', cheapState.graceActive ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
-        await this.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: cheapMinutes }, { automatic: true, label: 'Cheap Overnight', startDate: now, endDate: overnightEnd, targetSoc: this.applianceControl.targetSoc, batteryCarePlan: carePlan });
+        await this.startTimedChargeCommand({ displayName: 'Cheap Overnight', minutes: cheapMinutes }, { automatic: true, label: 'Cheap Overnight', startDate: now, endDate: overnightEnd, targetSoc: overnightTarget, batteryCarePlan: carePlan });
       });
       this.autoChargeActive = true;
       this.autoChargeLabel = 'Cheap Overnight';
@@ -3252,7 +3264,7 @@ class GivHomeModbusPlatform {
       const verify = await this.readChargePrestate();
       this.log.warn('GivHome evidence Cheap Overnight command verified: HR20=%s HR94=%s HR95=%s HR96=%s HR111=%s HR116=%s HR242=%s minutes=%s source=fallback-cheap-window iogObservesOnlyDuringCheapOvernight=yes automaticMutationPath=%s', verify.HR20, verify.HR94, verify.HR95, verify.HR96, verify.HR111, verify.HR116, verify.HR242 === null ? 'n/a' : verify.HR242, cheapMinutes, this.applianceControl.automaticMutationPath);
       if (verify.HR96 !== 1) throw new Error(`Cheap Overnight verification failed: expected HR96=1 actual=${verify.HR96}`);
-      this.log.warn('GivHome evidence Cheap Overnight charging requested: source=fallback-cheap-window soc=%s targetSoc=%s chargeRatePercent=%s estimatedChargeKw=%s windowEnd=%s automaticMutationPath=%s', model.socPercent, this.applianceControl.targetSoc, carePlan.active ? carePlan.chargeRatePercent : 'prestate-or-default', carePlan.active && Number.isFinite(carePlan.estimatedChargeKw) ? carePlan.estimatedChargeKw.toFixed(2) : 'n/a', overnightEnd.toISOString(), this.applianceControl.automaticMutationPath);
+      this.log.warn('GivHome evidence Cheap Overnight charging requested: source=fallback-cheap-window soc=%s targetSoc=%s chargeRatePercent=%s estimatedChargeKw=%s windowEnd=%s automaticMutationPath=%s', model.socPercent, overnightTarget, carePlan.active ? carePlan.chargeRatePercent : 'prestate-or-default', carePlan.active && Number.isFinite(carePlan.estimatedChargeKw) ? carePlan.estimatedChargeKw.toFixed(2) : 'n/a', overnightEnd.toISOString(), this.applianceControl.automaticMutationPath);
       return;
     }
 
@@ -3361,7 +3373,7 @@ class GivHomeModbusPlatform {
       this.applianceControl.cheapEnd,
       Number.isFinite(minutes) ? minutes : 'n/a',
       model?.socPercent ?? 'unknown',
-      this.applianceControl.targetSoc,
+      this.effectiveOvernightTarget(cheapState),
       carePlan?.active ? 'yes' : 'no',
       chargeRatePercent,
       estimatedChargeKw,
@@ -3415,7 +3427,7 @@ class GivHomeModbusPlatform {
       this.applianceControl.cheapEnd,
       this.applianceControl.graceMinutes,
       Number.isFinite(model?.socPercent) ? model.socPercent : 'unknown',
-      this.applianceControl.targetSoc,
+      this.effectiveOvernightTarget(cheapState),
       socGap,
       remainingMinutes,
       this.applianceControl.batteryCapacityKwh,
@@ -4921,6 +4933,8 @@ function roundOneDecimalPlace(value) {
   if (!Number.isFinite(numeric)) return numeric;
   return Math.round(numeric * 10) / 10;
 }
+
+Object.assign(GivHomeModbusPlatform.prototype, require('./lib/beta-controls'));
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivHomeModbusPlatform);

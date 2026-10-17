@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { GivHomeModbusPlatform } = require('../index');
 const { buildChargeTargetReconciliationPlan, verifyChargeTargetReconciliation } = require('../lib/charge-target-reconciliation');
+const { getMergedCheapState } = require('../lib/appliance-integrated-control');
 
 function fixture(serial = 'CH2344G083', original = {}) {
   const platform = Object.create(GivHomeModbusPlatform.prototype);
@@ -198,4 +199,45 @@ test('failed IOG target readback cannot enable charging or claim active ownershi
   p.writeDirectRegister = normalWrite;
   await p.cleanupApplianceCommandFamily('charge', 'failed IOG start');
   assert.equal(registers.HR116, 40);
+});
+
+for (const serial of ['CH2344G083', 'CE2225G298', 'ED2151G182']) {
+  test(`${serial}: solar overnight target, slider cap, Off fallback and IOG handover retain ownership`, async t => {
+    const at = new Date('2026-10-17T01:00:00+01:00');
+    t.mock.timers.enable({ apis: ['Date'], now: at.getTime() });
+    const { platform:p, registers, writes } = fixture(serial);
+    Object.assign(p, {
+      config: { enableSolarAwareCheapOvernight:true },
+      solarAwareEnabled:true,
+      solarForecasts:{'2026-10-17':{date:'2026-10-17',kwh:30,fetchedAt:'2026-10-16T18:00:00+01:00'}},
+      chargeTargetTileEnabled:()=>true,
+      currentCheapStateForStatusTiles:()=>getMergedCheapState(new Date(),p.octopusState.dispatches,p.applianceControl,p.octopusState)
+    });
+    p.applianceControl.iogChargeTargetSoc=95;
+    p.octopusState.dispatches=[{start:new Date('2026-10-17T00:30:00+01:00'),end:new Date('2026-10-17T06:00:00+01:00')}];
+    await p.applyApplianceAutomation();
+    assert.equal(p.activeChargeTarget.source,'Cheap Overnight'); assert.equal(registers.HR116,60);
+    assert.equal(p.applianceControl.targetSoc,100); assert.equal(p.applianceControl.iogChargeTargetSoc,95);
+    const snapshot=p.applianceSnapshots.get('charge');
+    p.solarAwareEnabled=false; await p.reconcileActiveChargeTarget(); assert.equal(registers.HR116,100);
+    p.solarAwareEnabled=true; p.applianceControl.targetSoc=45; await p.reconcileActiveChargeTarget(); assert.equal(registers.HR116,45);
+    assert.equal(p.applianceSnapshots.get('charge'),snapshot);
+    t.mock.timers.setTime(new Date('2026-10-17T05:31:00+01:00').getTime());
+    await p.applyApplianceAutomation();
+    assert.equal(p.activeChargeTarget.source,'Intelligent Octopus Go Home Battery Protection'); assert.equal(registers.HR116,95);
+    const count=writes.length; p.applianceControl.targetSoc=40; await p.reconcileActiveChargeTarget(); assert.equal(writes.length,count);
+    assert.equal(writes.some(([r])=>r===242),false);
+  });
+}
+
+test('solar owner reconciles even when the separate Charge Target tile is hidden', async t => {
+  t.mock.timers.enable({apis:['Date'],now:new Date('2026-10-17T01:00:00+01:00').getTime()});
+  const {platform:p,registers}=fixture();
+  Object.assign(p,{config:{enableSolarAwareCheapOvernight:true},solarAwareEnabled:true,
+    solarForecasts:{'2026-10-17':{date:'2026-10-17',kwh:30,fetchedAt:'2026-10-16T18:00:00+01:00'}},
+    chargeTargetTileEnabled:()=>false,
+    currentCheapStateForStatusTiles:()=>getMergedCheapState(new Date(),[],p.applianceControl,p.octopusState)});
+  p.applianceControl.masterGateSatisfied=true;
+  await p.applyApplianceAutomation(); assert.equal(registers.HR116,60);
+  p.solarAwareEnabled=false; await p.reconcileActiveChargeTarget(); assert.equal(registers.HR116,100);
 });

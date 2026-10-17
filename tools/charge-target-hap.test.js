@@ -6,7 +6,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const homebridgeEntry = require.resolve('homebridge', { paths: [process.env.GIVHOME_HOMEBRIDGE_TEST_ROOT || process.cwd()] });
-const hapEntry = require.resolve('@homebridge/hap-nodejs', { paths: [path.dirname(homebridgeEntry)] });
+let hapEntry;
+try { hapEntry = require.resolve('@homebridge/hap-nodejs', { paths: [path.dirname(homebridgeEntry)] }); }
+catch { hapEntry = require.resolve('hap-nodejs', { paths: [path.dirname(homebridgeEntry)] }); }
 const hap = require(hapEntry);
 const { GivHomeModbusPlatform } = require('../index');
 
@@ -28,7 +30,7 @@ function packageVersion(entry, name) {
   throw new Error(`Cannot identify ${name} test dependency`);
 }
 
-console.log(`Native test dependencies: Homebridge ${packageVersion(homebridgeEntry, 'homebridge')}; HAP ${packageVersion(hapEntry, '@homebridge/hap-nodejs')}`);
+console.log(`Native test dependencies: Homebridge ${packageVersion(homebridgeEntry, 'homebridge')}; HAP ${packageVersion(hapEntry, hapEntry.includes('@homebridge') ? '@homebridge/hap-nodejs' : 'hap-nodejs')}`);
 
 function makePlatform(t, directory, overrides = {}) {
   const config = {
@@ -126,4 +128,55 @@ test('real constructor reload isolates default and explicit IOG targets from sav
   assert.equal(defaultIog.applianceControl.iogChargeTargetSoc, 100);
   defaultIog.setChargeTargetFromHome(95);
   assert.equal(defaultIog.applianceControl.iogChargeTargetSoc, 100);
+});
+
+test('new native switches are opt-in and reuse UUIDs on reload', async t => {
+  const directory = storage(t);
+  const ordinary = makePlatform(t, directory);
+  ordinary.platform.ensureBetaControlAccessories();
+  assert.equal(ordinary.registered.length, 0);
+  const first = makePlatform(t, directory, { enableSolarAwareCheapOvernight: true, enableEmergencyStopTile: true });
+  first.platform.ensureBetaControlAccessories();
+  assert.equal(first.registered.length, 2);
+  const solar = first.registered.find(a => a.context.definitionId === 'solar-aware-overnight');
+  const switchOn = solar.getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  await switchOn.handleSetRequest(false); assert.equal(await switchOn.handleGetRequest(), false);
+  const second = makePlatform(t, directory, { enableSolarAwareCheapOvernight: true, enableEmergencyStopTile: true });
+  for (const accessory of first.registered) second.platform.configureAccessory(accessory);
+  second.platform.ensureBetaControlAccessories();
+  assert.equal(second.registered.length,0); assert.equal(second.platform.solarAwareEnabled,false);
+  assert.equal(await solar.getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On).handleGetRequest(),false);
+});
+
+test('native Emergency Stop is momentary, reports failure and never treats Off as verified', async t => {
+  const { platform:p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
+  p.ensureBetaControlAccessories();
+  const on = registered[0].getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  let calls=0;
+  p.requestEmergencyStop=async()=>{calls++;};
+  await on.handleSetRequest(true); await new Promise(setImmediate); assert.equal(calls,1); assert.equal(on.value,false);
+  await on.handleSetRequest(false); assert.equal(calls,1);
+  p.requestEmergencyStop=async()=>{p.emergencyState={status:'failed'}; throw new Error('simulated failed readback');};
+  const communicationFailure=err=>err===hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE || err.hapStatus===hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE;
+  await assert.rejects(on.handleSetRequest(true),communicationFailure);
+  await assert.rejects(on.handleGetRequest(),communicationFailure);
+  assert.equal(p.emergencyHeld(),true);
+});
+
+test('native switches respect master, unsupported model, CE acknowledgement and removal', t => {
+  for (const overrides of [{enableApplianceControl:false},{inverterSerial:'GW00000000'},{inverterSerial:'CE2225G298'}]) {
+    const {platform:p,registered}=makePlatform(t,storage(t),{enableEmergencyStopTile:true,...overrides});
+    p.ensureBetaControlAccessories(); assert.equal(registered.length,0);
+  }
+  const {platform:p,registered}=makePlatform(t,storage(t),{enableEmergencyStopTile:true});
+  p.ensureBetaControlAccessories(); assert.equal(registered.length,1);
+  p.config.enableEmergencyStopTile=false; p.ensureBetaControlAccessories(); assert.equal(p.accessories.length,0);
+});
+
+test('solar native toggle saves first, rejects storage failure and leaves prior preference', async t => {
+  const {platform:p,registered}=makePlatform(t,storage(t),{enableSolarAwareCheapOvernight:true});
+  p.ensureBetaControlAccessories();
+  const on=registered[0].getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  p.solarStateFile=path.join(p.getStoragePath(),'missing','state');
+  await assert.rejects(on.handleSetRequest(false)); assert.equal(p.solarAwareEnabled,true);
 });
