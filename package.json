@@ -62,7 +62,7 @@
     "tools/charge-target-hap.test.js"
   ],
   "displayName": "GivHome",
-  "homepage": "https://givhome.kernowekconsulting.co.uk/",
+  "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",
   "author": "Kernowek Consulting",
   "repository": {
     "type": "git",
