@@ -1,3 +1,19 @@
+# Beta.3 release preparation
+
+Base: verified remote `v4.0.3-beta.2`, commit `7619bca75416095626ba947db9711f4a2b0dff9c`. Default `main` remains the legacy v3 line. Release branch: `release/v4.0.3-beta-3`. Package identity remains `homebridge-giv-iog-local`.
+
+Beta.3 is distributed through the opt-in Homebridge beta channel, with local observation independently off by default. Physical Pi resource qualification remains pending and is not a prepublication requirement for this foundation beta. No automatic charging or hardware performance qualification is included.
+
+Keep `docs/OBSERVATION_QUALIFICATION.json` pending for physical tests. Its separate beta-publication record identifies the permitted release channel and scope. The verifier's `--beta-publication` mode accepts only this version, matching runtime, default-off foundation, privacy/fault checks and the specific beta release policy; it does not relabel pending hardware results as passed. Without that mode, hardware qualification remains required. Prepublication and trusted publishing use the explicit beta mode.
+
+Before publication: syntax checks, regressions, native HomeKit checks, observation fault/privacy/accuracy tests, accelerated retention, dependency audit, source-to-package review and tests against the packed package. Compare changed control paths with beta.2. Regenerate the GitHub release body, freeze the reviewed tarball SHA-256 and run Node 22/24 CI. Publish only that reviewed tarball through trusted publishing to `beta`; leave `latest` at 4.0.2. Verify remote commit/tag, workflow, GitHub prerelease and byte-identical public npm tarball before reporting completion.
+
+Continue the RSS investigation and paired physical Pi evaluation before claiming resource compliance. Do not count accelerated desktop replay as a real-time soak or change global Node heap limits to hide memory use. Future automatic planning needs its own qualification and explicit activation.
+
+This publication does not install on Homebridge or authorise live inverter testing. For a separately authorised installation, stop Homebridge and verify backups of package/config/accessory cache/Eve/Agile/flight recorder/charging and Emergency Stop state. Preserve the observation directory too. Beta.2 ignores it on rollback; keep other state intact. A package rollback cannot undo inverter registers or bypass an Emergency Stop recovery hold.
+
+---
+
 # GivHome 4.0.3-beta.2 release gates
 
 Wording-only follow-up to beta-1 commit `98a8facd1b59a5c2577580fc31daf4755e3a92d0`. Clarifies release notes, the changelog and Plugin Config guidance. Solar controls are grouped into three setup steps. Configuration keys, types, defaults and limits, accessory identities, charging decisions and Emergency Stop behaviour remain unchanged. Runtime identity advances to 4.0.3-beta.2.

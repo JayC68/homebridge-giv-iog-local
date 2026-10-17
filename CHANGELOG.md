@@ -2,7 +2,16 @@
 
 This is the story of GivHome v4 and the direct-Modbus work that led to it. The [earlier v3 changelog](docs/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) keep the earlier public history available too.
 
-[Release notes for 4.0.3-beta.2](RELEASE_NOTES.md) explain the current work and what we still need to check. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.3](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.3 — Local learning foundation (17 October 2026)
+
+- Add optional, off-by-default local observation for future Automatic Solar-Aware Cheap Overnight. Reuse verified polls and existing forecasts, with minute/half-hour energy summaries, provisional weekday/weekend site-load profiles and observed charging response.
+- Preserve forecast revisions as received; label unresolved DST times, missing values, gaps and control context. Do not claim EV separation, solar correction, battery capacity or automatic-planning readiness.
+- Bound queues, records, model dimensions, files and storage; batch asynchronous writes, rotate old records, recover compatible snapshots and isolate observation failures from telemetry and controls.
+- Add pause and one-time local reset settings, installation/setup fingerprints, service-account file permissions and explicit local-data privacy documentation. No observation or learning data is sent to the developer.
+- Retain existing charging decisions, IOG battery protection, Agile learning, Emergency Stop and Eve history. No new HomeKit service or automatic controller is added.
+- Local observation is off by default in this opt-in Homebridge beta. Pi CPU and memory performance are still being evaluated; automatic planning is not enabled.
 
 ## 4.0.3-beta.2 - 2026-10-17
 

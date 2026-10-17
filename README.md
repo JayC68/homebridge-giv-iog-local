@@ -20,7 +20,9 @@ Those two ideas shaped GivHome v4: **understand what the inverter is really doin
 
 ## Version and installation
 
-This is **4.0.3-beta.2** for `homebridge-giv-iog-local`, based on the canonical **4.0.2** release. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for the unchanged CH/AIO slot limit and restart-restoration limitations.
+This is **4.0.3-beta.3**, an opt-in beta for `homebridge-giv-iog-local`, based on the canonical **4.0.2** release. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for the unchanged CH/AIO slot limit and restart-restoration limitations.
+
+The optional [local learning foundation](docs/SOLAR_OBSERVATION.md) begins observing this installation for future Automatic Solar-Aware Cheap Overnight. It does not choose targets or enable automatic charging. Learning data stays on your device and is not sent to the developer.
 
 **Charge Target** brings your preferred charging percentage into Apple Home beside Solar 2mrw. It saves the target for Cheap Overnight only. IOG charge-mode protection uses an independent target, defaulting to 100%; timed Charge tiles retain the configured target. See [Charge Target](docs/CHARGE_TARGET.md) for its scope and the remaining slot-limit restriction.
 
