@@ -1,0 +1,11 @@
+{
+  "version": "4.0.3-beta.3",
+  "status": "pending",
+  "runtimeSha256": "c85211139c3249ce0c62b2aab36ad825634d3cd0055a7778e3e3ccd2af116cc7",
+  "minimumPi": null,
+  "busierPi": null,
+  "networkIsolationPassed": true,
+  "faultAndRetentionPassed": true,
+  "evidence": null,
+  "reason": "Matched 72-hour physical Pi qualification is outstanding. Accelerated desktop RSS growth exceeds the proposed budget in an unpaired run and needs investigation; this is not cleared for publication."
+}

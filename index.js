@@ -131,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.3-beta.2',
-      stage: 'GivHome 4.0.3-beta.2'
+      version: '4.0.3-beta.3',
+      stage: 'GivHome 4.0.3-beta.3'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -391,6 +391,7 @@ class GivHomeModbusPlatform {
     this.ensurePredictedSolarAccessory();
     this.ensureChargeTargetAccessory();
     this.ensureBetaControlAccessories();
+    this.startSolarObservation();
     this.startPredictedSolar();
 
     if (!this.enableReadOnlyPolling) {
@@ -737,6 +738,9 @@ class GivHomeModbusPlatform {
         config: this.config,
         log: this.log,
         storagePath,
+        onObservationForecast: this.config.enableSolarObservation === true ? (record) => {
+          try { this.solarObservation?.forecast(record); } catch { /* Forecast observation is isolated. */ }
+        } : undefined,
         onUpdate: (result) => {
           const forecastKwh = Number(result && result.kwh);
           const referenceKwh = Number(result && result.referenceKwh);
@@ -1442,6 +1446,7 @@ class GivHomeModbusPlatform {
   }
 
   async withManualChargeTransportGate(label, fn) {
+    try { this.observeSolarControlChange?.(); } catch { /* Learning must never block a command. */ }
     const emergencyGeneration = this.emergencyGeneration || 0;
     const ticket = ++this.commandTransportSequence;
     const queuedAtMs = Date.now();
@@ -4665,6 +4670,7 @@ class GivHomeModbusPlatform {
     const publishStarted = this.beta9PerfNowMs();
     const publishStats = this.updateAccessories(model);
     const publishDurationMs = this.beta9PerfNowMs() - publishStarted;
+    try { this.observeSolarTelemetry(model); } catch { /* Learning must never change poll success. */ }
     this.log.info('[Beta9Perf] poll modbusMs=%s publishMs=%s characteristicUpdates=%s', durationMs, publishDurationMs.toFixed(1), publishStats?.attempts ?? 'unknown');
 
     if (this.advancedDiagnostics || previousFailures > 0) {
@@ -4691,6 +4697,7 @@ class GivHomeModbusPlatform {
   }
 
   handlePollFailure(err) {
+    try { this.solarObservation?.breakChain('poll-failure'); } catch { /* Observation cannot affect telemetry health. */ }
     this.health.totalPolls += 1;
     this.health.totalFailures += 1;
     this.health.consecutiveFailures += 1;
@@ -4935,6 +4942,7 @@ function roundOneDecimalPlace(value) {
 }
 
 Object.assign(GivHomeModbusPlatform.prototype, require('./lib/beta-controls'));
+Object.assign(GivHomeModbusPlatform.prototype, require('./lib/solar-observation-platform'));
 
 module.exports = (api) => {
   api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, GivHomeModbusPlatform);
