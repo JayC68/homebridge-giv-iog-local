@@ -1,27 +1,39 @@
-# GivHome 4.0.3-beta.3 — Let GivHome begin learning your home
+# GivHome 4.0.3-beta.4 — Stop this action, keep the next one
 
-Every home uses its battery and solar differently. Good automatic overnight planning needs to understand those differences before it starts making decisions.
+Stopping an unwanted charge or discharge should not stop tonight’s Cheap Overnight, leave tomorrow’s schedules disabled, or make you wait for an old action’s finishing time before starting something else.
 
-This beta lays the first foundation: an optional local observer that can begin learning from your installation’s existing readings and forecasts. **It does not calculate a charging target or turn automatic charging on.**
+This beta corrects those control and recovery paths, including two-slot CE/AC and ED/Hybrid profiles alongside CH/All-in-One.
 
-## A quiet start to local learning
+## A one-time Emergency Stop
 
-Tick **Learn locally for future Automatic Solar-Aware Cheap Overnight** in Plugin Config and restart Homebridge to begin. It is off by default. Untick and restart to pause, or use the separate reset setting to start its learning again.
+Seen unwanted or unexpected charging or discharging? Switch on **Emergency Stop** in Apple Home to ask GivHome to find and stop the current forced operation and return to Eco.
 
-GivHome records compact energy summaries, provisional site-use patterns and ordinary charging response. It keeps forecast revisions as received, marks missing readings as gaps and labels control activity. EV energy is not guessed away, and constrained solar output is not automatically treated as a bad weather forecast. This foundation does not yet run the automatic or shadow planner.
+The tile acknowledges the request promptly while GivHome checks and verifies the inverter. Once the stop is verified, it returns to Off and new deliberate actions are available immediately. There is no extra wait until the stopped action’s former finishing time.
 
-Existing Solar-Aware Cheap Overnight continues to use your three chosen charge levels. Intelligent Octopus Go battery protection keeps its own target and continues to take over after the overnight window if enabled. Agile learning, Eve history and Emergency Stop retain their existing behaviour.
+If nothing is running and Eco is already normal, GivHome reports **nothing running** and leaves controls and future schedules alone.
 
-## Your observations stay with you
+Tick **Show Emergency Stop tile** in Plugin Config to add it. It remains off by default and uses the existing appliance-control acknowledgement and model gates.
 
-**GivHome does not send observation history or learned models to the developer or to a remote learning service.** Learning runs on your Homebridge device, with bounded local storage and no automatic diagnostic uploads. Existing weather/location and enabled Octopus requests continue; learning data is not added to them.
+## A dropped connection should be recoverable
 
-There are no extra inverter polls or weather requests. Queues and storage are capped, writes are batched, and observation faults degrade learning while ordinary controls keep priority. See the [local learning guide](docs/SOLAR_OBSERVATION.md) for retention, privacy, reset and the limits of provisional evidence.
+If communication is interrupted, GivHome keeps its recovery record and retries with bounded delays. It reads back what actually happened before deciding whether another write is needed. Recovery can continue after a Homebridge restart.
 
-## Trying this beta
+A genuine unresolved fault still appears in Apple Home and the Homebridge log. A quick request acknowledgement is not proof that the inverter stopped; check the logged result and fresh power readings.
 
-This is an opt-in beta, and local observation is also off by default. Pi CPU and memory performance are still being evaluated. Accelerated desktop testing showed a small retained learning model alongside higher process-memory use; it does not establish resource usage on your Pi. If you notice extra load, turn local observation off and restart Homebridge.
+## Looking after the next action
 
-Before any upgrade, keep a verified backup and the exact prior package for rollback. Existing model/firmware limitations still apply: HR242 remains diagnostic-only, and CH original pre-session restoration across restart remains unproved. Read the [local learning guide](docs/SOLAR_OBSERVATION.md), [safety notes](docs/SAFETY.md) and [Full Changelog](CHANGELOG.md).
+GivHome now records which action owns borrowed settings. Ending an action restores its captured settings and reconciles the shared enable flag with future schedules. Old timers, unrelated Off presses and refused starts cannot cancel a newer action or an operation belonging to another controller.
 
-**Full Changelog comparison:** [v4.0.3-beta.2...v4.0.3-beta.3](https://github.com/JayC68/homebridge-giv-iog-local/compare/v4.0.3-beta.2...v4.0.3-beta.3).
+Emergency Stop cancels the current occurrence. A cancelled recurring hardware window is temporarily cleared, then restored after that occurrence ends, unless newer settings have replaced it. The known CH slot 8 one-off route is cleared rather than replayed. GivHome also remembers a cancelled automation occurrence so its supervisor does not immediately restart the same action under another label. Later eligible windows can run normally, subject to their usual settings and safety gates.
+
+Cheap Overnight retains priority during its configured window. Intelligent Octopus Go battery protection keeps its own target and continues to take over after the overnight window if enabled. Existing reserve limits, Flux single-peak protection, Agile learning and Eve history remain in place.
+
+## Upgrading
+
+Keep a Homebridge backup and the exact previous package for rollback. This is an opt-in beta on the **beta** channel; **latest** remains 4.0.2. Older Emergency Stop records are reconciled against fresh inverter evidence rather than simply waiting for an old deadline.
+
+Register simulations and native HomeKit tests cover interrupted reads and writes, restart recovery, idle stops, future schedules, two-slot profiles and clock-change boundaries. They do not establish behaviour on every inverter or firmware. **HR242 remains diagnostic-only.** See [control recovery and model limits](docs/CONTROL_LIFECYCLE.md) and [validation details](docs/VALIDATION_BETA4.md).
+
+The optional local learning foundation is unchanged and remains off by default. **Observation history and learned models stay on your Homebridge device; none is sent to the developer.** Physical Pi resource qualification remains pending. See the [local learning guide](docs/SOLAR_OBSERVATION.md).
+
+**Full Changelog comparison:** [v4.0.3-beta.3...v4.0.3-beta.4](https://github.com/JayC68/homebridge-giv-iog-local/compare/v4.0.3-beta.3...v4.0.3-beta.4).

@@ -18,7 +18,7 @@ function fixture(serial = 'CH2344G083', original = {}) {
     applianceControl: {
       cheapStart: '23:30', cheapEnd: '05:30', targetSoc: 100, graceMinutes: 30,
       iogHomeBatteryProtectionMode: 'charge', iogHomeBatteryProtectionPauseValue: 2,
-      features: { cheapOvernightCharging: true, homeBatteryProtectionDuringSmartSlots: true, batteryCare: false }
+      features: { cheapOvernightCharging: true, homeBatteryProtectionDuringSmartSlots: true, batteryCare: false, ceAcCoupledLiveWrites: true }
     },
     octopusState: { dispatches: [] },
     applianceSnapshots: new Map(),
@@ -37,6 +37,7 @@ function fixture(serial = 'CH2344G083', original = {}) {
     logBatteryCarePlan() {},
     logCheapOvernightPlan() {}
   });
+  require('./attach-control-fixture')(platform, registers);
   return { platform, registers, writes };
 }
 
@@ -102,7 +103,7 @@ test('an unrelated charge owner cannot replace the saved snapshot', async () => 
   const { platform, writes } = fixture();
   await platform.startTimedChargeCommand({ minutes: 30 }, { automatic: true, label: 'Cheap Overnight' });
   const count = writes.length;
-  await assert.rejects(platform.startTimedChargeCommand({ minutes: 30 }, { automatic: true, label: 'IOG' }), /previous charge owner/);
+  await assert.rejects(platform.startTimedChargeCommand({ minutes: 30 }, { automatic: true, label: 'IOG' }), /Previous control owner/);
   assert.equal(writes.length, count);
   assert.equal(platform.applianceSnapshots.get('charge').source, 'Cheap Overnight');
 });

@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.0.3-beta.3",
+  "version": "4.0.3-beta.4",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -35,8 +35,8 @@
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {
-    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js",
-    "verify": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js",
+    "test": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js",
+    "verify": "node tools/verify-release.js && node tools/predicted-solar-harness.js && node tools/verify-release-notes.js && TZ=Europe/London node --test tools/charge-lifecycle.test.js tools/charge-target.test.js tools/control-lifecycle.test.js && TZ=Europe/London node --test tools/beta-controls.test.js && TZ=Europe/London node --test tools/solar-observation.test.js",
     "test:hap": "node --test tools/charge-target-hap.test.js",
     "pack:dry": "npm pack --dry-run",
     "test:observation": "TZ=Europe/London node --test tools/solar-observation.test.js",
@@ -66,7 +66,10 @@
     "tools/beta-controls.test.js",
     "tools/solar-observation.test.js",
     "tools/solar-observation-stress.js",
-    "tools/verify-observation-qualification.js"
+    "tools/verify-observation-qualification.js",
+    "tools/control-lifecycle.test.js",
+    "tools/control-test-fixture.js",
+    "tools/attach-control-fixture.js"
   ],
   "displayName": "GivHome",
   "homepage": "https://homebridge.givhome.kernowekconsulting.co.uk",

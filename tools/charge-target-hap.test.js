@@ -248,14 +248,18 @@ test('native idle Emergency Stop returns Off without disabling an armed future s
   const { platform: p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
   p.ensureBetaControlAccessories();
   const on = registered.find(a => a.displayName.includes('Emergency')).getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
-  const { emergencyProfile } = require('../lib/emergency-stop');
-  const state = { 27: 1, 96: 1, 59: 0, 318: 0 };
-  for (const slot of emergencyProfile(p.inverterSerial).slots) for (const r of slot.pair) state[r] = 0;
+  const { controlProfile } = require('../lib/control-state');
+  const state = { 20: 0, 27: 1, 96: 1, 59: 0, 111: 100, 112: 100, 116: 100, 293: 4, 318: 0, 319: 0, 320: 0 };
+  for (const slot of controlProfile(p.inverterSerial).slots) for (const r of slot.pair) state[r] = 0;
   // A window safely in the future, without a midnight or clock-dependent boundary.
   const hour = new Date().getHours();
   const start = (hour + 2) % 24, end = (hour + 3) % 24;
   state[94] = start * 100; state[95] = end * 100;
-  p.readHoldingRegisters = async (r, n) => Array.from({ length: n }, (_, i) => state[r + i]);
+  p.readHoldingRegisters = async (r, n) => {
+    const d = new Date();
+    const clock = { 35: d.getFullYear() - 2000, 36: d.getMonth() + 1, 37: d.getDate(), 38: d.getHours(), 39: d.getMinutes(), 40: d.getSeconds() };
+    return Array.from({ length: n }, (_, i) => clock[r + i] ?? state[r + i]);
+  };
   p.writeDirectRegister = async () => assert.fail('idle HomeKit press must not write');
   p.withManualChargeTransportGate = async (_, fn) => fn();
   await on.handleSetRequest(true);

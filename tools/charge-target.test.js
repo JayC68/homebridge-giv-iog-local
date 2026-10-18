@@ -67,6 +67,7 @@ function fixture(t, serial = 'CH2344G083') {
     logBatteryCarePlan() {}, logCheapOvernightPlan() {}
   });
   t.after(() => { if (platform.chargeTargetTimer) clearTimeout(platform.chargeTargetTimer); });
+  require('./attach-control-fixture')(platform, registers, directory);
   return { platform, registers, writes, chars, registrations, removals };
 }
 

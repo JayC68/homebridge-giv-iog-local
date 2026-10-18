@@ -1332,7 +1332,7 @@
     {
       "type": "fieldset",
       "title": "Emergency Stop",
-      "description": "Unwanted or unexpected battery charging or discharging? Add the Apple Home tile below so you can ask GivHome to find and stop the running forced operation and return to Eco. Switch it on for a one-time recovery; it returns to Off afterwards. Check the Homebridge log for the result. An incomplete recovery keeps commands on hold until you investigate and retry.",
+      "description": "Unwanted or unexpected battery charging or discharging? Add the Apple Home tile below so you can ask GivHome to find and stop the running forced operation and return to Eco. Switch it on for a one-time recovery; it returns to Off afterwards. Check the Homebridge log for the result. If communication is interrupted, GivHome retries with readback. A verified stop releases new actions immediately and preserves later schedules. An unresolved stop keeps conflicting controls on hold and reports the problem in the Homebridge log.",
       "items": [
         "enableEmergencyStopTile"
       ]

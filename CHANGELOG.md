@@ -2,7 +2,17 @@
 
 This is the story of GivHome v4 and the direct-Modbus work that led to it. The [earlier v3 changelog](docs/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) keep the earlier public history available too.
 
-[Release notes for 4.0.3-beta.3](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.4](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.4 — Stop this action, keep the next one (18 October 2026)
+
+- Make Emergency Stop acknowledge promptly in Apple Home and release new actions as soon as inverter readback verifies the stop. Remove the wait to an old action’s finishing time.
+- Treat nothing running as a no-change result when Eco is normal. Preserve armed future schedules, unrelated settings and cleanup ownership.
+- Persist stop and cleanup progress; retry interrupted communication with bounded backoff and reconcile uncertain writes before resending. Resume recovery after restart and migrate older stop records using fresh evidence.
+- Add durable action ownership and timer tokens for charge, export and pause. Restore borrowed settings only for a matching action; preserve external changes, refuse conflicting starts safely, and make unrelated Off presses harmless.
+- Reconcile shared charge/export enable flags with future schedules. Cancel only the current automation occurrence, restore recurring hardware windows after it ends, and retain Cheap Overnight priority and later IOG handover if enabled.
+- Cover documented two-slot CE/AC and ED/Hybrid routes as well as CH/All-in-One; route ED export through its core bank. Read supported pause capabilities and verify inverter time, including the repeated autumn hour. Keep HR242 diagnostic-only.
+- Retain reserve limits, Flux single-peak protection, Agile learning, Eve history and the optional local observation foundation. Local learning data stays on the device and is not sent to the developer.
 
 ## 4.0.3-beta.3 — Local learning foundation (17 October 2026)
 

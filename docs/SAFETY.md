@@ -1,34 +1,13 @@
 # Safety model
 
-GivHome is designed to be cautious rather than clever at any cost.
+GivHome reads before writing, serialises local commands and verifies important writes. It reconciles uncertain acknowledgements before resending and retains interrupted work for bounded recovery.
 
-## The basics
+Current actions have a durable identity. Cleanup restores only settings borrowed by the matching action, preserves changes made by another controller and reconciles shared enable flags with future schedules. Emergency Stop cancels the current occurrence; once verified, new actions are available immediately. Nothing running in normal Eco produces no writes.
 
-- It reads before writing where practical.
-- It writes through a local command queue.
-- It verifies important writes with readback.
-- It avoids blind resends when an acknowledgement is uncertain.
-- It cleans the shared CH/AIO export route after Flux, Agile or manual export use.
+For CH/All-in-One export, the shared slot 8 one-off times are neutralised after use. Its captured target and power settings are restored, and other eligible schedules retain their namespace enablement. Cleanup does not blindly disable every future export window.
 
-## Export route cleanup
+See [control recovery and model limits](CONTROL_LIFECYCLE.md) for two-slot profiles, pause capability, recovery journals and clock checks. HR242 remains diagnostic-only.
 
-For CH/AIO systems, scheduled export uses a shared route. GivHome clears the route after use:
+An accepted command or matching register value does not by itself prove physical power flow. Some CH firmware accepts an export power ratio but exports at a higher rate. Flux retains observed-discharge energy budgeting and reserve checks rather than assuming that requested power is obeyed.
 
-```text
-HR59=0
-HR291=0
-HR292=0
-HR293=0
-```
-
-This avoids stale export slots hanging around after an automation has finished.
-
-## Power ratio notes
-
-GivHome still writes and reads back the export power-ratio register where useful.
-
-On CH/AIO scheduled export, live evidence showed that the inverter may accept the value but still export at its own higher rate. For Flux Export, v4 therefore budgets using observed discharge power rather than assuming the requested ratio is being obeyed.
-
-## Practical advice
-
-Test new export features while you are at home and able to watch the system.
+Keep a verified backup and test new export features while able to watch the system.
