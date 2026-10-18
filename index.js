@@ -3193,6 +3193,7 @@ class GivHomeModbusPlatform {
   }
 
   async applyApplianceAutomation() {
+    if (this.emergencyHeld()) await this.recoverEmergencyStopIfNeeded();
     if (this.emergencyHeld()) return;
     const model = this.latestModel;
     if (!model || this.health.state !== 'online') return;

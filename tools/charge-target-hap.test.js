@@ -213,6 +213,19 @@ test('native Emergency Stop rejects acceptance if durable pending state cannot b
   assert.equal(p.emergencyHeld(),true);
 });
 
+test('automatic recovery publishes the cleared HomeKit fault without another Home button press', async t => {
+  const { platform:p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
+  p.ensureBetaControlAccessories();
+  const on=registered[0].getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  p.emergencyState={status:'failed'};
+  p.publishEmergencyStopHomeKitState(); await new Promise(setImmediate);
+  assert.equal(on.statusCode,hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+  p.emergencyState={status:'verified',untilMs:Date.now()+60000}; p.emergencyInFlight=null;
+  p.publishEmergencyStopHomeKitState(); await new Promise(setImmediate);
+  assert.equal(on.statusCode,hap.HAPStatus.SUCCESS);
+  assert.equal(await on.handleGetRequest(),false);
+});
+
 test('native switches respect master, unsupported model, CE acknowledgement and removal', t => {
   for (const overrides of [{enableApplianceControl:false},{inverterSerial:'GW00000000'},{inverterSerial:'CE2225G298'}]) {
     const {platform:p,registered}=makePlatform(t,storage(t),{enableEmergencyStopTile:true,...overrides});

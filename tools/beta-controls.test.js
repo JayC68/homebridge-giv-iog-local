@@ -46,7 +46,7 @@ function registers(serial = 'CH2344G083', overrides = {}) {
   Object.assign(state, { 94: 2330, 95: 530, 56: 30, 57: 200 }, overrides);
   const writes = []; const reads = [];
   return { profile, state, writes, reads,
-    read: async (r, count) => { reads.push(r); assert.equal(count, 1); return [state[r]]; },
+    read: async (r, count) => { reads.push(r); assert.ok(count>=1&&count<=3); return Array.from({length:count},(_,i)=>state[r+i]); },
     write: async (r, value) => { writes.push([r, value]); state[r] = value; }
   };
 }
@@ -73,6 +73,16 @@ test('CH active validated slot 8 clears times but preserves target and future sl
   await stop(f);
   assert.equal(f.state[291], 0); assert.equal(f.state[292], 0); assert.equal(f.state[293], 25);
   assert.equal(f.state[264], 2300); assert.equal(f.state[265], 2330);
+});
+
+test('Emergency Stop reads only required registers with bounded adjacent-word batches', async () => {
+  for(const serial of ['CH2344G083','CE2225G298']) {
+    const f=registers(serial), requested=[];
+    await readEmergencySnapshot(async(r,n)=>{requested.push(...Array.from({length:n},(_,i)=>r+i));return f.read(r,n);},f.profile);
+    const expected=[27,59,96,...f.profile.slots.flatMap(s=>s.pair),...(f.profile.pause?[318]:[])];
+    assert.deepEqual(requested,[...new Set(expected)].sort((a,b)=>a-b));
+    assert.equal(f.reads.length,serial.startsWith('CH')?23:6);
+  }
 });
 test('unsupported active clear path disables forced controls but fails held without speculative writes', async () => {
   const f = registers('CH2344G083', { 249: 30, 250: 200 });
@@ -235,6 +245,184 @@ test('stale saved ownership that cannot be removed fails reconciliation and keep
   const p=platform(t); const f=registers();p.readHoldingRegisters=f.read;p.writeDirectRegister=f.write;
   const stale=path.join(p.getStoragePath(),'stale');fs.writeFileSync(stale,'{}');p.ceAcChargeSlotStatePath=()=>stale;
   await assert.rejects(p.requestEmergencyStop(),/ownership memory/);assert.equal(p.emergencyHeld(),true);
+});
+
+function failFinalReadOnce(p, f) {
+  let coreReads=0;
+  p.readHoldingRegisters=async(r,n)=>{
+    if(r===27 && ++coreReads===3) throw new Error('wireless receive timed out');
+    return f.read(r,n);
+  };
+  p.writeDirectRegister=f.write;
+}
+function advanceRetry(t,p) { t.mock.timers.setTime(p.emergencyRetryAtMs+1); }
+
+test('automatic recovery proves a lost final read without repeating successful writes or extending the stop', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); failFinalReadOnce(p,f);
+  await assert.rejects(p.requestEmergencyStop(),/HR27.*wireless/);
+  const deadline=p.emergencyState.untilMs, writes=f.writes.length;
+  p.readHoldingRegisters=f.read;
+  await p.recoverEmergencyStopIfNeeded(); assert.equal(p.emergencyState.status,'failed');
+  advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified');
+  assert.equal(f.writes.length,writes);
+  assert.equal(p.emergencyState.untilMs,deadline);
+  t.mock.timers.setTime(deadline+1); assert.equal(p.emergencyHeld(),false);
+});
+
+test('automatic recovery after a lost disable acknowledgement clears only saved original slots', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers('CH2344G083',{31:800,32:900});
+  p.readHoldingRegisters=f.read;
+  p.writeDirectRegister=async(r,v)=>{await f.write(r,v);if(r===96)throw new Error('lost acknowledgement');};
+  await assert.rejects(p.requestEmergencyStop(),/uncertain/);
+  const count=f.writes.length; p.writeDirectRegister=f.write;
+  advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified');
+  assert.equal(f.state[94],0); assert.equal(f.state[95],0);
+  assert.equal(f.state[31],800); assert.equal(f.state[32],900);
+  assert.equal(f.writes.slice(count).some(([r])=>r===96||r===59),false);
+});
+
+test('automatic recovery repairs a partial clear without rewriting already cleared registers', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); p.readHoldingRegisters=f.read;
+  p.writeDirectRegister=async(r,v)=>{if(r===95)throw new Error('wireless loss');await f.write(r,v);};
+  await assert.rejects(p.requestEmergencyStop());
+  const count=f.writes.length; p.writeDirectRegister=f.write;
+  advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified'); assert.equal(f.state[95],0);
+  assert.equal(f.writes.slice(count).some(([r])=>r===94),false);
+});
+
+test('wireless outage recovery backs off, stays single-flight, and resumes a lost initial snapshot', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); let reads=0;
+  p.readHoldingRegisters=async()=>{reads++;throw new Error('offline');}; p.writeDirectRegister=f.write;
+  await assert.rejects(p.requestEmergencyStop());
+  let previousDelay=0;
+  for(let i=0;i<6;i++) {
+    const delay=p.emergencyRetryAtMs-Date.now();
+    assert.ok(delay>=previousDelay && delay<=60000); previousDelay=delay;
+    const before=reads; await p.recoverEmergencyStopIfNeeded(); assert.equal(reads,before);
+    advanceRetry(t,p);
+    await Promise.all([p.recoverEmergencyStopIfNeeded(),p.recoverEmergencyStopIfNeeded()]);
+    assert.equal(reads,before+1); assert.equal(f.writes.length,0);
+  }
+  p.readHoldingRegisters=f.read; advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified');
+  assert.equal(p.emergencyState.requestedAt,now.toISOString());
+  assert.equal(p.emergencyState.untilMs,windowEnd.getTime());
+});
+
+test('failed recovery survives restart and continues even when the optional tile is hidden', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); failFinalReadOnce(p,f);
+  await assert.rejects(p.requestEmergencyStop());
+  p.config.enableEmergencyStopTile=false; p.initialiseBetaControls();
+  p.readHoldingRegisters=f.read; advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified');
+});
+
+test('recovery leaves a later active schedule running once the original cleared slots are proved', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); failFinalReadOnce(p,f);
+  await assert.rejects(p.requestEmergencyStop()); const count=f.writes.length;
+  t.mock.timers.setTime(new Date('2026-10-17T06:10:00+01:00').getTime());
+  Object.assign(f.state,{96:1,31:600,32:700}); p.readHoldingRegisters=f.read;
+  await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified'); assert.equal(p.emergencyHeld(),false);
+  assert.equal(f.writes.length,count); assert.equal(f.state[96],1); assert.equal(f.state[31],600);
+});
+
+test('recovery refuses changed original slot evidence and retries without overwriting it', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); p.readHoldingRegisters=f.read;
+  p.writeDirectRegister=async(r,v)=>{if(r===95)throw new Error('partial');await f.write(r,v);};
+  await assert.rejects(p.requestEmergencyStop());
+  f.state[95]=600; p.writeDirectRegister=f.write; const count=f.writes.length;
+  advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'failed'); assert.match(p.emergencyState.error,/changed/);
+  assert.equal(f.writes.length,count); assert.ok(p.emergencyRetryAtMs>Date.now());
+});
+
+test('recovery migrates a legacy failed record using its original snapshot', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); const initial={...f.state};
+  Object.assign(f.state,{96:0,59:0,27:1});
+  p.emergencyState={identity:p.chargeTargetIdentity,status:'failed',requestedAt:now.toISOString(),untilMs:windowEnd.getTime(),implicated:[],initialRegisters:initial};
+  p.readHoldingRegisters=f.read; p.writeDirectRegister=f.write;
+  await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'verified'); assert.equal(f.state[94],0); assert.equal(f.state[56],0);
+});
+
+test('a lost initial snapshot cannot turn a later scheduled action into a new stop target', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers();
+  p.readHoldingRegisters=async()=>{throw new Error('offline before first snapshot');}; p.writeDirectRegister=f.write;
+  await assert.rejects(p.requestEmergencyStop());
+  t.mock.timers.setTime(new Date('2026-10-17T06:10:00+01:00').getTime());
+  Object.assign(f.state,{96:1,59:0,27:1,31:600,32:700}); p.readHoldingRegisters=f.read;
+  await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'failed'); assert.match(p.emergencyState.error,/later action/);
+  assert.equal(f.writes.length,0); assert.equal(f.state[96],1);
+});
+
+test('recovery never mutates after appliance-control acknowledgement is withdrawn', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const p=platform(t), f=registers(); failFinalReadOnce(p,f);
+  await assert.rejects(p.requestEmergencyStop()); const count=f.writes.length;
+  p.applianceControl.masterGateSatisfied=false; p.readHoldingRegisters=async()=>assert.fail('permission gate precedes transport');
+  advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.status,'failed'); assert.equal(f.writes.length,count);
+});
+
+test('late recovery unblocks the next Cheap Overnight window in the same automation tick', async t => {
+  const evening=new Date('2026-10-17T20:52:00+01:00');
+  t.mock.timers.enable({apis:['Date'],now:evening.getTime()});
+  const p=platform(t), f=registers('CH2344G083',{94:1537,95:1737,59:0,261:2051,262:2251});
+  failFinalReadOnce(p,f); await assert.rejects(p.requestEmergencyStop());
+  const originalDeadline=p.emergencyState.untilMs; p.readHoldingRegisters=f.read;
+  t.mock.timers.setTime(new Date('2026-10-17T23:30:01+01:00').getTime());
+  const queued=[];
+  Object.assign(p,{health:{state:'online'},latestModel:{socPercent:4},octopusState:{dispatches:[]},
+    reconcileActiveChargeTarget:async()=>{},logBatteryCarePlan(){},logCheapOvernightPlan(){},autoChargeActive:false,
+    withManualChargeTransportGate:async(label,fn)=>{queued.push(label);if(label==='GivHome Emergency Stop')return fn();throw new Error('OFFLINE_CHARGE_QUEUE_REACHED');}});
+  Object.assign(p.applianceControl,{cheapStart:'23:30',cheapEnd:'05:30'});
+  await assert.rejects(p.applyApplianceAutomation(),/OFFLINE_CHARGE_QUEUE_REACHED/);
+  assert.equal(p.emergencyState.status,'released'); assert.equal(p.emergencyState.untilMs,originalDeadline);
+  assert.deepEqual(queued,['GivHome Emergency Stop','GivHome Cheap Overnight fallback charge']);
+});
+
+test('fault sweep: every snapshot read and every before/after-write wireless loss recovers after restart', async t => {
+  t.mock.timers.enable({apis:['Date'],now:now.getTime()});
+  const faults=[...Array.from({length:69},(_,i)=>({kind:'read',at:i+1})),
+    ...['before','after'].flatMap(phase=>Array.from({length:7},(_,i)=>({kind:'write',phase,at:i+1})))];
+  for(const fault of faults) {
+    t.mock.timers.setTime(now.getTime());
+    const p=platform(t), f=registers('CH2344G083',{31:800,32:900});
+    let reads=0,writes=0;
+    p.readHoldingRegisters=async(r,n)=>{
+      if(fault.kind==='read'&&++reads===fault.at)throw new Error(`wireless read ${fault.at}`);
+      return f.read(r,n);
+    };
+    p.writeDirectRegister=async(r,v)=>{
+      const fail=fault.kind==='write'&&++writes===fault.at;
+      if(fail&&fault.phase==='before')throw new Error('wireless before write');
+      await f.write(r,v);
+      if(fail)throw new Error('lost write acknowledgement');
+    };
+    await assert.rejects(p.requestEmergencyStop(),undefined,JSON.stringify(fault));
+    p.initialiseBetaControls(); p.readHoldingRegisters=f.read; p.writeDirectRegister=f.write;
+    advanceRetry(t,p); await p.recoverEmergencyStopIfNeeded();
+    assert.equal(p.emergencyState.status,'verified',JSON.stringify(fault));
+    assert.equal(p.emergencyState.untilMs,windowEnd.getTime());
+    for(const r of [94,95,56,57,96,59])assert.equal(f.state[r],0,JSON.stringify(fault));
+    assert.equal(f.state[27],1);
+    assert.equal(f.state[31],800);assert.equal(f.state[32],900);
+    assert.equal(f.writes.some(([r])=>[111,112,116,242,31,32].includes(r)),false);
+  }
 });
 
 test('CE configured pause protection requires and restores its pause control without reading CH slot banks', async t => {
