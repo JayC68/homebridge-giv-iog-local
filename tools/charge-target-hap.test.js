@@ -243,3 +243,25 @@ test('solar native toggle saves first, rejects storage failure and leaves prior 
   p.solarStateFile=path.join(p.getStoragePath(),'missing','state');
   await assert.rejects(on.handleSetRequest(false)); assert.equal(p.solarAwareEnabled,true);
 });
+
+test('native idle Emergency Stop returns Off without disabling an armed future schedule', async t => {
+  const { platform: p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
+  p.ensureBetaControlAccessories();
+  const on = registered.find(a => a.displayName.includes('Emergency')).getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  const { emergencyProfile } = require('../lib/emergency-stop');
+  const state = { 27: 1, 96: 1, 59: 0, 318: 0 };
+  for (const slot of emergencyProfile(p.inverterSerial).slots) for (const r of slot.pair) state[r] = 0;
+  // A window safely in the future, without a midnight or clock-dependent boundary.
+  const hour = new Date().getHours();
+  const start = (hour + 2) % 24, end = (hour + 3) % 24;
+  state[94] = start * 100; state[95] = end * 100;
+  p.readHoldingRegisters = async (r, n) => Array.from({ length: n }, (_, i) => state[r + i]);
+  p.writeDirectRegister = async () => assert.fail('idle HomeKit press must not write');
+  p.withManualChargeTransportGate = async (_, fn) => fn();
+  await on.handleSetRequest(true);
+  if (p.emergencyInFlight) await p.emergencyInFlight;
+  await new Promise(setImmediate);
+  assert.equal(await on.handleGetRequest(), false);
+  assert.equal(p.emergencyHeld(), false); assert.equal(state[96], 1);
+  assert.equal(p.emergencyState.outcome, 'nothing-running');
+});

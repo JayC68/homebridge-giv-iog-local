@@ -438,3 +438,118 @@ test('CE configured pause with missing capability readback fails before all writ
   const f=registers('CE2225G298',{318:undefined});p.readHoldingRegisters=f.read;p.writeDirectRegister=f.write;
   await assert.rejects(p.requestEmergencyStop(),/incomplete HR318/);assert.deepEqual(f.writes,[]);assert.equal(p.emergencyHeld(),true);
 });
+
+function idlePlatform(t, overrides = {}, cheap = {}) {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-18T08:00:00+01:00') });
+  const p = platform(t), f = registers('CH2344G083', { 27: 1, 96: 0, 59: 0, 94: 0, 95: 0, 56: 0, 57: 0, ...overrides });
+  p.readHoldingRegisters = f.read; p.writeDirectRegister = f.write;
+  p.currentCheapStateForStatusTiles = () => cheap;
+  const timer = setTimeout(() => {}, 3600000); timer.unref(); t.after(() => clearTimeout(timer));
+  p.applianceCommandTimers.set('future', timer);
+  const snapshot = { future: true }; p.applianceSnapshots.set('future', snapshot);
+  p.activeChargeTarget = { endAtMs: Date.now() + 3600000 };
+  for (const name of ['clearCeAcChargeSlotMemory', 'clearEveningExcessExportMemory', 'clearOctopusFluxExportMemory', 'clearOctopusAgileOutgoingMemory', 'setManualChargeHomeKitState']) p[name] = () => assert.fail('idle must preserve ownership and tile state');
+  return { p, f, timer, snapshot };
+}
+for (const armed of [false, true]) test(`idle stop preserves future controls, timers, ownership and intents: armed=${armed}`, async t => {
+  const { p, f, timer, snapshot } = idlePlatform(t, armed ? { 96: 1, 94: 2330, 95: 530, 59: 1, 291: 1800, 292: 1900 } : {});
+  const before = { ...f.state }, generation = p.emergencyGeneration;
+  const result = await p.requestEmergencyStop();
+  assert.equal(result.idle, true); assert.deepEqual(f.writes, []); assert.deepEqual(f.state, before);
+  assert.equal(f.reads.length, 23); assert.equal(p.applianceCommandTimers.get('future'), timer);
+  assert.equal(p.applianceSnapshots.get('future'), snapshot); assert.ok(p.activeChargeTarget);
+  assert.equal(p.emergencyGeneration, generation); assert.equal(p.emergencyHeld(), false);
+  assert.equal(p.emergencyState.outcome, 'nothing-running');
+  p.initialiseBetaControls(); assert.equal(p.emergencyHeld(), false);
+});
+test('idle during Cheap Overnight or IOG creates no hold even with protection deadlines', async t => {
+  const { p, f } = idlePlatform(t, {}, { fallbackActive: true, fallbackWindowEnd: new Date('2026-10-18T09:00:00+01:00'), smartActive: true, protectedEnd: new Date('2026-10-18T10:00:00+01:00') });
+  p.autoChargeProtectedUntilMs = Date.now() + 7200000;
+  await p.requestEmergencyStop(); assert.equal(p.emergencyHeld(), false); assert.deepEqual(f.writes, []);
+});
+test('idle inspection coalesces repeated taps without cancelling a future timer', async t => {
+  const { p, f } = idlePlatform(t);
+  const first = p.acceptEmergencyStopRequest(), second = p.acceptEmergencyStopRequest();
+  assert.equal(first, second); await first;
+  assert.equal(f.reads.length, 23); assert.equal(p.applianceCommandTimers.size, 1);
+});
+test('idle detection allows queued work before and after its shared transport turn', async t => {
+  const { p, f } = idlePlatform(t); let release;
+  Object.assign(p, { commandQueueTail: new Promise(resolve => { release = resolve; }), commandTransportSequence: 0, commandQueueDepth: 0, commandPollHoldUntilMs: 0, enterQueuedCommandTransportGate: async (_, fn) => fn() });
+  p.withManualChargeTransportGate = GivHomeModbusPlatform.prototype.withManualChargeTransportGate;
+  const events = [];
+  const before = p.withManualChargeTransportGate('future command before inspection', async () => events.push('before'));
+  const stop = p.acceptEmergencyStopRequest();
+  const after = p.withManualChargeTransportGate('future command after inspection', async () => events.push('after'));
+  release(); await Promise.all([before, stop, after]);
+  assert.deepEqual(events, ['before', 'after']); assert.deepEqual(f.writes, []);
+});
+test('idle recovery after lost initial read preserves armed future schedules and timers', async t => {
+  const { p, f, timer } = idlePlatform(t, { 96: 1, 94: 2330, 95: 530 });
+  p.readHoldingRegisters = async () => { throw new Error('wireless unavailable'); };
+  await assert.rejects(p.requestEmergencyStop(), /wireless/);
+  assert.equal(p.emergencyHeld(), true); assert.equal(p.applianceCommandTimers.get('future'), timer);
+  p.initialiseBetaControls(); assert.equal(p.emergencyHeld(), true);
+  p.readHoldingRegisters = f.read; advanceRetry(t, p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyState.outcome, 'nothing-running'); assert.equal(p.emergencyHeld(), false);
+  assert.deepEqual(f.writes, []); assert.equal(f.state[96], 1); assert.equal(p.applianceCommandTimers.get('future'), timer);
+});
+test('idle completion persistence failure holds safely and retries without hardware writes', async t => {
+  const { p, f } = idlePlatform(t); const read = f.read;
+  p.readHoldingRegisters = async (r, n) => {
+    const result = await read(r, n);
+    if (f.reads.length === 23) p.emergencyStateFile = path.join(p.getStoragePath(), 'missing', 'state');
+    return result;
+  };
+  const file = p.emergencyStateFile;
+  await assert.rejects(p.requestEmergencyStop()); assert.equal(p.emergencyHeld(), true); assert.deepEqual(f.writes, []);
+  p.emergencyStateFile = file; p.readHoldingRegisters = f.read;
+  advanceRetry(t, p); await p.recoverEmergencyStopIfNeeded();
+  assert.equal(p.emergencyHeld(), false); assert.deepEqual(f.writes, []);
+});
+test('an existing verified hold is not erased by an otherwise idle button press', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: now.getTime() });
+  const p = platform(t), f = registers('CH2344G083', { 27: 1, 96: 0, 59: 0 });
+  p.readHoldingRegisters = f.read; p.writeDirectRegister = f.write;
+  p.emergencyState = { identity: p.chargeTargetIdentity, status: 'verified', untilMs: windowEnd.getTime() };
+  await p.requestEmergencyStop(); assert.equal(p.emergencyHeld(), true); assert.equal(p.emergencyState.untilMs, windowEnd.getTime());
+});
+test('manual retry of an unmutated failed inspection also leaves future schedules intact', async t => {
+  const { p, f } = idlePlatform(t, { 96: 1, 94: 2330, 95: 530 });
+  p.readHoldingRegisters = async () => { throw new Error('offline'); };
+  await assert.rejects(p.requestEmergencyStop()); p.readHoldingRegisters = f.read;
+  await p.requestEmergencyStop(); assert.equal(p.emergencyHeld(), false); assert.deepEqual(f.writes, []);
+});
+for (const serial of ['CE2225G298', 'ED2151G182']) test(`${serial} idle leaves armed future windows untouched`, async t => {
+  const { p } = idlePlatform(t); p.inverterSerial = serial;
+  p.applianceControl.features.ceAcCoupledLiveWrites = true;
+  const f = registers(serial, { 27: 1, 96: 1, 59: 1, 94: 2330, 95: 530, 56: 1800, 57: 1900 });
+  p.readHoldingRegisters = f.read; p.writeDirectRegister = f.write;
+  await p.requestEmergencyStop(); assert.equal(p.emergencyHeld(), false); assert.deepEqual(f.writes, []);
+  assert.equal(f.reads.length, 6);
+});
+test('a command already ahead of inspection can start, then is detected and stopped; stale queued intent is cancelled', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-18T08:00:00+01:00') });
+  const p = platform(t), f = registers('CH2344G083', { 27: 1, 96: 0, 59: 0, 94: 0, 95: 0 });
+  p.readHoldingRegisters = f.read; p.writeDirectRegister = f.write;
+  let release;
+  Object.assign(p, { commandQueueTail: new Promise(resolve => { release = resolve; }), commandTransportSequence: 0, commandQueueDepth: 0, commandPollHoldUntilMs: 0, enterQueuedCommandTransportGate: async (_, fn) => fn() });
+  p.withManualChargeTransportGate = GivHomeModbusPlatform.prototype.withManualChargeTransportGate;
+  const before = p.withManualChargeTransportGate('start before inspection', async () => Object.assign(f.state, { 96: 1, 94: 800, 95: 900 }));
+  const stop = p.acceptEmergencyStopRequest();
+  const after = p.withManualChargeTransportGate('stale intent after inspection', async () => assert.fail('stale command ran'));
+  const rejected = assert.rejects(after, /cancelled/);
+  release(); await Promise.all([before, stop, rejected]);
+  assert.equal(f.state[96], 0); assert.equal(f.state[94], 0); assert.equal(f.state[95], 0);
+  assert.equal(p.emergencyHeld(), true); assert.equal(p.emergencyGeneration, 1);
+});
+test('a saved read-only inspection is held after restart until readback is recovered', async t => {
+  const { p, f } = idlePlatform(t); let resume;
+  const read = f.read;
+  p.readHoldingRegisters = async (r, n) => { if (!resume) await new Promise(resolve => { resume = resolve; }); return read(r, n); };
+  const completion = p.acceptEmergencyStopRequest();
+  assert.equal(p.emergencyHeld(), false);
+  const restarted = Object.assign(Object.create(GivHomeModbusPlatform.prototype), p, { emergencyInFlight: null });
+  restarted.initialiseBetaControls(); assert.equal(restarted.emergencyHeld(), true);
+  resume(); await completion; assert.deepEqual(f.writes, []);
+});
