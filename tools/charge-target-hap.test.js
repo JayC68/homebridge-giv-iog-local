@@ -47,7 +47,7 @@ function makePlatform(t, directory, overrides = {}) {
   };
   const log = Object.assign(() => {}, { info() {}, warn() {}, error() {}, debug() {} });
   const platform = new GivHomeModbusPlatform(log, config, api);
-  t.after(() => { clearInterval(platform.flightRecorder.timer); clearTimeout(platform.chargeTargetTimer); });
+  t.after(() => { clearInterval(platform.flightRecorder.timer); if (platform.chargeTargetTimer) clearTimeout(platform.chargeTargetTimer); });
   return { platform, registered };
 }
 
@@ -148,15 +148,65 @@ test('new native switches are opt-in and reuse UUIDs on reload', async t => {
   assert.equal(await solar.getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On).handleGetRequest(),false);
 });
 
-test('native Emergency Stop is momentary, reports failure and never treats Off as verified', async t => {
+test('native Emergency Stop acknowledges acceptance, returns Off on completion and exposes later failure', async t => {
   const { platform:p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
   p.ensureBetaControlAccessories();
   const on = registered[0].getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
   let calls=0;
-  p.requestEmergencyStop=async()=>{calls++;};
+  p.acceptEmergencyStopRequest=()=>{calls++;return Promise.resolve();};
   await on.handleSetRequest(true); await new Promise(setImmediate); assert.equal(calls,1); assert.equal(on.value,false);
   await on.handleSetRequest(false); assert.equal(calls,1);
-  p.requestEmergencyStop=async()=>{p.emergencyState={status:'failed'}; throw new Error('simulated failed readback');};
+  p.acceptEmergencyStopRequest=()=>{p.emergencyState={status:'failed'}; return Promise.reject(new Error('simulated failed readback'));};
+  const communicationFailure=err=>err===hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE || err.hapStatus===hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE;
+  await on.handleSetRequest(true); await new Promise(setImmediate);
+  await assert.rejects(on.handleGetRequest(),communicationFailure);
+  assert.equal(p.emergencyHeld(),true);
+});
+
+test('native HAP request responds before its deadline while a 25-second stop remains readable as busy', async t => {
+  const { platform:p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
+  p.ensureBetaControlAccessories();
+  const accessory = registered[0];
+  const on = accessory.getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  accessory.aid=1; on.iid=10;
+  let finish;
+  p.acceptEmergencyStopRequest=()=>{
+    p.emergencyState={status:'pending'};
+    p.emergencyInFlight=new Promise(resolve=>{finish=()=>{
+      p.emergencyState={status:'verified',untilMs:Date.now()+60000};
+      p.emergencyInFlight=null; resolve();
+    };});
+    return p.emergencyInFlight;
+  };
+  const warnings=[];
+  accessory.on('characteristic-warning', warning=>warnings.push(warning));
+  t.mock.timers.enable({apis:['setTimeout']});
+  let response;
+  accessory.handleSetCharacteristics({}, {characteristics:[{aid:1,iid:10,value:true}]},
+    (error, result)=>{response={error,result};});
+  await new Promise(setImmediate);
+  assert.ok(response, 'HomeKit must receive acceptance while inverter work is still pending');
+  assert.equal(response.error,undefined);
+  assert.equal(response.result.characteristics[0].status,0);
+  assert.equal(await on.handleGetRequest(),true);
+  t.mock.timers.tick(25000);
+  await new Promise(setImmediate);
+  assert.equal(warnings.length,0);
+  assert.equal(await on.handleGetRequest(),true);
+  await on.handleSetRequest(false); await new Promise(setImmediate);
+  assert.equal(await on.handleGetRequest(),true, 'Off cannot cancel verification or hide busy state');
+  finish(); await new Promise(setImmediate);
+  assert.equal(await on.handleGetRequest(),false);
+  assert.equal(on.value,false);
+});
+
+test('native Emergency Stop rejects acceptance if durable pending state cannot be saved', async t => {
+  const { platform:p, registered } = makePlatform(t, storage(t), { enableEmergencyStopTile: true });
+  p.ensureBetaControlAccessories();
+  p.emergencyStateFile=path.join(p.getStoragePath(),'missing-directory','stop.json');
+  p.readHoldingRegisters=async()=>assert.fail('no inverter reads before durable acceptance');
+  p.writeDirectRegister=async()=>assert.fail('no inverter writes before durable acceptance');
+  const on=registered[0].getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
   const communicationFailure=err=>err===hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE || err.hapStatus===hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE;
   await assert.rejects(on.handleSetRequest(true),communicationFailure);
   await assert.rejects(on.handleGetRequest(),communicationFailure);
