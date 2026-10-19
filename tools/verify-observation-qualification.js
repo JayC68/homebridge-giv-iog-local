@@ -22,9 +22,9 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
   // This explicit owner approval applies only to this optional foundation beta, never a stable/automatic release.
   const optionalFoundation = schema?.schema?.properties?.enableSolarObservation?.default === false
     && foundation?.automaticControl === false && foundation?.qualified === false;
-  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.4'
+  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.5'
     && approval?.version === pkg.version && approval?.authorizedBy === 'project owner'
-    && approval?.authorizedOn === '2026-10-18' && approval?.channel === 'beta'
+    && approval?.authorizedOn === '2026-10-19' && approval?.channel === 'beta'
     && approval?.optIn === true && approval?.piSoakRequiredBeforeBetaPublication === false && optionalFoundation;
   return { allowed: Boolean(approvedBeta), hardwareQualified: false };
 }
@@ -37,7 +37,7 @@ function main() {
   const runtimeSha256 = digest.digest('hex');
   if (process.argv.includes('--runtime-hash')) { console.log(runtimeSha256); return; }
   const read = file => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
-  const decision = publicationDecision({ record: read('docs/OBSERVATION_QUALIFICATION.json'), pkg: read('package.json'),
+  const decision = publicationDecision({ record: read('docs/maintainer/OBSERVATION_QUALIFICATION.json'), pkg: read('package.json'),
     schema: read('config.schema.json'), foundation: require('../lib/solar-observation').emptyModel({}), runtimeSha256 },
   process.argv.includes('--beta-publication'));
   if (!decision.allowed) {
@@ -45,7 +45,7 @@ function main() {
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : 'PASS owner-authorised opt-in beta.4 publication; physical Pi qualification remains pending.');
+    : 'PASS owner-authorised opt-in beta.5 publication; physical Pi qualification remains pending.');
 }
 
 module.exports = { publicationDecision };

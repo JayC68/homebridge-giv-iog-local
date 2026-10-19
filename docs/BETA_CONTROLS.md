@@ -26,6 +26,6 @@ Emergency Stop now retires the current occurrence and releases new actions after
 
 A durable action journal protects shared settings and recurring schedules. Failed communication is retried using the existing queue and automation loop, with bounded delay and readback before resending. Unknown or conflicting state remains a visible fault. Later actions retain their normal model, acknowledgement, reserve and ownership gates.
 
-See [control recovery and model limits](CONTROL_LIFECYCLE.md) for current profile coverage, future pause windows, recurring schedule restoration, legacy migration and recovery evidence. Endpoint authority is documented/profile-guarded, not a claim of fleet-wide hardware qualification. HR242 remains diagnostic-only.
+See [control recovery and model limits](maintainer/CONTROL_LIFECYCLE.md) for current profile coverage, future pause windows, recurring schedule restoration, legacy migration and recovery evidence. Endpoint authority is documented/profile-guarded, not a claim of fleet-wide hardware qualification. HR242 remains diagnostic-only.
 
 Local files include `givhome-solar-aware-*.json`, `givhome-emergency-*.json` and `givhome-controls-*.json`. Keep Homebridge storage with rollback evidence; removing a tile does not discard incomplete recovery. No observation history or learned model is sent to the developer.

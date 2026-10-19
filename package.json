@@ -1,6 +1,6 @@
 {
   "name": "homebridge-giv-iog-local",
-  "version": "4.0.3-beta.4",
+  "version": "4.0.3-beta.5",
   "description": "Direct local GivEnergy integration for Homebridge with Apple Home telemetry and control, Intelligent Octopus Go, Flux and Agile export intelligence, Eve Energy history and Predicted Solar.",
   "main": "index.js",
   "license": "GPL-3.0-or-later",
@@ -76,10 +76,10 @@
   "author": "Kernowek Consulting",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JayC68/homebridge-giv-iog-local.git"
+    "url": "https://github.com/KernowekConsulting/homebridge-giv-iog-local.git"
   },
   "bugs": {
-    "url": "https://github.com/JayC68/homebridge-giv-iog-local/issues"
+    "url": "https://github.com/KernowekConsulting/homebridge-giv-iog-local/issues"
   },
   "funding": {
     "type": "website",
