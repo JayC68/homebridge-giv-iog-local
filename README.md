@@ -20,7 +20,7 @@ Those two ideas shaped GivHome v4: **understand what the inverter is really doin
 
 ## Version and installation
 
-This is **4.0.3-beta.4**, an opt-in beta for `homebridge-giv-iog-local`, based on the canonical **4.0.2** release. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for Emergency Stop recovery, action ownership and remaining model/firmware limits.
+This is **4.0.3-beta.5**, an opt-in beta for `homebridge-giv-iog-local`, based on the canonical **4.0.2** release. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so a v4 upgrade can reuse cached accessories rather than creating replacements. Read the release notes for Emergency Stop recovery, action ownership and remaining model/firmware limits.
 
 The optional [local learning foundation](docs/SOLAR_OBSERVATION.md) begins observing this installation for future Automatic Solar-Aware Cheap Overnight. It does not choose targets or enable automatic charging. Learning data stays on your device and is not sent to the developer.
 
@@ -28,7 +28,7 @@ The optional [local learning foundation](docs/SOLAR_OBSERVATION.md) begins obser
 
 Keep a verified backup and rollback before installation. The [release notes](RELEASE_NOTES.md) and [safety guidance](docs/SAFETY.md) record the verified scope and remaining limitations. Published releases can be installed through the Homebridge UI.
 
-[Start here: user guides](docs/README.md) | [Release Notes](RELEASE_NOTES.md) | [Full Changelog](CHANGELOG.md) | [Published GitHub Releases](https://github.com/JayC68/homebridge-giv-iog-local/releases)
+[Start here: user guides](docs/README.md) | [Release Notes](RELEASE_NOTES.md) | [Full Changelog](CHANGELOG.md) | [Published GitHub Releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases)
 
 Core monitoring and local control use direct local Modbus TCP; GivTCP, MQTT and GivEnergy Cloud are not required for the v4 local-control path.
 

@@ -1,17 +1,17 @@
 {
-  "version": "4.0.3-beta.4",
+  "version": "4.0.3-beta.5",
   "status": "pending",
-  "runtimeSha256": "055d14a71f53df1e60333bae54dbd971574345fec68b72367b984bebd8431f74",
+  "runtimeSha256": "b29447f4cb6f92941325a8aff4714b5c756719366c9ba6849452ab430065b830",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_BETA4.md",
+  "evidence": "docs/maintainer/VALIDATION_BETA5.md",
   "reason": "Physical Pi qualification and the accelerated RSS investigation remain outstanding. Opt-in beta publication is permitted for this version and default-off foundation; hardware performance is not qualified.",
   "betaPublication": {
-    "version": "4.0.3-beta.4",
+    "version": "4.0.3-beta.5",
     "authorizedBy": "project owner",
-    "authorizedOn": "2026-10-18",
+    "authorizedOn": "2026-10-19",
     "channel": "beta",
     "optIn": true,
     "piSoakRequiredBeforeBetaPublication": false

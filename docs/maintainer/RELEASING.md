@@ -24,4 +24,4 @@ For rollback, stop Homebridge, restore the previous package through the establis
 
 HR242 remains diagnostic-only. Do not infer live model/firmware validation from documented register authority or successful automated checks. Release preparation does not include deployment or live inverter testing.
 
-Historical release context is available in the [changelog](../../CHANGELOG.md), [provenance record](RELEASE_PROVENANCE.md) and [published releases](https://github.com/JayC68/homebridge-giv-iog-local/releases). Earlier tagged source retains the old release and private-trial procedures.
+Historical release context is available in the [changelog](../../CHANGELOG.md), [provenance record](RELEASE_PROVENANCE.md) and [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases). Earlier tagged source retains the old release and private-trial procedures.

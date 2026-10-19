@@ -9,7 +9,7 @@ const pkg = JSON.parse(read('package.json'));
 const notes = read('RELEASE_NOTES.md');
 const changelog = read('CHANGELOG.md');
 const readme = read('README.md');
-const tagBase = 'https://github.com/JayC68/homebridge-giv-iog-local/blob/v4.0.3-beta.4/';
+const tagBase = 'https://github.com/KernowekConsulting/homebridge-giv-iog-local/blob/v4.0.3-beta.5/';
 
 // A GitHub release body needs absolute file links into its tagged source tree.
 const githubBody = notes.replace(/\]\(([^)]+)\)/g, (link, target) => {
@@ -20,18 +20,18 @@ const githubBody = notes.replace(/\]\(([^)]+)\)/g, (link, target) => {
 if (process.argv.includes('--github-body')) {
   process.stdout.write(githubBody);
 } else {
-  assert.equal(pkg.version, '4.0.3-beta.4');
-  assert.match(notes, /^# GivHome 4\.0\.3-beta\.4 /);
-  assert.match(changelog, /^## 4\.0\.3-beta\.4 /m);
-  assert.ok(readme.includes('**4.0.3-beta.4**'));
+  assert.equal(pkg.version, '4.0.3-beta.5');
+  assert.match(notes, /^# GivHome 4\.0\.3-beta\.5 /);
+  assert.match(changelog, /^## 4\.0\.3-beta\.5 /m);
+  assert.ok(readme.includes('**4.0.3-beta.5**'));
   assert.doesNotMatch(notes, /Unreleased|date is pending/);
-  const latestChanges = changelog.split('## 4.0.3-beta.4')[1].split('## 4.0.3-beta.3')[0];
+  const latestChanges = changelog.split('## 4.0.3-beta.5')[1].split('## 4.0.3-beta.4')[0];
   const internalDiscussion = /our agreement|project owner|explicitly authori[sz]ed|ChatGPT|Codex|assistant|conversation/i;
   assert.doesNotMatch(notes, internalDiscussion);
   assert.doesNotMatch(latestChanges, internalDiscussion);
   assert.match(readme, /\[Release Notes\]\(RELEASE_NOTES\.md\)/);
   assert.match(readme, /\[Full Changelog\]\(CHANGELOG\.md\)/);
-  assert.match(notes, /compare\/v4\.0\.3-beta\.3\.\.\.v4\.0\.3-beta\.4/);
+  assert.match(notes, /compare\/v4\.0\.3-beta\.4\.\.\.v4\.0\.3-beta\.5/);
   assert.match(notes, /HR242|slot-specific limit/);
   for (const version of ['4.0.0', '4.0.0-beta.3']) {
     assert.ok(changelog.includes(`## ${version} `), `missing history ${version}`);

@@ -13,6 +13,6 @@ Start with the guide for what you want to do. Configure the plugin through the H
 
 Local learning is optional and does not enable automatic solar planning. Read the safety guidance before trying charge or export controls.
 
-For changes between versions, see the [release notes](../RELEASE_NOTES.md), [full changelog](../CHANGELOG.md) or [published releases](https://github.com/JayC68/homebridge-giv-iog-local/releases).
+For changes between versions, see the [release notes](../RELEASE_NOTES.md), [full changelog](../CHANGELOG.md) or [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases).
 
 [Maintainer records](maintainer/README.md) are kept separately from these user guides.

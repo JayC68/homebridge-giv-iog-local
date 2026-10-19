@@ -1,8 +1,14 @@
 # Changelog
 
-This changelog covers GivHome v4. See [published releases](https://github.com/JayC68/homebridge-giv-iog-local/releases) for release downloads.
+This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.4](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.5](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.5 — Repository rename and simpler documentation (19 October 2026)
+
+- Update repository, support and release links to KernowekConsulting after the GitHub account rename. Keep the npm package name and existing HomeKit identities.
+- Keep six current user guides and a task-based index; remove pre-v4 history, obsolete private-trial instructions and duplicate release bodies. Group engineering and validation records separately.
+- Update release checks for the current documentation and account identity. Battery-control behaviour, settings and defaults are unchanged from beta.4. HR242 remains diagnostic-only and physical Pi qualification remains pending.
 
 ## 4.0.3-beta.4 — Stop this action, keep the next one (18 October 2026)
 
@@ -111,7 +117,7 @@ Before the first trial, the installed Pi source matched all 42 files in the publ
 
 Release notes and the full changelog are linked from the README and included in the npm package. A matching GitHub release body is prepared, and the published 4.0.0 history below is preserved.
 
-Full Changelog comparison: [v4.0.0...v4.0.1](https://github.com/JayC68/homebridge-giv-iog-local/compare/v4.0.0...v4.0.1).
+Full Changelog comparison: [v4.0.0...v4.0.1](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.0...v4.0.1).
 
 ## 4.0.0 — Direct-local GivHome
 
