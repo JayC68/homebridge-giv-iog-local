@@ -1,6 +1,6 @@
 # Changelog
 
-This is the story of GivHome v4 and the direct-Modbus work that led to it. The [earlier v3 changelog](docs/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) keep the earlier public history available too.
+This is the story of GivHome v4 and the direct-Modbus work that led to it. The [earlier v3 changelog](docs/history/CHANGELOG_V3.md) and [published release notes](https://github.com/JayC68/homebridge-giv-iog-local/releases) keep the earlier public history available too.
 
 [Release notes for 4.0.3-beta.4](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
 
@@ -105,7 +105,7 @@ The existing software checks, Predicted Solar tests and package checks pass. Twe
 
 Charge Target adds 20 setting and runtime tests, plus four tests using real Homebridge 2.4.0/HAP services and platform construction. These cover persistence, configuration precedence, native percentage handlers, control gates, burst updates, active changes across CH/CE/ED, failed verification, ownership, window boundaries and telemetry/stale-connection publication. All 36 runtime/native tests passed on the Pi's Node 24.21.0. The owner also exercised the Apple Home slider and observed active general-limit readback and the corrected tile presentation.
 
-Before the first trial, the installed Pi source matched all 42 files in the published 4.0.0 package. Recorder evidence confirms IOG command resumption after restart, but not original pre-session snapshot restoration across restart. A complete recording replay, broader model validation and live overnight results remain outstanding. The [release record](docs/RELEASING.md) describes the verified scope and limitations.
+Before the first trial, the installed Pi source matched all 42 files in the published 4.0.0 package. Recorder evidence confirms IOG command resumption after restart, but not original pre-session snapshot restoration across restart. A complete recording replay, broader model validation and live overnight results remain outstanding. The [release record](docs/maintainer/RELEASING.md) describes the verified scope and limitations.
 
 ### Keeping the history available
 

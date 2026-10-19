@@ -6,7 +6,7 @@ The previous low-level stop executor has been removed. Its tests of disable-and-
 
 The evening-stop-to-overnight incident is reproduced with simulated CH, CE and ED controls, followed by the actual overnight supervisor. A second scenario cancels Cheap Overnight during IOG overlap, verifies that it does not restart under the IOG label, then verifies handover after the overnight window.
 
-Simulation and native-service results do not establish live behaviour across the fleet. Physical overnight boundary testing and Pi CPU/memory qualification remain pending. The optional observation foundation remains off by default; automatic solar planning is not enabled. See [local learning](SOLAR_OBSERVATION.md).
+Simulation and native-service results do not establish live behaviour across the fleet. Physical overnight boundary testing and Pi CPU/memory qualification remain pending. The optional observation foundation remains off by default; automatic solar planning is not enabled. See [local learning](../SOLAR_OBSERVATION.md).
 
 Final command results, package digest and publication receipts are recorded with the release evidence. The release package is validated before publication; hardware qualification is not inferred from successful packaging.
 

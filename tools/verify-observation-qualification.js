@@ -37,7 +37,7 @@ function main() {
   const runtimeSha256 = digest.digest('hex');
   if (process.argv.includes('--runtime-hash')) { console.log(runtimeSha256); return; }
   const read = file => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
-  const decision = publicationDecision({ record: read('docs/OBSERVATION_QUALIFICATION.json'), pkg: read('package.json'),
+  const decision = publicationDecision({ record: read('docs/maintainer/OBSERVATION_QUALIFICATION.json'), pkg: read('package.json'),
     schema: read('config.schema.json'), foundation: require('../lib/solar-observation').emptyModel({}), runtimeSha256 },
   process.argv.includes('--beta-publication'));
   if (!decision.allowed) {

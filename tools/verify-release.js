@@ -54,6 +54,6 @@ const edPlan=buildChargeTargetReconciliationPlan({HR20:0,HR116:100,HR242:null},{
 check('ED Hybrid target already aligned',edPlan.establishedWrites.length===0&&edPlan.profile==='ed-hybrid');
 const overlapState=getMergedCheapState(new Date('2026-10-10T01:00:00+01:00'),[{start:new Date('2026-10-10T00:30:00+01:00'),end:new Date('2026-10-10T01:30:00+01:00')}],{cheapStart:'23:30',cheapEnd:'05:30',graceMinutes:30},{});
 check('Cheap Overnight and IOG overlap remains observable',overlapState.fallbackActive===true&&overlapState.smartActive===true&&overlapState.source.includes('off-peak-hours')&&overlapState.source.includes('smart-charging'));
-for (const f of ['LICENSE','NOTICE','TRADEMARKS.md','SECURITY.md','SUPPORT.md','docs/RELEASE_PROVENANCE.md','docs/MIGRATION_V3_TO_V4.md','docs/SAFETY.md','docs/TROUBLESHOOTING.md']) check(`required file ${f}`,fs.existsSync(path.join(root,f)));
+for (const f of ['LICENSE','NOTICE','TRADEMARKS.md','SECURITY.md','SUPPORT.md','docs/maintainer/RELEASE_PROVENANCE.md','docs/MIGRATION_V3_TO_V4.md','docs/SAFETY.md','docs/TROUBLESHOOTING.md']) check(`required file ${f}`,fs.existsSync(path.join(root,f)));
 console.log(`KEY SUMMARY: ${failures===0?'PASS':'FAIL'} | failures=${failures}`);
 if(failures) process.exit(1);

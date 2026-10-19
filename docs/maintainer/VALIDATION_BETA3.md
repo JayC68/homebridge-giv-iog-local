@@ -37,4 +37,4 @@ An earlier file-index implementation repeatedly sorted/scanned its complete dire
 - Confirm physical storage-pressure/recovery behaviour in an isolated test environment; preserve normal Homebridge controls and never test by writing to a live inverter.
 - Continue privacy/resource review as the foundation gains field evidence; no automatic controller is qualified by this release.
 
-`docs/OBSERVATION_QUALIFICATION.json` remains pending for hardware testing. The beta publication policy is separate from hardware qualification and is limited to this default-off foundation and matching runtime. It does not establish Pi performance or automatic-control readiness. The publisher verifies the beta policy explicitly and publishes to `beta` only.
+`docs/maintainer/OBSERVATION_QUALIFICATION.json` remains pending for hardware testing. The beta publication policy is separate from hardware qualification and is limited to this default-off foundation and matching runtime. It does not establish Pi performance or automatic-control readiness. The publisher verifies the beta policy explicitly and publishes to `beta` only.

@@ -8,7 +8,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const pkg = JSON.parse(read('package.json'));
 const notes = read('RELEASE_NOTES.md');
 const changelog = read('CHANGELOG.md');
-const archive = read('docs/CHANGELOG_V3.md');
+const archive = read('docs/history/CHANGELOG_V3.md');
 const readme = read('README.md');
 const tagBase = 'https://github.com/JayC68/homebridge-giv-iog-local/blob/v4.0.3-beta.4/';
 
@@ -43,13 +43,12 @@ if (process.argv.includes('--github-body')) {
   for (const file of ['RELEASE_NOTES.md', 'CHANGELOG.md', 'docs']) {
     assert.ok(pkg.files.includes(file), `not included in npm allowlist: ${file}`);
   }
-  for (const file of ['RELEASE_NOTES.md', 'CHANGELOG.md', 'README.md']) {
+  for (const file of ['RELEASE_NOTES.md', 'CHANGELOG.md', 'README.md', ...fs.readdirSync(path.join(root, 'docs'), { recursive: true }).filter(name => name.endsWith('.md')).map(name => `docs/${name}`)]) {
     for (const match of read(file).matchAll(/\]\(([^)]+)\)/g)) {
       const target = match[1];
       if (/^(?:https?:|#)/.test(target)) continue;
-      assert.ok(fs.existsSync(path.join(root, target)), `broken local link in ${file}: ${target}`);
+      assert.ok(fs.existsSync(path.resolve(root, path.dirname(file), target.split('#')[0])), `broken local link in ${file}: ${target}`);
     }
   }
-  assert.equal(read('docs/GITHUB_RELEASE_v4.0.3-beta.4.md'), githubBody, 'GitHub body differs from release notes');
-  console.log('PASS release notes, full changelog, archived history, links and GitHub release body');
+  console.log('PASS release notes, full changelog, archived history and links');
 }

@@ -32,7 +32,7 @@ Cheap Overnight retains priority during its configured window. Intelligent Octop
 
 Keep a Homebridge backup and the exact previous package for rollback. This is an opt-in beta on the **beta** channel; **latest** remains 4.0.2. Older Emergency Stop records are reconciled against fresh inverter evidence rather than simply waiting for an old deadline.
 
-Register simulations and native HomeKit tests cover interrupted reads and writes, restart recovery, idle stops, future schedules, two-slot profiles and clock-change boundaries. They do not establish behaviour on every inverter or firmware. **HR242 remains diagnostic-only.** See [control recovery and model limits](docs/CONTROL_LIFECYCLE.md) and [validation details](docs/VALIDATION_BETA4.md).
+Register simulations and native HomeKit tests cover interrupted reads and writes, restart recovery, idle stops, future schedules, two-slot profiles and clock-change boundaries. They do not establish behaviour on every inverter or firmware. **HR242 remains diagnostic-only.** See [control recovery and model limits](docs/maintainer/CONTROL_LIFECYCLE.md) and [validation details](docs/maintainer/VALIDATION_BETA4.md).
 
 The optional local learning foundation is unchanged and remains off by default. **Observation history and learned models stay on your Homebridge device; none is sent to the developer.** Physical Pi resource qualification remains pending. See the [local learning guide](docs/SOLAR_OBSERVATION.md).
 

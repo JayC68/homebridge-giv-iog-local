@@ -6,7 +6,7 @@ Public 4.0.1 promotes the privately tested `.2` correction, derived from the exa
 
 The requested production-source ZIP was unavailable in this workspace. The earlier local `4.0.0-beta.1` build is superseded. Neither source is claimed to be the stable baseline here.
 
-Release notes are at root `RELEASE_NOTES.md`; full v4 history is at root `CHANGELOG.md`; public v3 history is archived in `docs/CHANGELOG_V3.md`. `docs/RELEASING.md` records the evidence, unresolved release conditions and eventual publication locations.
+Release notes are at root `RELEASE_NOTES.md`; full v4 history is at root `CHANGELOG.md`; public v3 history is archived in `docs/history/CHANGELOG_V3.md`. `docs/maintainer/RELEASING.md` records the evidence, unresolved release conditions and eventual publication locations.
 
 The 4.0.0 provenance below is retained as historical evidence. It does not establish validation of the new candidate.
 

@@ -26,9 +26,9 @@ The optional [local learning foundation](docs/SOLAR_OBSERVATION.md) begins obser
 
 **Charge Target** brings your preferred charging percentage into Apple Home beside Solar 2mrw. It saves the target for Cheap Overnight only. IOG charge-mode protection uses an independent target, defaulting to 100%; timed Charge tiles retain the configured target. See [Charge Target](docs/CHARGE_TARGET.md) for its scope and the remaining slot-limit restriction.
 
-Keep a verified backup and rollback before installation. The [release notes](RELEASE_NOTES.md) and [publication instructions](docs/RELEASING.md) record the verified scope and remaining limitations. Published releases can be installed through the Homebridge UI; v3 users should first read the [v3-to-v4 migration guide](docs/MIGRATION_V3_TO_V4.md).
+Keep a verified backup and rollback before installation. The [release notes](RELEASE_NOTES.md) and [safety guidance](docs/SAFETY.md) record the verified scope and remaining limitations. Published releases can be installed through the Homebridge UI; v3 users should first read the [v3-to-v4 migration guide](docs/MIGRATION_V3_TO_V4.md).
 
-[Release Notes](RELEASE_NOTES.md) | [Full Changelog](CHANGELOG.md) | [Earlier v3 History](docs/CHANGELOG_V3.md) | [Published GitHub Releases](https://github.com/JayC68/homebridge-giv-iog-local/releases)
+[Start here: user guides](docs/README.md) | [Release Notes](RELEASE_NOTES.md) | [Full Changelog](CHANGELOG.md) | [Earlier v3 History](docs/history/CHANGELOG_V3.md) | [Published GitHub Releases](https://github.com/JayC68/homebridge-giv-iog-local/releases)
 
 Core monitoring and local control use direct local Modbus TCP; GivTCP, MQTT and GivEnergy Cloud are not required for the v4 local-control path.
 
