@@ -131,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.3-beta.5',
-      stage: 'GivHome 4.0.3-beta.5'
+      version: '4.0.3-beta.6',
+      stage: 'GivHome 4.0.3-beta.6'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;

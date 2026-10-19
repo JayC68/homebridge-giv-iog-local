@@ -3,7 +3,7 @@ name: Publish npm
 on:
   push:
     tags:
-      - 'v4.0.3-beta.5'
+      - 'v4.0.3-beta.6'
 
 permissions:
   id-token: write
@@ -31,7 +31,7 @@ jobs:
       - name: Verify release
         run: |
           node tools/verify-observation-qualification.js --beta-publication
-          test "$(node -p 'require("./package.json").version')" = "4.0.3-beta.5"
+          test "$(node -p 'require("./package.json").version')" = "4.0.3-beta.6"
           npm ci --ignore-scripts
           for file in index.js lib/*.js tools/*.js; do node --check "$file"; done
           npm test
@@ -41,7 +41,7 @@ jobs:
       - name: Build and verify reviewed package
         run: |
           npm pack
-          echo '25a0cfde8d7f610fc067d96471aeea35894a45169ab09d5eca6547900d59703c  homebridge-giv-iog-local-4.0.3-beta.5.tgz' | sha256sum --check
+          echo '2385d7cb61d55371bc0b824f965a8fe044a983b08ff5a42d7bf837049d710b35  homebridge-giv-iog-local-4.0.3-beta.6.tgz' | sha256sum --check
 
       - name: Publish with trusted publishing
-        run: npm publish homebridge-giv-iog-local-4.0.3-beta.5.tgz --access public --tag beta
+        run: npm publish homebridge-giv-iog-local-4.0.3-beta.6.tgz --access public --tag beta

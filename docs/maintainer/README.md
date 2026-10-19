@@ -3,6 +3,7 @@
 - [Release procedure](RELEASING.md)
 - [Control lifecycle and model limits](CONTROL_LIFECYCLE.md)
 - [Register control sources](REGISTER_CONTROL_SOURCES.md)
+- [Beta.6 metadata validation](VALIDATION_BETA6.md)
 - [Beta.5 maintenance validation](VALIDATION_BETA5.md)
 - [Beta.4 validation](VALIDATION_BETA4.md)
 - [Beta.3 validation](VALIDATION_BETA3.md)

@@ -1,13 +1,7 @@
-# GivHome 4.0.3-beta.5 — Repository rename and simpler documentation
+# GivHome 4.0.3-beta.6 — Correct the developer-support link
 
-This maintenance beta updates GivHome after the GitHub account moved from JayC68 to KernowekConsulting. The npm package remains `homebridge-giv-iog-local` and existing HomeKit identities are preserved.
+The heart icon in Homebridge now links to the [GivHome Homebridge website](https://homebridge.givhome.kernowekconsulting.co.uk), where you can support development through Buy me a coffee.
 
-## Easier-to-find guidance
+This maintenance beta changes donation metadata and release identity only. Battery-control behaviour, settings, defaults and HomeKit identities are unchanged. Local observation remains optional and off by default. HR242 remains diagnostic-only; hardware qualification remains pending. See the [user guides](docs/README.md) and [safety guidance](docs/SAFETY.md).
 
-The [user guide index](docs/README.md) links to six current guides covering Charge Target, Octopus features, Solar-Aware controls and Emergency Stop, local learning, safety and troubleshooting. Pre-v4 history, obsolete private-trial instructions and duplicate release bodies have been removed. Engineering and qualification records are grouped separately.
-
-## Publishing and compatibility
-
-Repository and support links use the new account. Battery-control behaviour, settings and defaults are unchanged from beta.4. This remains an opt-in beta; local observation is off by default and automatic solar planning is not enabled. HR242 remains diagnostic-only. Physical model/firmware testing and Pi resource qualification remain pending. See [safety](docs/SAFETY.md), [local learning](docs/SOLAR_OBSERVATION.md) and the [full changelog](CHANGELOG.md).
-
-**Full Changelog comparison:** [v4.0.3-beta.4...v4.0.3-beta.5](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.4...v4.0.3-beta.5).
+**Full Changelog comparison:** [v4.0.3-beta.5...v4.0.3-beta.6](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.5...v4.0.3-beta.6).

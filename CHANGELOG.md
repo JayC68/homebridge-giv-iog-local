@@ -2,7 +2,11 @@
 
 This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.5](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.6](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.6 — Correct the developer-support link (19 October 2026)
+
+- Point Homebridge’s heart/donation link to the Homebridge website instead of the separate iOS site. Plugin behaviour and settings are unchanged.
 
 ## 4.0.3-beta.5 — Repository rename and simpler documentation (19 October 2026)
 

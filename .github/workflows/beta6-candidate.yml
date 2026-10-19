@@ -1,8 +1,8 @@
-name: Beta.5 candidate validation
+name: Beta.6 candidate validation
 
 on:
   push:
-    branches: ['release/v4.0.3-beta-5']
+    branches: ['release/v4.0.3-beta-6']
   workflow_dispatch:
 
 permissions:
