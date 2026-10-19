@@ -4,7 +4,7 @@ Use the active v4 release branch as the baseline; the default `main` branch is t
 
 ## Prepare and validate
 
-1. Update package/runtime identity, root release notes and changelog together. Keep current user guidance in the seven top-level guides; keep engineering records here.
+1. Update package/runtime identity, root release notes and changelog together. Keep current user guidance in the top-level user guides; keep engineering records here.
 2. Run syntax checks, `npm test`, `npm run test:hap`, dependency audit and source/package review. Run the relevant observation and control simulations. Validate the packed package as well as the source.
 3. Review [validation scope](VALIDATION_BETA4.md), [control lifecycle](CONTROL_LIFECYCLE.md) and the [qualification record](OBSERVATION_QUALIFICATION.json). Physical Pi performance and live overnight testing remain pending. Desktop simulations do not establish those results.
 4. Check the runtime hash with `node tools/verify-observation-qualification.js --runtime-hash`. The qualification record must match the runtime and release. The explicit `--beta-publication` policy permits only the recorded default-off foundation beta; it does not qualify hardware or automatic control.
