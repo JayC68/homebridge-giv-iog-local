@@ -2,7 +2,13 @@
 
 This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.8](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.9](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.9 — Safer upgrades, clearer setup (20 October 2026)
+
+- Reorganised Plugin Config and rewrote its guidance in the GivHome voice, including clearer Solar Now, Predicted Solar, Local Learning and advanced-charging explanations.
+- Added upgrade conversion for older setting names, omitted legacy defaults and export-day choices while preserving effective behaviour and canonical-setting precedence.
+- Preserved saved Night Target, forecast preference, Emergency Stop state, control ownership, Eve totals, Local Learning data, cached accessory UUIDs and owner-managed unknown settings through repeated saves and restart readback.
 
 ## 4.0.3-beta.8 — Clearer overnight and Flux controls (20 October 2026)
 

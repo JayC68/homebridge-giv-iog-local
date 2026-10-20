@@ -23,7 +23,7 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
   const optionalFoundation = schema?.schema?.properties?.enableSolarObservation?.default === true
     && schema?.schema?.properties?.enableEmergencyStopTile?.default === true
     && foundation?.automaticControl === false && foundation?.qualified === false;
-  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.8'
+  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.9'
     && approval?.version === pkg.version && approval?.authorizedBy === 'project owner'
     && approval?.authorizedOn === '2026-10-20'
     && approval?.observationDefaultEnabled === true && approval?.emergencyStopDefaultEnabled === true && approval?.channel === 'beta'
@@ -33,7 +33,9 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
 
 function main() {
   const root = path.resolve(__dirname, '..');
-  const files = ['index.js', 'config.schema.json', 'package.json', ...fs.readdirSync(path.join(root, 'lib')).filter(n => n.endsWith('.js')).map(n => `lib/${n}`)].sort();
+  const files = ['index.js', 'config.schema.json', 'package.json',
+    ...fs.readdirSync(path.join(root, 'lib')).filter(n => n.endsWith('.js')).map(n => `lib/${n}`),
+    ...fs.readdirSync(path.join(root, 'homebridge-ui/public')).filter(n => /\.(?:html|js)$/.test(n)).map(n => `homebridge-ui/public/${n}`)].sort();
   const digest = crypto.createHash('sha256');
   for (const file of files) { digest.update(file + '\0'); digest.update(fs.readFileSync(path.join(root, file))); }
   const runtimeSha256 = digest.digest('hex');
@@ -47,7 +49,7 @@ function main() {
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : 'PASS owner-authorised beta.8 publication; physical Pi qualification remains pending.');
+    : 'PASS owner-authorised beta.9 publication; formal resource budgets remain unmeasured.');
 }
 
 module.exports = { publicationDecision };

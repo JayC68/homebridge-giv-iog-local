@@ -2,6 +2,7 @@
   "pluginAlias": "GivHomeModbus",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
   "headerDisplay": "Your GivEnergy battery, at home in Apple Home. Choose the features that suit you below. Remember to click SAVE at the end, then restart Homebridge to apply your changes.",
   "schema": {
     "type": "object",

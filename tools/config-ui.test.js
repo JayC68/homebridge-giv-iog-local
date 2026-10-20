@@ -2,7 +2,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const schema = require('../config.schema.json');
+const { buildApplianceControlConfig } = require('../lib/appliance-integrated-control');
+const { migrateExistingConfig } = require('../homebridge-ui/public/config-migration');
 const expectedContract = '47207a5e754243c5231ca027be49f367add5a319571c84f9e78576d3386b8a2f';
 function runtimeContract(value) {
   if (Array.isArray(value)) return value.map(runtimeContract);
@@ -64,4 +68,90 @@ test('All nine selectors have explicit UI choices without changing optional stor
     assert.ok(!schema.schema.required.includes(field.key), 'UI requirement must not migrate existing optional config');
     assert.ok(Object.hasOwn(schema.schema.properties[field.key], 'default'));
   }
+});
+
+function withSchemaDefaults(config) {
+  const result = structuredClone(config);
+  for (const [key, property] of Object.entries(schema.schema.properties)) {
+    if (!Object.hasOwn(result, key) && Object.hasOwn(property, 'default')) result[key] = structuredClone(property.default);
+  }
+  return result;
+}
+
+test('Existing configurations are prepared without changing their effective appliance behaviour', () => {
+  const identity = { platform: 'GivHomeModbus', inverterSerial: 'CH2344G083',
+    enableApplianceControl: true, applianceControlAcknowledgement: 'ENABLE_GIVHOME_APPLIANCE_CONTROL' };
+  const cases = {
+    '01-complete-v4': { ...identity, name: 'Longstanding Home', enableCheapOvernightCharging: false,
+      enableOctopusFluxExport: false, octopusFluxRunDaysPreset: 'custom', octopusFluxRunMonday: false,
+      octopusFluxRunTuesday: true, maxBatteryChargePowerKw: 3.6, maxBatteryExportPowerKw: 3.6,
+      maxGridExportPowerKw: 2.7, timedExportPowerKw: 1.8, predictedSolarCountryCode: 'GB' },
+    '02-sparse-no-name': { ...identity, enableBatteryCareCharging: false,
+      enableEvSmartWindowBatteryProtection: false, targetSoc: 61 },
+    '03-legacy-aliases': { ...identity, name: 'Migration Example', enableCheapOvernightCharging: false,
+      enableExcessEnergyExport: true, excessExportStartTime: '20:15', excessExportReserveSoc: 41,
+      excessExportDischargeKw: 2.2, excessExportSlotMinutes: 45, excessExportMarginSoc: 7,
+      maxBatteryDischargePowerKw: 3.2, gridExportLimitKw: 2.1, manualExportPowerPercent: 45,
+      enableFluxPeakExport: true, fluxExportStartTime: '16:30', fluxExportEndTime: '18:30',
+      fluxReserveSoc: 44, fluxEveningReserveKwh: 5.5, fluxSafetyMarginSoc: 8,
+      fluxExportPowerKw: 1.7, fluxSlotMinutes: 45, fluxMinimumExportKwh: 1.3,
+      enableAgileOutgoingAutoExport: true, agileOutgoingExportPowerKw: 1.9 },
+    '04-old-day-lists': { ...identity, name: 'Migration Example', enableCheapOvernightCharging: false,
+      enableOctopusFluxExport: true, octopusFluxDaysToRun: ['mon', 'wed'],
+      enableOctopusAgileOutgoingAutoExport: true, octopusAgileOutgoingDaysToRun: ['tue', 'sat'],
+      enableTimedExportTiles: true, manualExportPowerPercent: 35, maxBatteryChargePowerKw: 4.5 },
+    '05-numeric-strings': { ...identity, name: 'String settings', enableCheapOvernightCharging: false,
+      octopusAgileOutgoingReferenceImportPence: '7.5', octopusAgileOutgoingMinimumGrossMarginPence: '6.25',
+      octopusAgileOutgoingEveningReserveKwh: '4.25', octopusAgileOutgoingSafetyMarginSoc: '5.5',
+      octopusAgileOutgoingMinimumExportKwh: '0.75', octopusAgileOutgoingMpanAuditDelayHours: '24',
+      octopusAgileOutgoingMpanMismatchToleranceKwh: '0.6' },
+    '06-canonical-precedence': { ...identity, name: 'Canonical wins', enableCheapOvernightCharging: false,
+      enableEveningExcessExport: false, enableExcessEnergyExport: true,
+      eveningExportReserveSoc: 33, excessExportReserveSoc: 77,
+      enableOctopusFluxExport: false, enableFluxPeakExport: true,
+      octopusFluxReserveSoc: 29, fluxReserveSoc: 78 }
+  };
+  for (const [id, before] of Object.entries(cases)) {
+    const prepared = migrateExistingConfig(before).config;
+    const afterFormDefaults = withSchemaDefaults(prepared);
+    const originalEffective = { ...buildApplianceControlConfig(before) };
+    const migratedEffective = { ...buildApplianceControlConfig(afterFormDefaults) };
+    // An old explicit day list is represented as the equivalent custom preset.
+    // The resolved days are compared; the preset label itself is canonical metadata.
+    delete originalEffective.octopusFluxRunDaysPreset;
+    delete originalEffective.octopusAgileOutgoingRunDaysPreset;
+    delete migratedEffective.octopusFluxRunDaysPreset;
+    delete migratedEffective.octopusAgileOutgoingRunDaysPreset;
+    assert.deepEqual(migratedEffective, originalEffective, id);
+    assert.deepEqual(migrateExistingConfig(prepared).config, prepared, `${id} migration is idempotent`);
+    assert.equal(prepared.platform, before.platform, `${id} platform identity retained`);
+    assert.equal(prepared.inverterSerial, before.inverterSerial, `${id} serial retained`);
+  }
+});
+
+test('Sparse identity, old export days and unknown owner settings survive preparation', () => {
+  const sparse = migrateExistingConfig({ platform: 'GivHomeModbus', inverterSerial: 'CH2344G083', customOwnerMetadata: { keep: true } }).config;
+  assert.equal(sparse.name, 'GivHome Modbus');
+  assert.equal(sparse.enableCheapOvernightCharging, false);
+  assert.deepEqual(sparse.customOwnerMetadata, { keep: true });
+  const days = migrateExistingConfig({ platform: 'GivHomeModbus', name: 'Home', inverterSerial: 'CH2344G083',
+    octopusFluxDaysToRun: ['mon', 'wed'], octopusAgileOutgoingDaysToRun: ['tue', 'sat'] }).config;
+  assert.equal(days.octopusFluxRunDaysPreset, 'custom');
+  assert.equal(days.octopusFluxRunMonday, true);
+  assert.equal(days.octopusFluxRunTuesday, false);
+  assert.equal(days.octopusFluxRunWednesday, true);
+  assert.equal(days.octopusAgileOutgoingRunTuesday, true);
+  assert.equal(days.octopusAgileOutgoingRunSaturday, true);
+  assert.equal(days.octopusAgileOutgoingRunSunday, false);
+});
+
+test('Custom UI wrapper is packaged, migrates only existing blocks and retains unknown settings', () => {
+  assert.equal(schema.customUi, true);
+  for (const file of ['index.html', 'ui.js', 'config-migration.js']) assert.ok(fs.existsSync(path.resolve(__dirname, '../homebridge-ui/public', file)));
+  const ui = fs.readFileSync(path.resolve(__dirname, '../homebridge-ui/public/ui.js'), 'utf8');
+  assert.match(ui, /blocks\.length > 0/);
+  assert.match(ui, /updatePluginConfig\(prepared\)/);
+  assert.match(ui, /createForm\(pluginSchema, prepared\[0\]\)/);
+  assert.match(ui, /form\.onChange/);
+  assert.match(ui, /\.\.\.\(passthrough\[0\]/);
 });

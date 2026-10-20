@@ -1,11 +1,11 @@
-# GivHome 4.0.3-beta.8 — Clearer overnight and Flux controls
+# GivHome 4.0.3-beta.9 — Safer upgrades, clearer setup
 
-**Night Target** replaces Charge Target in Apple Home, giving the overnight percentage slider a name that fits its tile. The configuration now makes clear that this target applies to Cheap Overnight only; IOG battery protection keeps its separate target. Your saved percentage and accessory identity are retained.
+Plugin Config now prepares existing GivHome settings before showing the revised form. Long-standing installations keep their established identity and behaviour when older names, export choices or omitted settings are encountered. Saved Night Target, forecast preference, Emergency Stop state, action ownership, Eve history and Local Learning data continue to use their existing files and accessory identities.
 
-**Octopus Flux Export** now has separate configuration choices to enable the function and show its **Flux Out** tile in Apple Home. Hiding the tile leaves the enabled function following its configured rules. With the tile shown, Off stops GivHome-owned Flux export and prevents further starts; On permits eligible export again. After a Homebridge restart, Flux follows the enabled configuration again. Existing installations retain their tile unless it is explicitly hidden.
+The Config UI has a clearer flow and more direct explanations in the GivHome voice. Related features now sit together, advanced choices explain what they change, Solar Now describes its live generation percentage accurately, and new users receive clearer guidance for Advanced charging. Existing owner-managed settings that GivHome does not recognise are carried through a save instead of being removed.
 
-**Local Learning** now sits directly below Predicted Solar — advanced. Its description reflects that learning is enabled by default, can be switched off, keeps data locally and does not change charging.
+**Night Target** remains the Cheap Overnight percentage slider. IOG battery protection keeps its separate target. **Flux Out** remains an optional Apple Home tile for an independently enabled Octopus Flux Export function. Emergency Stop and Local Learning remain enabled by default and can be disabled in Plugin Config.
 
-Emergency Stop and Local Learning retain their beta.7 defaults and existing safeguards. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
+Charging and export control rules are unchanged. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
 
-**Full Changelog comparison:** [v4.0.3-beta.7...v4.0.3-beta.8](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.7...v4.0.3-beta.8).
+**Full Changelog comparison:** [v4.0.3-beta.8...v4.0.3-beta.9](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.8...v4.0.3-beta.9).

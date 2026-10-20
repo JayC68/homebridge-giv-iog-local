@@ -11,6 +11,7 @@ try { hapEntry = require.resolve('@homebridge/hap-nodejs', { paths: [path.dirnam
 catch { hapEntry = require.resolve('hap-nodejs', { paths: [path.dirname(homebridgeEntry)] }); }
 const hap = require(hapEntry);
 const { GivHomeModbusPlatform } = require('../index');
+const { migrateExistingConfig } = require('../homebridge-ui/public/config-migration');
 
 // Use real native services without relying on Homebridge's private wrapper exports.
 class NativeTestAccessory extends hap.Accessory {
@@ -146,6 +147,53 @@ test('native switches respect explicit opt-out and reuse UUIDs on reload', async
   second.platform.ensureBetaControlAccessories();
   assert.equal(second.registered.length,0); assert.equal(second.platform.solarAwareEnabled,false);
   assert.equal(await solar.getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On).handleGetRequest(),false);
+});
+
+test('legacy no-name upgrade preserves target, Eve totals and every cached accessory UUID', (t) => {
+  const directory = storage(t);
+  const legacy = {
+    name: undefined,
+    enableApplianceControl: true,
+    applianceControlAcknowledgement: 'ENABLE_GIVHOME_APPLIANCE_CONTROL',
+    enableCheapOvernightCharging: true,
+    targetSoc: 73,
+    enableChargeTargetTile: true,
+    enableEmergencyStopTile: true,
+    enableSolarAwareCheapOvernight: true,
+    enableEveEnergyHistory: true
+  };
+  fs.writeFileSync(path.join(directory, 'givhome_CH2344G083_eve_energy_totals.json'), JSON.stringify({
+    version: '1.1.0-beta.24',
+    totals: { solar: 1234.567, import: 2345.678, export: 345.789 }
+  }));
+
+  const first = makePlatform(t, directory, legacy);
+  first.platform.setChargeTargetFromHome(37);
+  first.platform.ensureReadOnlyAccessories();
+  first.platform.ensureChargeTargetAccessory();
+  first.platform.ensureBetaControlAccessories();
+  first.platform.ensureEveHistoryAccessories();
+  const cached = [...first.registered];
+  const cachedUUIDs = cached.map(accessory => accessory.UUID).sort();
+  assert.ok(cached.some(accessory => accessory.displayName === 'Night Target'));
+  assert.ok(cached.some(accessory => accessory.displayName === 'Emergency Stop'));
+  assert.ok(cached.some(accessory => accessory.displayName === 'Eve Solar History'));
+
+  const migrated = migrateExistingConfig({ ...legacy }).config;
+  assert.equal(migrated.name, 'GivHome Modbus');
+  const second = makePlatform(t, directory, migrated);
+  for (const accessory of cached) second.platform.configureAccessory(accessory);
+  second.platform.ensureReadOnlyAccessories();
+  second.platform.ensureChargeTargetAccessory();
+  second.platform.ensureBetaControlAccessories();
+  second.platform.ensureEveHistoryAccessories();
+
+  assert.equal(second.registered.length, 0, 'upgrade must reuse the Homebridge accessory cache');
+  assert.deepEqual([...second.platform.accessoryByUUID.keys()].sort(), cachedUUIDs);
+  assert.equal(second.platform.applianceControl.targetSoc, 37);
+  assert.equal(second.platform.eveEnergyRuntimeTotalsKwh.get('solar'), 1234.567);
+  assert.equal(second.platform.eveEnergyRuntimeTotalsKwh.get('import'), 2345.678);
+  assert.equal(second.platform.eveEnergyRuntimeTotalsKwh.get('export'), 345.789);
 });
 
 test('native Emergency Stop acknowledges acceptance, returns Off on completion and exposes later failure', async t => {

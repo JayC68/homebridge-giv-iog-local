@@ -309,12 +309,12 @@ test('unverified responder never reaches observation callback', async () => {
 
 test('owner-approved beta publication is explicit and does not claim hardware qualification', () => {
   const { publicationDecision } = require('./verify-observation-qualification');
-  const input = { pkg: { version: '4.0.3-beta.8' }, runtimeSha256: 'reviewed',
+  const input = { pkg: { version: '4.0.3-beta.9' }, runtimeSha256: 'reviewed',
     schema: { schema: { properties: { enableSolarObservation: { default: true }, enableEmergencyStopTile: { default: true } } } },
     foundation: { automaticControl: false, qualified: false },
-    record: { version: '4.0.3-beta.8', runtimeSha256: 'reviewed', status: 'pending',
+    record: { version: '4.0.3-beta.9', runtimeSha256: 'reviewed', status: 'pending',
       networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: 'local validation',
-      betaPublication: { version: '4.0.3-beta.8', authorizedBy: 'project owner', authorizedOn: '2026-10-20', observationDefaultEnabled: true, emergencyStopDefaultEnabled: true,
+      betaPublication: { version: '4.0.3-beta.9', authorizedBy: 'project owner', authorizedOn: '2026-10-20', observationDefaultEnabled: true, emergencyStopDefaultEnabled: true,
         channel: 'beta', optIn: true, piSoakRequiredBeforeBetaPublication: false } } };
   assert.equal(publicationDecision(input).allowed, false);
   assert.deepEqual(publicationDecision(input, true), { allowed: true, hardwareQualified: false });
@@ -322,17 +322,17 @@ test('owner-approved beta publication is explicit and does not claim hardware qu
 
 test('beta approval cannot authorise another version, changed runtime, unapproved defaults or automatic control', () => {
   const { publicationDecision } = require('./verify-observation-qualification');
-  const input = { pkg: { version: '4.0.3-beta.8' }, runtimeSha256: 'reviewed',
+  const input = { pkg: { version: '4.0.3-beta.9' }, runtimeSha256: 'reviewed',
     schema: { schema: { properties: { enableSolarObservation: { default: true }, enableEmergencyStopTile: { default: true } } } },
     foundation: { automaticControl: false, qualified: false },
-    record: { version: '4.0.3-beta.8', runtimeSha256: 'reviewed', status: 'pending',
+    record: { version: '4.0.3-beta.9', runtimeSha256: 'reviewed', status: 'pending',
       networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: 'local validation',
-      betaPublication: { version: '4.0.3-beta.8', authorizedBy: 'project owner', authorizedOn: '2026-10-20', observationDefaultEnabled: true, emergencyStopDefaultEnabled: true,
+      betaPublication: { version: '4.0.3-beta.9', authorizedBy: 'project owner', authorizedOn: '2026-10-20', observationDefaultEnabled: true, emergencyStopDefaultEnabled: true,
         channel: 'beta', optIn: true, piSoakRequiredBeforeBetaPublication: false } } };
   for (const change of [
     x => { x.runtimeSha256 = 'different'; },
     x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3'; },
-    x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3-beta.9'; },
+    x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3-beta.10'; },
     x => { x.schema.schema.properties.enableSolarObservation.default = false; },
     x => { x.schema.schema.properties.enableEmergencyStopTile.default = false; },
     x => { delete x.record.betaPublication.observationDefaultEnabled; },

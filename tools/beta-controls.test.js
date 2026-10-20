@@ -65,3 +65,21 @@ test('forecast and Home preference survive restart and retain morning data after
   p.initialiseBetaControls(); assert.equal(p.solarAwareEnabled, false); assert.equal(p.solarForecasts[day].kwh,25);
   p.config.predictedSolarLocation = 'changed'; p.initialiseBetaControls(); assert.deepEqual(p.solarForecasts,{});
 });
+test('legacy forecast identity survives equivalent form defaults and no-op shading', t => {
+  const p = platform(t);
+  const file = p.solarStateFile;
+  const legacyArrays = [{ capacityKw: 2.8, tiltDegrees: 35, azimuthDegrees: 180, shading: [] }];
+  p.config.predictedSolarLocation = 'Chelmsford';
+  p.config.predictedSolarCountryCode = '';
+  p.config.predictedSolarArrays = legacyArrays;
+  fs.writeFileSync(file, JSON.stringify({ identity: p.chargeTargetIdentity,
+    forecastIdentity: JSON.stringify(['Chelmsford', undefined, legacyArrays]), enabled: true,
+    forecasts: { '2026-10-21': { date: '2026-10-21', kwh: 12 } } }));
+  p.config.predictedSolarArrays = [{ name: 'Array', capacityKw: 2.8, tiltDegrees: 35, azimuthDegrees: 180,
+    shading: [{ start: '00:00', end: '00:00' }] }];
+  p.initialiseBetaControls();
+  assert.equal(p.solarForecasts['2026-10-21'].kwh, 12);
+  p.config.predictedSolarArrays[0].tiltDegrees = 40;
+  p.initialiseBetaControls();
+  assert.deepEqual(p.solarForecasts, {});
+});
