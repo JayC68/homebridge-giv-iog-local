@@ -1,11 +1,11 @@
-# GivHome 4.0.3-beta.7 — Emergency Stop ready, local learning enabled
+# GivHome 4.0.3-beta.8 — Clearer overnight and Flux controls
 
-Emergency Stop is now shown by default on supported systems with appliance control enabled. You can hide it in Plugin Config; its existing compatibility and safety checks remain in place. Showing the tile does not issue a stop command.
+**Night Target** replaces Charge Target in Apple Home, giving the overnight percentage slider a name that fits its tile. The configuration now makes clear that this target applies to Cheap Overnight only; IOG battery protection keeps its separate target. Your saved percentage and accessory identity are retained.
 
-Local learning is also enabled by default, using readings and forecasts GivHome already receives. You can disable it in Plugin Config. Explicitly saved disabled settings remain disabled after upgrading; an omitted setting uses the new default.
+**Octopus Flux Export** now has separate configuration choices to enable the function and show its **Flux Out** tile in Apple Home. Hiding the tile leaves the enabled function following its configured rules. With the tile shown, Off stops GivHome-owned Flux export and prevents further starts; On permits eligible export again. After a Homebridge restart, Flux follows the enabled configuration again. Existing installations retain their tile unless it is explicitly hidden.
 
-Learning stays on your Homebridge device, uses bounded storage and does not calculate or change charging targets. Solar-Aware Cheap Overnight remains a separate optional control with its existing forecast choices and normal-target fallback.
+**Local Learning** now sits directly below Predicted Solar — advanced. Its description reflects that learning is enabled by default, can be switched off, keeps data locally and does not change charging.
 
-Existing unfinished recovery is retained when the Emergency Stop tile is hidden. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
+Emergency Stop and Local Learning retain their beta.7 defaults and existing safeguards. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
 
-**Full Changelog comparison:** [v4.0.3-beta.6...v4.0.3-beta.7](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.6...v4.0.3-beta.7).
+**Full Changelog comparison:** [v4.0.3-beta.7...v4.0.3-beta.8](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.7...v4.0.3-beta.8).

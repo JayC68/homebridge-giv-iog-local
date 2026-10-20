@@ -99,7 +99,7 @@ test('native dimmer wiring has one stable identity, range and percentage handler
   p.ensureChargeTargetAccessory();
   p.ensureChargeTargetAccessory();
   assert.equal(registrations.length, 1);
-  assert.equal(registrations[0].displayName, 'Charge Target');
+  assert.equal(registrations[0].displayName, 'Night Target');
   assert.deepEqual(chars.get('Brightness').props, { minValue: 4, maxValue: 100, minStep: 1 });
   assert.equal(chars.get('Brightness').get(), 100);
   chars.get('Brightness').set(70);

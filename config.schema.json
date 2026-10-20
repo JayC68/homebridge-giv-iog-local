@@ -176,10 +176,10 @@
         "description": "Starting target for Cheap Overnight and configured target for timed Charge tiles. Apple Home saves a Cheap Overnight-only override. IOG uses its separate target."
       },
       "enableChargeTargetTile": {
-        "title": "Show Charge Target in Apple Home",
+        "title": "Show Night Target in Apple Home",
         "type": "boolean",
         "default": true,
-        "description": "Adds a Charge Target percentage slider when supported charging controls are enabled. Turning this off returns to the configured target after restart."
+        "description": "Adds a slider to set the battery percentage target for Cheap Overnight charging only. It does not start charging or change the separate IOG battery protection target. Turning this off returns to the configured target after restart."
       },
       "enableTimedChargeTiles": {
         "title": "Enable Charge 30/60/90/120 tiles",
@@ -488,10 +488,10 @@
         "description": "Hidden safe default used by the product appliance-control engine."
       },
       "enableOctopusFluxExport": {
-        "title": "Show Octopus Flux Export switch",
+        "title": "Enable Octopus Flux Export",
         "type": "boolean",
         "default": false,
-        "description": "Adds one Apple Home switch for Flux peak export. Turn the Apple Home switch on when you want GivHome to sell spare battery during the Flux peak period. GivHome does not try to fill the whole peak band; it plans short slots from the battery energy actually spare after reserve and margin."
+        "description": "Allows GivHome to sell spare battery energy during the configured Flux peak period, keeping your reserve and margin. Enabled at startup; eligible days and export limits still apply. Use the optional Flux Out tile to turn the function off or back on in Apple Home."
       },
       "octopusFluxDaysToRun": {
         "title": "Legacy Flux days list",
@@ -1157,13 +1157,13 @@
         "default": 100,
         "minimum": 4,
         "maximum": 100,
-        "description": "Independent target for IOG charge-mode battery protection. The Cheap Overnight Charge Target slider never changes this value."
+        "description": "Independent target for IOG charge-mode battery protection. The Cheap Overnight Night Target slider never changes this value."
       },
       "enableSolarAwareCheapOvernight": {
         "title": "Show Solar-Aware Cheap Overnight switch",
         "type": "boolean",
         "default": false,
-        "description": "First enable Cheap Overnight, then enable Predicted Solar and enter your location and solar-panel details. Tick this box to add the Apple Home switch. Switch it on to use the forecast-based overnight levels below, or off to use your normal Charge Target. If no usable forecast is available, GivHome uses your normal Charge Target."
+        "description": "First enable Cheap Overnight, then enable Predicted Solar and enter your location and solar-panel details. Tick this box to add the Apple Home switch. Switch it on to use the forecast-based overnight levels below, or off to use your normal Night Target. If no usable forecast is available, GivHome uses your normal Night Target."
       },
       "solarAwareLowForecastKwh": {
         "title": "Low solar forecast: below this amount (kWh)",
@@ -1187,7 +1187,7 @@
         "default": 100,
         "minimum": 4,
         "maximum": 100,
-        "description": "Charge more overnight when little solar is expected. Default: 100%, aiming for a full battery by the end of the cheap period. Your normal Charge Target still sets the maximum."
+        "description": "Charge more overnight when little solar is expected. Default: 100%, aiming for a full battery by the end of the cheap period. Your normal Night Target still sets the maximum."
       },
       "solarAwareMediumTargetSoc": {
         "title": "Overnight battery level for a middle solar forecast (%)",
@@ -1195,7 +1195,7 @@
         "default": 80,
         "minimum": 4,
         "maximum": 100,
-        "description": "Used when the forecast is at least the first amount but below the second. Default: 80%, leaving about 20% of the battery capacity free when overnight charging finishes. Your normal Charge Target still sets the maximum."
+        "description": "Used when the forecast is at least the first amount but below the second. Default: 80%, leaving about 20% of the battery capacity free when overnight charging finishes. Your normal Night Target still sets the maximum."
       },
       "solarAwareHighTargetSoc": {
         "title": "Overnight battery level for a high solar forecast (%)",
@@ -1203,7 +1203,7 @@
         "default": 60,
         "minimum": 4,
         "maximum": 100,
-        "description": "Used when the forecast reaches or exceeds the second amount. Default: 60%, leaving about 40% of the battery capacity free when overnight charging finishes. Your normal Charge Target still sets the maximum."
+        "description": "Used when the forecast reaches or exceeds the second amount. Default: 60%, leaving about 40% of the battery capacity free when overnight charging finishes. Your normal Night Target still sets the maximum."
       },
       "enableEmergencyStopTile": {
         "title": "Show Emergency Stop tile",
@@ -1222,6 +1222,12 @@
         "type": "string",
         "maxLength": 64,
         "description": "To erase only this feature\u2019s local observations and model, enter a new short value, such as reset-1, then restart with local learning enabled. That value is applied once; change it again for another reset. Leave blank to keep learning. This does not erase Eve history, configuration or Emergency Stop recovery records."
+      },
+      "showOctopusFluxExportTile": {
+        "title": "Show Flux Out in Apple Home",
+        "type": "boolean",
+        "default": true,
+        "description": "Adds an On/Off tile when Octopus Flux Export is enabled. Off stops Flux export owned by GivHome and prevents further Flux starts until switched on again. Hiding the tile does not disable Flux Export. After a Homebridge restart, Flux Export follows the enabled configuration again."
       }
     },
     "required": [
@@ -1290,7 +1296,7 @@
     {
       "type": "fieldset",
       "title": "Solar-Aware Cheap Overnight",
-      "description": "Buy more cheap electricity before a dull day, or leave more room in the battery when sunshine is expected. GivHome uses the forecast to choose one of the three overnight battery levels you set below. Your normal Charge Target remains the maximum; IOG battery protection, if enabled, keeps its separate target.",
+      "description": "Buy more cheap electricity before a dull day, or leave more room in the battery when sunshine is expected. GivHome uses the forecast to choose one of the three overnight battery levels you set below. Your normal Night Target remains the maximum; IOG battery protection, if enabled, keeps its separate target.",
       "items": [
         {
           "type": "fieldset",
@@ -1311,22 +1317,13 @@
         {
           "type": "fieldset",
           "title": "3. Choose how full to charge overnight",
-          "description": "Set a battery percentage for each forecast band. Choose the same or a lower level as more solar is expected. For example, 60% leaves about 40% of the battery capacity free when overnight charging finishes. A normal Charge Target of 70% caps an 80% setting at 70%. This beta uses your choices; it does not yet calculate these levels from battery size or household use.",
+          "description": "Set a battery percentage for each forecast band. Choose the same or a lower level as more solar is expected. For example, 60% leaves about 40% of the battery capacity free when overnight charging finishes. A normal Night Target of 70% caps an 80% setting at 70%. This beta uses your choices; it does not yet calculate these levels from battery size or household use.",
           "items": [
             "solarAwareLowTargetSoc",
             "solarAwareMediumTargetSoc",
             "solarAwareHighTargetSoc"
           ]
         }
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Automatic Solar-Aware: local learning foundation",
-      "description": "Help GivHome learn before it plans. This beta can observe your installation using existing readings; it cannot enable automatic charging. Data stays on your device. Storage and queues are capped, and missing readings are marked as gaps. Pi CPU and memory performance are still being evaluated in this opt-in beta. See the local-learning guide for privacy, retention and limits.",
-      "items": [
-        "enableSolarObservation",
-        "solarObservationResetKey"
       ]
     },
     {
@@ -1398,9 +1395,10 @@
       "title": "Octopus Flux Export",
       "expandable": true,
       "expanded": false,
-      "description": "Peak-rate export for Octopus Flux. The Flux tariff peak band is only the eligible selling period; GivHome sells only the spare kWh available after reserve and margin, so a short run inside the band can be correct.",
+      "description": "Sell spare battery energy during the Octopus Flux peak period, keeping your reserve and margin. Enable the function below and choose whether to show its On/Off tile in Apple Home. GivHome plans only the export needed; it may finish before the peak period ends.",
       "items": [
         "enableOctopusFluxExport",
+        "showOctopusFluxExportTile",
         "octopusFluxReserveSoc",
         "octopusFluxExportPowerKw",
         "octopusFluxRunDaysPreset"
@@ -1593,6 +1591,15 @@
       "condition": {
         "functionBody": "return model.enablePredictedSolar === true;"
       }
+    },
+    {
+      "type": "fieldset",
+      "title": "Automatic Solar-Aware: local learning foundation",
+      "description": "Help GivHome learn before it plans. Local learning is enabled by default and uses existing readings and forecasts to build a picture of your installation for future automatic planning. It does not change charging. Data stays on this Homebridge device, storage is capped, and you can switch learning off below. See the local-learning guide for privacy, retention and limits.",
+      "items": [
+        "enableSolarObservation",
+        "solarObservationResetKey"
+      ]
     }
   ],
   "description": "Configure local GivEnergy monitoring and optional HomeKit controls for GivHome."

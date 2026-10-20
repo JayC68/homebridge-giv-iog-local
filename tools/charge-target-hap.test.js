@@ -284,3 +284,42 @@ test('Emergency Stop is exposed by default without starting an action and explic
   p.config.enableEmergencyStopTile = false; p.ensureBetaControlAccessories();
   assert.equal(p.accessoryByUUID.has(uuid), false);
 });
+
+test('Flux enable and optional Home tile are independent and preserve legacy defaults', (t) => {
+  for (const config of [
+    { enableOctopusFluxExport: false, showOctopusFluxExportTile: true },
+    { enableOctopusFluxExport: true },
+    { enableOctopusFluxExport: true, showOctopusFluxExportTile: false }
+  ]) {
+    const { platform: p } = makePlatform(t, storage(t), config);
+    assert.equal(p.applianceControl.features.octopusFluxExport, config.enableOctopusFluxExport);
+    assert.equal(p.octopusFluxExportArmed, config.enableOctopusFluxExport);
+    assert.equal(p.octopusFluxExportTileEnabled(), config.enableOctopusFluxExport && config.showOctopusFluxExportTile !== false);
+    p.ensureReadOnlyAccessories();
+    assert.equal(p.accessories.some(a => a.displayName === 'Flux Out'), p.octopusFluxExportTileEnabled());
+    p.config.showOctopusFluxExportTile = false;
+    p.ensureReadOnlyAccessories();
+    assert.equal(p.accessories.some(a => a.displayName === 'Flux Out'), false);
+    assert.equal(p.octopusFluxExportArmed, config.enableOctopusFluxExport, 'hiding tile does not disarm enabled function');
+  }
+});
+
+test('native Flux tile Off cleans only Flux-owned export and On permits eligible starts', async (t) => {
+  const { platform: p } = makePlatform(t, storage(t), { enableOctopusFluxExport: true });
+  const accessory = new NativeTestAccessory('Flux Out', hap.uuid.generate('flux-control-test'));
+  p.configureOctopusFluxExportAccessory(accessory);
+  const on = accessory.getService(hap.Service.Switch).getCharacteristic(hap.Characteristic.On);
+  const cleanups = [];
+  p.currentControlOwner = () => ({ source: 'Octopus Flux Export' });
+  p.cleanupApplianceCommandFamily = async (...args) => cleanups.push(args);
+  p.allowStoppedOccurrence = () => {};
+  await on.handleSetRequest(false);
+  assert.equal(p.octopusFluxExportArmed, false);
+  assert.equal(cleanups.length, 1);
+  assert.equal(p.evaluateOctopusFluxExport({}, {}), null);
+  await on.handleSetRequest(true);
+  assert.equal(p.octopusFluxExportArmed, true);
+  p.currentControlOwner = () => ({ source: 'external' });
+  await on.handleSetRequest(false);
+  assert.equal(cleanups.length, 1);
+});

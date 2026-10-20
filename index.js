@@ -131,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.3-beta.7',
-      stage: 'GivHome 4.0.3-beta.7'
+      version: '4.0.3-beta.8',
+      stage: 'GivHome 4.0.3-beta.8'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -496,7 +496,7 @@ class GivHomeModbusPlatform {
       this.log.info('Removed %s stale read-only accessor%s.', stale.length, stale.length === 1 ? 'y' : 'ies');
     }
 
-    if (this.applianceControl.features.octopusFluxExport) {
+    if (this.octopusFluxExportTileEnabled()) {
       const uuid = this.applianceCommandUUID(COMMAND_KINDS.OCTOPUS_FLUX_EXPORT);
       let accessory = this.accessoryByUUID.get(uuid);
       const isNew = !accessory;
@@ -522,7 +522,7 @@ class GivHomeModbusPlatform {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existing]);
         this.accessoryByUUID.delete(uuid);
         this.accessories = this.accessories.filter((candidate) => candidate.UUID !== uuid);
-        this.log.warn('Removed Octopus Flux Export accessory because its GivHome command feature gate is disabled.');
+        this.log.warn('Removed Flux Out accessory because the feature or Apple Home tile is disabled.');
       }
     }
 
@@ -565,6 +565,10 @@ class GivHomeModbusPlatform {
   }
 
 
+  octopusFluxExportTileEnabled() {
+    return this.applianceControl.features.octopusFluxExport && this.config.showOctopusFluxExportTile !== false;
+  }
+
   predictedSolarAccessoryUUID() {
     return this.api.hap.uuid.generate(`${PLUGIN_NAME}:${this.name}:${PREDICTED_SOLAR_ACCESSORY_ID}`);
   }
@@ -592,15 +596,15 @@ class GivHomeModbusPlatform {
     }
     const created = !accessory;
     if (!accessory) {
-      accessory = new this.api.platformAccessory('Charge Target', uuid);
+      accessory = new this.api.platformAccessory('Night Target', uuid);
       this.accessoryByUUID.set(uuid, accessory);
       this.accessories.push(accessory);
     }
     accessory.context.definitionId = CHARGE_TARGET_ACCESSORY_ID;
     accessory.context.chargeTarget = true;
-    accessory.displayName = 'Charge Target';
-    const service = accessory.getService(this.Service.Lightbulb) || accessory.addService(this.Service.Lightbulb, 'Charge Target', CHARGE_TARGET_ACCESSORY_ID);
-    service.setCharacteristic(this.Characteristic.Name, 'Charge Target');
+    accessory.displayName = 'Night Target';
+    const service = accessory.getService(this.Service.Lightbulb) || accessory.addService(this.Service.Lightbulb, 'Night Target', CHARGE_TARGET_ACCESSORY_ID);
+    service.setCharacteristic(this.Characteristic.Name, 'Night Target');
     service.getCharacteristic(this.Characteristic.On).onGet(() => true).onSet((value) => {
       if (value !== true) throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.INVALID_VALUE_IN_REQUEST);
     });
@@ -616,7 +620,7 @@ class GivHomeModbusPlatform {
     service.updateCharacteristic(this.Characteristic.Brightness, this.applianceControl.targetSoc);
     const info = accessory.getService(this.Service.AccessoryInformation);
     if (info) info.setCharacteristic(this.Characteristic.Manufacturer, 'Kernowek Consulting')
-      .setCharacteristic(this.Characteristic.Model, 'Charge Target')
+      .setCharacteristic(this.Characteristic.Model, 'Night Target')
       .setCharacteristic(this.Characteristic.FirmwareRevision, require('./package.json').version);
     this.chargeTargetService = service;
     if (created) this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);

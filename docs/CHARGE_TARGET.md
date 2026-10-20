@@ -1,6 +1,6 @@
-# Charge Target
+# Night Target
 
-Charge Target is a percentage selector in Apple Home. Look at Solar 2mrw, then choose the battery level you want Cheap Overnight to work towards. Apple Home supplies its native dimmer detail screen; the plugin cannot customise that screen or promise a direct swipe on the compact tile. HomeKit will classify it as a light, so broad lighting scenes may also address it.
+Night Target is a percentage selector in Apple Home. Look at Solar 2mrw, then choose the battery level you want Cheap Overnight to work towards. Apple Home supplies its native dimmer detail screen; the plugin cannot customise that screen or promise a direct swipe on the compact tile. HomeKit will classify it as a light, so broad lighting scenes may also address it.
 
 ## One saved choice
 

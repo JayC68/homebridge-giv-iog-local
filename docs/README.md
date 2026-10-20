@@ -4,7 +4,7 @@ Start with the guide for what you want to do. Configure the plugin through the H
 
 | I want to… | Guide |
 | --- | --- |
-| Choose my overnight battery level in Apple Home | [Charge Target](CHARGE_TARGET.md) |
+| Choose my overnight battery level in Apple Home | [Night Target](CHARGE_TARGET.md) |
 | Use Intelligent Octopus Go, Flux or Agile | [Octopus features](ADVANCED_OCTOPUS.md) |
 | Adjust overnight charging for solar or use Emergency Stop | [Solar-Aware controls and Emergency Stop](BETA_CONTROLS.md) |
 | Enable, pause or reset local learning | [Local learning](SOLAR_OBSERVATION.md) |

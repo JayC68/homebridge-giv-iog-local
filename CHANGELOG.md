@@ -2,7 +2,13 @@
 
 This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.7](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.8](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.8 — Clearer overnight and Flux controls (20 October 2026)
+
+- Renamed the Apple Home percentage slider to Night Target and clarified that it applies to Cheap Overnight only. Preserved saved settings and accessory identity.
+- Separated enabling Octopus Flux Export from showing its optional Flux Out tile. Preserved existing export rules, startup behaviour and default tile visibility.
+- Moved Local Learning below Predicted Solar — advanced and corrected its description to reflect the enabled-by-default setting and option to disable.
 
 ## 4.0.3-beta.7 — Emergency Stop ready, local learning enabled (20 October 2026)
 

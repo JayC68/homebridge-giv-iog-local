@@ -23,7 +23,7 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
   const optionalFoundation = schema?.schema?.properties?.enableSolarObservation?.default === true
     && schema?.schema?.properties?.enableEmergencyStopTile?.default === true
     && foundation?.automaticControl === false && foundation?.qualified === false;
-  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.7'
+  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.8'
     && approval?.version === pkg.version && approval?.authorizedBy === 'project owner'
     && approval?.authorizedOn === '2026-10-20'
     && approval?.observationDefaultEnabled === true && approval?.emergencyStopDefaultEnabled === true && approval?.channel === 'beta'
@@ -47,7 +47,7 @@ function main() {
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : 'PASS owner-authorised beta.7 publication; physical Pi qualification remains pending.');
+    : 'PASS owner-authorised beta.8 publication; physical Pi qualification remains pending.');
 }
 
 module.exports = { publicationDecision };
