@@ -2,7 +2,7 @@
   "pluginAlias": "GivHomeModbus",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Your GivEnergy battery, at home in Apple Home. Set up the features you want below. Save your changes, then restart Homebridge to apply them.",
+  "headerDisplay": "Your GivEnergy battery, at home in Apple Home. Choose the features that suit you below. Remember to click SAVE at the end, then restart Homebridge to apply your changes.",
   "schema": {
     "type": "object",
     "properties": {
@@ -35,12 +35,12 @@
         "required": true
       },
       "maxPvKw": {
-        "title": "Solar power tile reference (kW)",
+        "title": "Maximum solar power (kW)",
         "type": "number",
         "default": 0,
         "minimum": 0,
         "maximum": 100,
-        "description": "The solar power shown as 100% brightness in Apple Home. Use your installed panel capacity, or 0 to leave percentage scaling off. This is a display setting, not a forecast or export limit."
+        "description": "Your panels\u2019 maximum output, used to show live generation as a percentage in Solar Now. For example, 1.4 kW from a 2.8 kW array shows 50%. The tile shows Off when there is no generation and up to 99% while generating. Set 0 to leave percentage scaling off."
       },
       "enableReadOnlyPolling": {
         "title": "Enable telemetry polling",
@@ -1069,19 +1069,19 @@
         "description": "Use a two-letter code, such as GB, IE, US, AU or NZ, to help find the right location."
       },
       "predictedSolarReferenceKwh": {
-        "title": "Solar 2mrw tile scale (kWh)",
+        "title": "Solar 2mrw: energy for a full tile (kWh)",
         "type": "number",
         "default": 0,
         "minimum": 0,
         "maximum": 1000,
-        "description": "The forecast amount used as 100% for the tile\u2019s display scale. Set 0 to use 4 kWh for each installed kWp. The tile displays 1\u201399%; this is a forecast scale, not a battery target."
+        "description": "Solar 2mrw shows tomorrow\u2019s forecast as a percentage. With 10 kWh here, a 5 kWh forecast shows 50%. Leave 0 for GivHome to use 4 kWh for each kWp of panels: a 2.8 kWp array uses 11.2 kWh. The tile displays 1\u201399%. This changes the percentage shown, not the forecast itself."
       },
       "predictedSolarRefreshMinutes": {
-        "title": "Update forecast every (minutes)",
+        "title": "Check tomorrow\u2019s forecast every (minutes)",
         "type": "integer",
         "default": 360,
         "minimum": 60,
-        "description": "How often to refresh tomorrow\u2019s forecast. The minimum is 60 minutes; 360 minutes is usually enough."
+        "description": "360 minutes means every six hours and is usually enough for tomorrow\u2019s forecast. Use a shorter interval if you want more frequent updates; the minimum is 60 minutes."
       },
       "predictedSolarArrays": {
         "title": "PV arrays",
@@ -1270,12 +1270,13 @@
       "title": "GivHome Setup",
       "expandable": true,
       "expanded": true,
-      "description": "Connect to your inverter and tell GivHome about your battery. GivTCP is not required.",
+      "description": "Connect to your inverter and tell GivHome about your battery and solar panels.",
       "items": [
         "inverterHost",
         "inverterSerial",
         "batteryCapacityKwh",
-        "maxBatteryChargePowerKw"
+        "maxBatteryChargePowerKw",
+        "maxPvKw"
       ]
     },
     {
@@ -1457,7 +1458,7 @@
       "title": "Predicted Solar \u2014 advanced",
       "expandable": true,
       "expanded": false,
-      "description": "Adjust the forecast tile\u2019s display scale and how often tomorrow\u2019s forecast is refreshed.",
+      "description": "Choose how tomorrow\u2019s forecast is shown as a percentage in Solar 2mrw, and how often GivHome checks for a fresh forecast.",
       "items": [
         "predictedSolarReferenceKwh",
         "predictedSolarRefreshMinutes"
@@ -1547,20 +1548,10 @@
         "enableEveEnergyHistory",
         {
           "type": "fieldset",
-          "title": "Solar tile display",
-          "expandable": true,
-          "expanded": false,
-          "description": "Choose how live solar power is shown in Apple Home, with or without Predicted Solar.",
-          "items": [
-            "maxPvKw"
-          ]
-        },
-        {
-          "type": "fieldset",
           "title": "Advanced charging check",
           "expandable": true,
           "expanded": false,
-          "description": "An optional check for a manual charging period that has already ended.",
+          "description": "Recommended for new users. Helps GivHome clear a manual-charge setting left enabled after its charging period has ended.",
           "items": [
             "manualChargeExpiredSlotFailsafeGate"
           ]
@@ -1677,7 +1668,7 @@
       "title": "Octopus Agile Export",
       "expandable": true,
       "expanded": false,
-      "description": "Plan sales of spare battery energy in worthwhile Agile Outgoing half-hours. Set up your tariff, review the plans, then deliberately enable live export when you are ready.",
+      "description": "Agile Export is experimental and still needs live testing. Start with planning only to review proposed sales of spare battery energy. Set up your tariff and export limits below.",
       "items": [
         "enableOctopusAgileOutgoingAutoExport",
         {
