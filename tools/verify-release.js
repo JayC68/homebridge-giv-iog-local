@@ -24,7 +24,7 @@ check('fakegato required dependency',pkg.dependencies&&pkg.dependencies['fakegat
 check('clean publication surface',!pkg.files.includes('EVIDENCE.md')&&!pkg.files.some(x=>/verify-beta/.test(x)));
 check('v4 legal/support surface',['NOTICE','TRADEMARKS.md','SECURITY.md','SUPPORT.md','docs'].every(x=>pkg.files.includes(x)));
 check('platform alias preserved',schema.pluginAlias==='GivHomeModbus'&&schema.pluginType==='platform'&&schema.singular===true);
-check('v4 schema presentation',schema.schema.properties.name.default==='GivHome'&&/GivHome connects Homebridge/.test(schema.headerDisplay||''));
+check('v4 schema presentation',schema.schema.properties.name.default==='GivHome'&&/Apple Home/.test(schema.headerDisplay||''));
 check('Predicted Solar schema',!!schema.schema.properties.enablePredictedSolar&&!!schema.schema.properties.predictedSolarArrays);
 check('plugin constant converted',idx.includes("const PLUGIN_NAME = 'homebridge-giv-iog-local';"));
 check('platform constant preserved',idx.includes("const PLATFORM_NAME = 'GivHomeModbus';"));

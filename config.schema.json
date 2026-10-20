@@ -2,7 +2,7 @@
   "pluginAlias": "GivHomeModbus",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "GivHome connects Homebridge to compatible GivEnergy systems over your local network. GivTCP is not required for v4 local control.",
+  "headerDisplay": "Your GivEnergy battery, at home in Apple Home. Set up the features you want below. Save your changes, then restart Homebridge to apply them.",
   "schema": {
     "type": "object",
     "properties": {
@@ -16,7 +16,7 @@
         "title": "Inverter IP address",
         "type": "string",
         "placeholder": "192.168.0.101",
-        "description": "Required. Local IP address of the GivEnergy inverter/adapter on port 8899. GivTCP is not required.",
+        "description": "The local IP address of your GivEnergy inverter or network adapter.",
         "required": true
       },
       "inverterPort": {
@@ -28,19 +28,19 @@
         "description": "Leave at 8899 for normal GivEnergy local Modbus. Advanced adapter validation only."
       },
       "inverterSerial": {
-        "title": "Inverter serial",
+        "title": "Inverter serial number",
         "type": "string",
         "placeholder": "CH2344G083",
-        "description": "Required. Safety gate: the plugin rejects a responder if the serial does not match this value.",
+        "description": "Enter the serial number shown in your GivEnergy settings. GivHome checks it is talking to your inverter before allowing control.",
         "required": true
       },
       "maxPvKw": {
-        "title": "Maximum Solar Power (kW)",
+        "title": "Solar power tile reference (kW)",
         "type": "number",
         "default": 0,
         "minimum": 0,
         "maximum": 100,
-        "description": "Optional. Used only to scale the Solar Generating Lightbulb brightness. Example: enter 2.8 for a 2.8 kW array. Set 0 if there is no PV or if you do not want percentage scaling yet."
+        "description": "The solar power shown as 100% brightness in Apple Home. Use your installed panel capacity, or 0 to leave percentage scaling off. This is a display setting, not a forecast or export limit."
       },
       "enableReadOnlyPolling": {
         "title": "Enable telemetry polling",
@@ -140,10 +140,10 @@
         "description": "Used only when the advanced Manual Charge command accessory and live-write gates are both enabled."
       },
       "manualChargeExpiredSlotFailsafeGate": {
-        "title": "Enable expired manual-charge failsafe",
+        "title": "Check for expired manual charging",
         "type": "boolean",
         "default": false,
-        "description": "Allows GivHome to turn off a stale manual-charge enable after its active window has expired. Normal users can leave this enabled."
+        "description": "Allows GivHome to turn off a manual-charge setting left enabled after its charging period has expired. This does not stop an active charging period."
       },
       "manualChargeExpiredSlotFailsafeAcknowledgement": {
         "title": "Expired Manual Charge failsafe acknowledgement",
@@ -168,36 +168,36 @@
         "description": "Grace period after the Manual Charge end time before a repair would be eligible if the third gate is enabled."
       },
       "targetSoc": {
-        "title": "Target battery charge %",
+        "title": "Configured charge target (%)",
         "type": "integer",
         "default": 100,
         "minimum": 4,
         "maximum": 100,
-        "description": "Starting target for Cheap Overnight and configured target for timed Charge tiles. Apple Home saves a Cheap Overnight-only override. IOG uses its separate target."
+        "description": "The starting target for Cheap Overnight and the target for timed Charge tiles. Night Target in Apple Home can save a different percentage for Cheap Overnight only. IOG protection has its own target."
       },
       "enableChargeTargetTile": {
         "title": "Show Night Target in Apple Home",
         "type": "boolean",
         "default": true,
-        "description": "Adds a slider to set the battery percentage target for Cheap Overnight charging only. It does not start charging or change the separate IOG battery protection target. Turning this off returns to the configured target after restart."
+        "description": "Set your Cheap Overnight battery percentage from Apple Home. This does not start charging. Hiding the tile returns to the configured target after restart; it does not change IOG protection."
       },
       "enableTimedChargeTiles": {
-        "title": "Enable Charge 30/60/90/120 tiles",
+        "title": "Show timed Charge tiles in Apple Home",
         "type": "boolean",
         "default": false,
-        "description": "Shows Charge 30, 60, 90 and 120 minute switches in Apple Home. GivHome uses direct local readback before, during and after each command."
+        "description": "Add Charge 30, 60, 90 and 120 minute switches. Each starts a battery charge for the selected duration, using the configured charge target."
       },
       "enableTimedExportTiles": {
-        "title": "Enable Export 30/60/90/120 tiles",
+        "title": "Show timed Export tiles in Apple Home",
         "type": "boolean",
         "default": false,
-        "description": "Shows Export 30, 60, 90 and 120 minute switches in Apple Home. GivHome uses the proven local export route for your inverter model and verifies command readback."
+        "description": "Add Export 30, 60, 90 and 120 minute switches. Each requests battery export for the selected duration, within your export limits."
       },
       "enablePauseTiles": {
-        "title": "Enable Pause Charge/Discharge/Both tiles",
+        "title": "Show Pause tiles in Apple Home",
         "type": "boolean",
         "default": false,
-        "description": "Shows Pause Charge, Pause Discharge and Pause Both switches in Apple Home. These are simple On/Off switches: On sets the selected pause mode, Off returns the battery to Eco. Apple Home automations can provide any timing you want."
+        "description": "Add Pause Charge, Pause Discharge and Pause Both. On applies the selected pause; Off returns the battery to Eco. Use Apple Home automations if you want a timed pause."
       },
       "manualExportTargetSoc": {
         "title": "Manual export lower battery target %",
@@ -219,19 +219,19 @@
         "title": "Octopus Energy API key",
         "type": "string",
         "default": "",
-        "description": "Used only when Intelligent Octopus Go smart windows are enabled. GivHome calls Octopus plannedDispatches directly; GivTCP is not used."
+        "description": "Find this in your Octopus account. GivHome uses it to read your smart charging slots and, if enabled, check export-meter results."
       },
       "octopusAccountNumber": {
         "title": "Octopus Energy account number",
         "type": "string",
         "default": "",
-        "description": "Usually starts with A-. Used with the Octopus Energy API key to read Intelligent Octopus Go planned dispatch windows."
+        "description": "Your Octopus account number, usually beginning A-."
       },
       "enableOctopusSmartWindows": {
-        "title": "Enable Intelligent Octopus Go smart windows",
+        "title": "Read Intelligent Octopus Go smart slots",
         "type": "boolean",
         "default": false,
-        "description": "Reads planned dispatch windows from Intelligent Octopus Go. Cheap Overnight does not depend on this; it has its own user-configured schedule."
+        "description": "Read the extra EV charging periods scheduled by Octopus. Your normal Cheap Overnight schedule stays independent."
       },
       "octopusPollSeconds": {
         "title": "Octopus polling seconds",
@@ -242,46 +242,46 @@
         "description": "How often GivHome may check Intelligent Octopus Go for planned dispatch windows when enabled."
       },
       "cheapStart": {
-        "title": "Cheap Overnight start time",
+        "title": "Cheap Overnight starts (HH:MM)",
         "type": "string",
         "default": "23:30",
         "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
-        "description": "Your normal low-rate period start. Used even without Intelligent Octopus Go."
+        "description": "The start of your usual low-rate period, using the 24-hour clock."
       },
       "cheapEnd": {
-        "title": "Cheap Overnight end time",
+        "title": "Cheap Overnight ends (HH:MM)",
         "type": "string",
         "default": "05:30",
         "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
-        "description": "Your normal low-rate period end. GivHome returns the inverter to normal Eco behaviour afterwards."
+        "description": "The end of your low-rate period. GivHome returns the battery to normal Eco operation afterwards."
       },
       "graceMinutes": {
-        "title": "Smart-window grace minutes",
+        "title": "Extra protection after a smart slot (minutes)",
         "type": "integer",
         "default": 30,
         "minimum": 0,
         "maximum": 30,
-        "description": "After an Intelligent Octopus Go smart dispatch ends, GivHome may continue home-battery protection to the next half-hour boundary, up to this many minutes. This does not extend Battery Care."
+        "description": "Continue home-battery protection to the next half-hour boundary, up to this many minutes. Set 0 to finish with the smart slot. This does not extend EV charging or Battery Care."
       },
       "enableEvSmartWindowBatteryProtection": {
-        "title": "Protect home battery during Intelligent Octopus Go smart slots",
+        "title": "Protect the home battery during smart slots",
         "type": "boolean",
         "default": false,
-        "description": "When Intelligent Octopus Go schedules a smart EV charging slot, GivHome can stop the home battery discharging into the car. Choose the method below."
+        "description": "Choose how the battery behaves while Octopus charges your EV. GivHome controls the home battery; Octopus continues to control the car."
       },
       "enableBatteryCareCharging": {
-        "title": "Enable Battery Care Charging",
+        "title": "Enable Battery Care",
         "type": "boolean",
         "default": false,
-        "description": "Optional overnight-only charge-rate planning for the main Cheap Overnight window."
+        "description": "Adjust the charge rate to the energy needed and time left in Cheap Overnight. This does not change timed Charge tiles or extra IOG smart slots."
       },
       "batteryCapacityKwh": {
-        "title": "Battery size used for planning (kWh)",
+        "title": "Battery capacity (kWh)",
         "type": "number",
         "default": 13.5,
         "minimum": 1,
         "maximum": 80,
-        "description": "Used by Battery Care, Evening Excess Export and Octopus Flux Export planning."
+        "description": "Your total battery capacity. GivHome uses this when planning charging and spare energy for export."
       },
       "maxBatteryChargePowerKw": {
         "title": "Maximum battery charge power (kW)",
@@ -289,10 +289,10 @@
         "default": 6,
         "minimum": 0.5,
         "maximum": 20,
-        "description": "Used to translate Battery Care planning into HR111 charge-rate percentages."
+        "description": "The maximum charging power supported by your battery and inverter. Battery Care uses this to plan the overnight charging rate."
       },
       "batteryCareMode": {
-        "title": "Battery Care mode",
+        "title": "Battery Care approach",
         "type": "string",
         "default": "balanced",
         "oneOf": [
@@ -315,63 +315,63 @@
             ]
           }
         ],
-        "description": "Controls how cautious the overnight Battery Care charge-rate plan is."
+        "description": "Gentle uses a lower charging allowance. Balanced leaves more headroom to reach your target. Strong allows a higher rate when needed. The target and time remaining still guide the plan."
       },
       "batteryCareMinimumWindowMinutes": {
-        "title": "Minimum overnight time remaining",
+        "title": "Minimum time remaining (minutes)",
         "type": "integer",
         "default": 90,
         "minimum": 60,
         "maximum": 360,
-        "description": "Battery Care writes HR111 only when the main overnight cheap window has at least this much time remaining."
+        "description": "Only adjust the overnight charge rate when at least this much time remains in Cheap Overnight."
       },
       "enableEveningExcessExport": {
         "title": "Enable Evening Excess Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Enables GivHome\u2019s evening sell-off planner. Once configured here, use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day. Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically before the cheap overnight charge window. Legacy v3.7.5 enableExcessEnergyExport is also honoured."
+        "description": "Plan export of spare battery energy before Cheap Overnight begins. Use the Excess Out tile in Apple Home to turn this on or off. Enable this only if you are paid for export."
       },
       "eveningExportStartTime": {
-        "title": "Evening export earliest start",
+        "title": "Earliest export start (HH:MM)",
         "type": "string",
         "default": "19:30",
-        "description": "Earliest time Evening Excess Export may begin. Legacy v3.7.5 excessExportStartTime / excessExportStart are also honoured."
+        "description": "The earliest time GivHome may begin selling spare evening energy."
       },
       "eveningExportReserveSoc": {
-        "title": "Minimum battery to keep %",
+        "title": "Battery level to keep (%)",
         "type": "integer",
         "default": 20,
         "minimum": 5,
         "maximum": 95,
-        "description": "Minimum battery level to preserve before the cheap overnight window. Legacy v3.7.5 excessExportReserveSoc is also honoured."
+        "description": "Keep at least this battery level for the home before Cheap Overnight."
       },
       "eveningExportSlotMinutes": {
-        "title": "Evening export slot minutes",
+        "title": "Export check interval (minutes)",
         "type": "integer",
         "default": 30,
         "minimum": 15,
         "maximum": 60,
-        "description": "How long each Evening Excess Export slot should run before GivHome checks the battery and time remaining again. Legacy v3.7.5 excessExportSlotMinutes is also honoured."
+        "description": "The length of each export period before GivHome checks the battery and time remaining again."
       },
       "eveningExportMarginSoc": {
-        "title": "Evening export safety margin %",
+        "title": "Extra battery margin (%)",
         "type": "number",
         "default": 2,
         "minimum": 0,
         "maximum": 20,
-        "description": "Extra battery percentage above the calculated reserve required before export may start. Legacy v3.7.5 excessExportMarginSoc is also honoured."
+        "description": "Keep this additional battery percentage above the calculated reserve before starting export."
       },
       "serveOvernightLoadFromBattery": {
-        "title": "Serve overnight load from battery",
+        "title": "Keep battery energy for overnight house use",
         "type": "boolean",
         "default": false,
-        "description": "Advanced planning option. Leave off for most Intelligent Octopus Go homes."
+        "description": "Include expected house use during Cheap Overnight in the energy kept back from export. Leave off if you normally use cheap grid electricity overnight."
       },
       "enableEveEnergyHistory": {
         "title": "Enable Eve energy history",
         "type": "boolean",
         "default": false,
-        "description": "Creates Solar, Import and Export history collectors and stores local totals. Uses fakegato-history when available."
+        "description": "Keep local solar, grid import and export history for viewing in the Eve app."
       },
       "eveHistorySampleMinutes": {
         "title": "Eve history sample minutes",
@@ -402,18 +402,18 @@
         "description": "Hidden from the normal form. The plugin uses fixed unit 17 for normal GivEnergy local Modbus unless config.json is manually edited with an explicit engineering override acknowledgement."
       },
       "enableCheapOvernightCharging": {
-        "title": "Enable Cheap Overnight charging",
+        "title": "Enable Cheap Overnight",
         "type": "boolean",
         "default": true,
-        "description": "Uses your normal off-peak window even when Intelligent Octopus Go is not configured or has not supplied smart charging slots."
+        "description": "Charge during your usual low-rate period. This works independently of Intelligent Octopus Go smart slots."
       },
       "eveningExportPowerKw": {
-        "title": "Evening export power limit (kW)",
+        "title": "Export power (kW)",
         "type": "number",
         "default": 5,
         "minimum": 0.5,
         "maximum": 12,
-        "description": "Requested Evening Excess Export battery discharge power. Uses the same kW-to-HR112 calculation as Timed Export, while keeping a separate value for the planner. Legacy v3.7.5 maxExportPowerKw / excessExportDischargeKw aliases are also honoured.",
+        "description": "The battery power requested for evening export. Your battery and grid export limits still apply.",
         "multipleOf": 0.1
       },
       "maxBatteryExportPowerKw": {
@@ -423,16 +423,16 @@
         "minimum": 0.5,
         "maximum": 20,
         "multipleOf": 0.1,
-        "description": "Battery/inverter discharge capability used to convert export kW into HR112 percentage. Example: 6.0 for an AIO 6kW."
+        "description": "The maximum discharge power supported by your battery and inverter. This is separate from your permitted grid export limit."
       },
       "maxGridExportPowerKw": {
-        "title": "Maximum allowed grid export (kW)",
+        "title": "Permitted grid export (kW)",
         "type": "number",
         "default": 6,
         "minimum": 0.5,
         "maximum": 20,
         "multipleOf": 0.1,
-        "description": "Site/DNO grid export ceiling used as a safety clamp. GivHome estimates battery export + PV - house load before writing HR112."
+        "description": "Your site\u2019s agreed grid export limit. GivHome uses battery output, solar generation and house use when planning within this limit."
       },
       "timedExportPowerKw": {
         "title": "Timed Export power (kW)",
@@ -441,39 +441,39 @@
         "minimum": 0.1,
         "maximum": 20,
         "multipleOf": 0.1,
-        "description": "Requested battery export/discharge power for Export 30/60/90/120. GivHome converts this to HR112 and clamps to the maximum battery export and grid export settings."
+        "description": "The battery power requested by the timed Export tiles. Your battery and grid export limits still apply."
       },
       "iogHomeBatteryProtectionMode": {
-        "title": "Home-battery protection method",
+        "title": "Home-battery behaviour",
         "type": "string",
         "default": "charge",
         "oneOf": [
           {
-            "title": "Charge mode",
+            "title": "Charge towards the IOG target",
             "enum": [
               "charge"
             ]
           },
           {
-            "title": "Pause Discharge",
+            "title": "Pause discharge",
             "enum": [
               "pauseDischarge"
             ]
           },
           {
-            "title": "Pause Charge",
+            "title": "Pause charging \u2014 discharge still allowed",
             "enum": [
               "pauseCharge"
             ]
           },
           {
-            "title": "Pause Both",
+            "title": "Pause charging and discharge",
             "enum": [
               "pauseBoth"
             ]
           }
         ],
-        "description": "Choose how GivHome protects the home battery during Intelligent Octopus Go smart EV charging slots. Restores the previous state afterwards, after the smart slot and any active grace period."
+        "description": "Choose what the home battery does during smart slots. GivHome restores the previous state when protection ends."
       },
       "enableApplianceControl": {
         "title": "Enable appliance controls",
@@ -491,7 +491,7 @@
         "title": "Enable Octopus Flux Export",
         "type": "boolean",
         "default": false,
-        "description": "Allows GivHome to sell spare battery energy during the configured Flux peak period, keeping your reserve and margin. Enabled at startup; eligible days and export limits still apply. Use the optional Flux Out tile to turn the function off or back on in Apple Home."
+        "description": "Sell spare battery energy during the configured Flux peak period, keeping your reserve and margin. Enabling this also allows it to run after a Homebridge restart."
       },
       "octopusFluxDaysToRun": {
         "title": "Legacy Flux days list",
@@ -556,56 +556,56 @@
         "description": "Legacy/internal value retained for existing config.json compatibility. New installs should use Days to export."
       },
       "octopusFluxExportStartTime": {
-        "title": "Flux eligible peak starts",
+        "title": "Peak period starts (HH:MM)",
         "type": "string",
         "default": "16:00",
-        "description": "Advanced. Start of the Flux tariff peak period that is eligible for export. This is not a promise to export from this time; GivHome still calculates how much energy is genuinely spare."
+        "description": "The earliest time Flux Export may run. GivHome starts only when there is spare energy to sell."
       },
       "octopusFluxExportEndTime": {
-        "title": "Flux eligible peak ends",
+        "title": "Peak period ends (HH:MM)",
         "type": "string",
         "default": "19:00",
-        "description": "Advanced. End of the Flux tariff peak period that is eligible for export. Actual run length is limited by spare kWh, reserve, safety margin, load, PV and export power."
+        "description": "The latest time Flux Export may run. It may finish earlier when the planned energy has been sold."
       },
       "octopusFluxEveningReserveKwh": {
-        "title": "Also keep this energy (kWh)",
+        "title": "Energy to keep (kWh)",
         "type": "number",
         "default": 3,
         "minimum": 0,
         "maximum": 30,
-        "description": "Advanced. Optional kWh reserve. GivHome keeps whichever is safer: this energy reserve or the battery percentage above."
+        "description": "Keep this much energy for the home. GivHome uses whichever keeps more: this energy reserve or the battery percentage."
       },
       "octopusFluxReserveSoc": {
-        "title": "Keep at least this battery (%)",
+        "title": "Battery level to keep (%)",
         "type": "integer",
         "default": 25,
         "minimum": 5,
         "maximum": 95,
-        "description": "GivHome stops before the battery falls below this level. Use a higher value if the house needs more evening or overnight energy; this may deliberately shorten the Flux run."
+        "description": "Keep this battery level for the home. A higher reserve leaves less energy available to sell."
       },
       "octopusFluxSafetyMarginSoc": {
-        "title": "Start only above reserve by (%)",
+        "title": "Extra battery margin (%)",
         "type": "number",
         "default": 4,
         "minimum": 0,
         "maximum": 30,
-        "description": "Advanced. Extra headroom above the reserve before a Flux export slot may start. A higher margin deliberately shortens or prevents export."
+        "description": "Require this additional battery percentage above the reserve before starting export."
       },
       "octopusFluxExportPowerKw": {
-        "title": "Maximum export power (kW)",
+        "title": "Requested export power (kW)",
         "type": "number",
         "default": 6,
         "minimum": 0.5,
         "maximum": 20,
-        "description": "The most battery power GivHome may request during Flux Export. On CH/AIO scheduled export this HR112 power-ratio value is written and read back, but live planning is budgeted from observed/effective discharge because some firmware exports at full power despite accepting the ratio."
+        "description": "The battery power GivHome requests. Some inverter firmware may export faster than requested; GivHome measures actual discharge and stops when the planned energy has been used."
       },
       "octopusFluxSlotMinutes": {
-        "title": "Maximum run/check slice (minutes)",
+        "title": "Export check interval (minutes)",
         "type": "integer",
         "default": 30,
         "minimum": 15,
         "maximum": 60,
-        "description": "Advanced. GivHome exports in short slices and re-checks spare battery, house load and time before continuing. This is not the total Flux run length."
+        "description": "The maximum length of each export period before GivHome checks the available energy again. This is not the total run length."
       },
       "octopusFluxMinimumExportKwh": {
         "title": "Minimum spare energy (kWh)",
@@ -613,7 +613,7 @@
         "default": 0.5,
         "minimum": 0.1,
         "maximum": 10,
-        "description": "Advanced. GivHome will not start if there is less than this spare energy above reserve and margin."
+        "description": "Start only when at least this much energy is available above the reserve and margin."
       },
       "octopusFluxTariffImportPence": {
         "title": "Legacy Flux reference import cost (p/kWh)",
@@ -637,38 +637,38 @@
         "title": "Enable Octopus Agile Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional Agile Export Autopilot. When enabled and armed in Apple Home, GivHome learns local energy behaviour and plans saleable spare energy against any high-value Agile Outgoing half-hour. It is not tied to the Flux 16:00-19:00 peak band."
+        "description": "Find worthwhile Agile Outgoing half-hours for selling spare battery energy. Begin with planning only so you can review the proposed exports."
       },
       "octopusAgileOutgoingProductCode": {
         "title": "Agile Outgoing product code",
         "type": "string",
         "default": "AGILE-OUTGOING-19-05-13",
-        "description": "Octopus product code used for Agile Outgoing export prices. Leave as default unless Octopus changes product."
+        "description": "Keep the supplied value unless your Octopus export product uses a different code."
       },
       "octopusAgileOutgoingRegionCode": {
-        "title": "Agile Outgoing region code",
+        "title": "Electricity region",
         "type": "string",
         "default": "J",
-        "description": "Your Octopus electricity region letter, A-P. GivHome builds the Agile Outgoing export tariff code from this if no full tariff code is supplied."
+        "description": "Your Octopus electricity region letter, A\u2013P. GivHome uses this with the product code when no full tariff code is entered."
       },
       "octopusAgileOutgoingTariffCode": {
-        "title": "Agile Outgoing full tariff code",
+        "title": "Full export tariff code (optional)",
         "type": "string",
         "default": "",
-        "description": "Optional full tariff code, for example E-1R-AGILE-OUTGOING-19-05-13-J. If left blank, GivHome builds it from product and region."
+        "description": "If supplied, this takes precedence over product and region. Example: E-1R-AGILE-OUTGOING-19-05-13-J."
       },
       "octopusAgileOutgoingAllowedStartTime": {
-        "title": "Custom limiter start time",
+        "title": "Export window starts (HH:MM)",
         "type": "string",
         "default": "00:00",
-        "description": "Only used when Slot search is Custom time window. Any high-value slot ignores this field completely. Leave blank or 00:00 unless deliberately testing a custom time limit.",
+        "description": "The start of your chosen daily export window. Used only with Custom time window.",
         "placeholder": "00:00"
       },
       "octopusAgileOutgoingAllowedEndTime": {
-        "title": "Custom limiter end time",
+        "title": "Export window ends (HH:MM)",
         "type": "string",
         "default": "23:59",
-        "description": "Only used when Slot search is Custom time window. Any high-value slot ignores this field completely. Leave blank or 23:59 unless deliberately testing a custom time limit.",
+        "description": "The end of your chosen daily export window. Used only with Custom time window.",
         "placeholder": "23:59"
       },
       "octopusAgileOutgoingDaysToRun": {
@@ -740,124 +740,124 @@
         "minimum": -100,
         "maximum": 500,
         "multipleOf": 0.1,
-        "description": "GivHome will only consider Agile Outgoing half-hours at or above this price. This is the plain user-facing price hurdle."
+        "description": "Consider selling only in half-hours paying at least this price. Your reserve and other planning limits still apply."
       },
       "octopusAgileOutgoingReferenceImportPence": {
-        "title": "Energy cost baseline (advanced, p/kWh)",
+        "title": "Energy cost to compare (p/kWh)",
         "type": "string",
         "default": "8",
-        "description": "Advanced internal value test. For IOG users this normally represents the cheap-rate energy baseline. It is used with the extra reward setting and does not change Octopus billing. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "The cost of the energy being sold, normally your cheap import rate. Used to assess the gain from export; this does not change your bill.",
         "placeholder": "8"
       },
       "octopusAgileOutgoingMinimumGrossMarginPence": {
-        "title": "Minimum extra reward above cheap charge cost (p/kWh)",
+        "title": "Minimum gain above energy cost (p/kWh)",
         "type": "string",
         "default": "5",
-        "description": "Advanced value guard. Agile export must beat the energy cost baseline by at least this much before GivHome considers selling battery energy. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "Require export prices to exceed the energy cost below by at least this amount.",
         "placeholder": "5"
       },
       "octopusAgileOutgoingReserveSoc": {
-        "title": "Minimum battery to keep (%)",
+        "title": "Battery level to keep (%)",
         "type": "integer",
         "default": 35,
         "minimum": 5,
         "maximum": 95,
-        "description": "Minimum battery percentage to keep for the home before autonomous export."
+        "description": "Keep at least this battery level for the home before selling spare energy."
       },
       "octopusAgileOutgoingEveningReserveKwh": {
-        "title": "Evening energy to keep (kWh)",
+        "title": "Energy to keep (kWh)",
         "type": "string",
         "default": "3",
-        "description": "Minimum usable energy to preserve for the home. GivHome keeps whichever is larger: this kWh reserve or the percentage reserve. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "Keep this energy for the home. GivHome uses whichever keeps more: this amount or your battery percentage reserve.",
         "placeholder": "3"
       },
       "octopusAgileOutgoingSafetyMarginSoc": {
-        "title": "Agile safety margin (%)",
+        "title": "Extra battery margin (%)",
         "type": "string",
         "default": "4",
-        "description": "Extra battery percentage above the reserve required before autonomous export may start. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "Require this additional battery percentage above the reserve before starting export.",
         "placeholder": "4"
       },
       "octopusAgileOutgoingExportPowerKw": {
-        "title": "Maximum export power (kW)",
+        "title": "Requested export power (kW)",
         "type": "number",
         "default": 6,
         "minimum": 0.5,
         "maximum": 20,
         "multipleOf": 0.1,
-        "description": "Maximum battery export/discharge power GivHome may request during Agile Export. Live decisions are still clamped against battery limit, PV, load and grid export limit."
+        "description": "The maximum battery power requested for Agile Export. Battery capability, solar generation, house use and your grid export limit still apply."
       },
       "octopusAgileOutgoingMinimumExportKwh": {
-        "title": "Minimum spare energy to export (kWh)",
+        "title": "Minimum spare energy (kWh)",
         "type": "string",
         "default": "0.5",
-        "description": "GivHome will not start an Agile export slot unless spare energy above reserve and margin is at least this amount. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "Start only when at least this much energy is available above the reserve and margin.",
         "placeholder": "0.5"
       },
       "octopusAgileOutgoingDailyExportCapKwh": {
-        "title": "Maximum to sell per day (kWh)",
+        "title": "Maximum to sell each day (kWh)",
         "type": "number",
         "default": 9,
         "minimum": 0.1,
         "maximum": 80,
         "multipleOf": 0.1,
-        "description": "Maximum planned/observed export energy GivHome may sell per local day. In Auto mode this acts as an upper cap; in Custom mode it is the direct daily cap."
+        "description": "The daily upper limit, including when GivHome estimates the allowance automatically."
       },
       "octopusAgileOutgoingDryRun": {
-        "title": "Agile planner only / dry run",
+        "title": "Plan without exporting",
         "type": "boolean",
         "default": true,
-        "description": "Leave on for first testing. GivHome fetches prices, learns and logs plans, but does not write export registers until dry run is off, the execution stage permits it, and the live acknowledgement is set."
+        "description": "Keep this on to read prices and record plans without starting export. Turning it off is only one part of enabling live export; the operating mode and confirmation below must also allow it."
       },
       "octopusAgileOutgoingLiveAcknowledgement": {
-        "title": "Agile live export acknowledgement",
+        "title": "Confirm live Agile Export",
         "type": "string",
         "default": "",
-        "description": "To allow unattended live Agile Export, set this exactly to ENABLE_AGILE_OUTGOING_LIVE_EXPORT, turn dry run off, and choose a live execution stage."
+        "description": "To allow live export, enter ENABLE_AGILE_OUTGOING_LIVE_EXPORT exactly, choose a live operating mode and turn Plan without exporting off. Your other limits still apply."
       },
       "octopusAgileOutgoingEnableMpanAudit": {
-        "title": "Check results against export MPAN",
+        "title": "Compare exports with Octopus meter readings",
         "type": "boolean",
         "default": false,
-        "description": "Optional delayed audit. Uses your Octopus API key, export MPAN and export meter serial to compare planned/inverter export against Octopus export-metered kWh."
+        "description": "Use your Octopus API key and export meter details to compare recorded exports with Octopus readings after they become available."
       },
       "octopusExportMpan": {
         "title": "Export MPAN",
         "type": "string",
         "default": "",
-        "description": "Your export MPAN. Used only for Agile Outgoing MPAN audit, not for live safety decisions."
+        "description": "The export supply number for your property. Used only for the optional meter comparison."
       },
       "octopusExportMeterSerial": {
         "title": "Export meter serial number",
         "type": "string",
         "default": "",
-        "description": "Meter serial paired with the export MPAN. Used only for Agile Outgoing MPAN audit."
+        "description": "The meter serial number associated with your export MPAN."
       },
       "octopusAgileOutgoingMpanAuditDelayHours": {
-        "title": "MPAN audit delay (hours)",
+        "title": "Wait before checking readings (hours)",
         "type": "string",
         "default": "12",
-        "description": "How long after an export slot ends before checking Octopus export MPAN data. Octopus data is delayed, so this is not used as a live safety signal. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "Allow time for Octopus export readings to arrive. These delayed readings are not used to decide whether it is safe to export now.",
         "placeholder": "12"
       },
       "octopusAgileOutgoingMpanMismatchToleranceKwh": {
-        "title": "MPAN mismatch tolerance (kWh)",
+        "title": "Allowed difference (kWh)",
         "type": "string",
         "default": "1",
-        "description": "Allowed difference between inverter-observed export and Octopus export MPAN kWh before the audit is considered a mismatch. Runtime clamps still apply; leave the default unless deliberately tuning.",
+        "description": "The difference allowed between GivHome\u2019s recorded export and the Octopus meter reading before reporting a mismatch.",
         "placeholder": "1"
       },
       "octopusAgileOutgoingSuspendOnMpanMismatch": {
-        "title": "Suspend on MPAN mismatch",
+        "title": "Pause Agile Export if readings differ",
         "type": "boolean",
         "default": true,
-        "description": "If enabled, GivHome disarms Agile Outgoing Auto Export after a significant MPAN mismatch."
+        "description": "Turn Agile Export off if the optional meter comparison finds a difference above your allowance."
       },
       "octopusFluxRunDaysPreset": {
         "title": "Days to export",
         "type": "string",
         "default": "everyday",
-        "description": "Choose the days when GivHome is allowed to start Flux Export. For example, exclude a regular high-use day when you want to keep more battery at home.",
+        "description": "Choose when GivHome may start Flux Export. Choose days\u2026 lets you select individual weekdays below.",
         "enum": [
           "everyday",
           "weekdays",
@@ -872,56 +872,49 @@
           "Every day except Friday",
           "Every day except Saturday",
           "Every day except Sunday",
-          "Custom day checkboxes below"
+          "Choose days\u2026"
         ]
       },
       "octopusFluxRunMonday": {
-        "title": "Run on Monday",
+        "title": "Monday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusFluxRunTuesday": {
-        "title": "Run on Tuesday",
+        "title": "Tuesday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusFluxRunWednesday": {
-        "title": "Run on Wednesday",
+        "title": "Wednesday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusFluxRunThursday": {
-        "title": "Run on Thursday",
+        "title": "Thursday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusFluxRunFriday": {
-        "title": "Run on Friday",
+        "title": "Friday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusFluxRunSaturday": {
-        "title": "Run on Saturday",
+        "title": "Saturday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusFluxRunSunday": {
-        "title": "Run on Sunday",
+        "title": "Sunday",
         "type": "boolean",
-        "default": true,
-        "description": "Used only when Days to export is set to Custom day checkboxes below."
+        "default": true
       },
       "octopusAgileOutgoingExecutionStage": {
-        "title": "Execution stage",
+        "title": "Export operating mode",
         "type": "string",
         "default": "plannerOnly",
-        "description": "Staged live gate. Planner only is safest and performs no inverter writes. Single-slot proves one slot. Multi-slot can trade more than one selected half-hour. Adaptive also uses learning evidence for saleable-energy and headroom decisions.",
+        "description": "Planning only does not start export. Single best slot uses one selected half-hour; Multiple slots can use more than one. Adaptive trading can use learned energy and export-headroom estimates. Live modes still require Plan without exporting to be off and the confirmation below.",
         "enum": [
           "plannerOnly",
           "singleSlot",
@@ -929,17 +922,17 @@
           "adaptive"
         ],
         "enumNames": [
-          "Planner only \u2014 no inverter writes",
-          "Single best slot only",
-          "Multi-slot trader",
-          "Adaptive trader"
+          "Planning only",
+          "Single best slot",
+          "Multiple slots",
+          "Adaptive trading"
         ]
       },
       "octopusAgileOutgoingStrategy": {
-        "title": "Strategy",
+        "title": "Export approach",
         "type": "string",
         "default": "balanced",
-        "description": "Controls how much of the learned saleable-energy budget GivHome is allowed to commit. Maximum return can use many profitable half-hour slots; extra cautious keeps wider reserve margins.",
+        "description": "Balanced uses a measured share of the available energy. Maximum return can commit more to worthwhile slots. Extra cautious keeps a wider reserve.",
         "enum": [
           "balanced",
           "maximumReturn",
@@ -952,10 +945,10 @@
         ]
       },
       "octopusAgileOutgoingLearningMode": {
-        "title": "Learning mode",
+        "title": "Agile learning",
         "type": "string",
         "default": "observe",
-        "description": "Observe only records local PV, load, SOC and export-response patterns for evidence. Adaptive allows those learned patterns to influence saleable-energy and export-headroom planning.",
+        "description": "Off disables Agile learning. Observe only records patterns; Adaptive lets them influence Agile planning. This is separate from Local Learning for future Solar-Aware charging.",
         "enum": [
           "off",
           "observe",
@@ -968,24 +961,24 @@
         ]
       },
       "octopusAgileOutgoingDailyExportMode": {
-        "title": "Daily sell limit mode",
+        "title": "Daily export allowance",
         "type": "string",
         "default": "auto",
-        "description": "Auto estimates how many kWh are safe to sell from SOC, reserve, PV/load evidence and learned local behaviour. Custom uses the maximum-to-sell setting directly.",
+        "description": "Auto estimates the spare energy available to sell. A fixed allowance uses your chosen daily limit. Both respect the maximum below.",
         "enum": [
           "auto",
           "custom"
         ],
         "enumNames": [
-          "Auto \u2014 learn how much is spare",
-          "Custom cap"
+          "Auto \u2014 estimate spare energy",
+          "Fixed daily allowance"
         ]
       },
       "octopusAgileOutgoingRunDaysPreset": {
         "title": "Days to export",
         "type": "string",
         "default": "everyday",
-        "description": "Simple days-to-export choice. Use Custom to reveal individual day checkboxes in the advanced section.",
+        "description": "Choose when GivHome may start Agile Export. Choose days\u2026 lets you select individual weekdays below.",
         "enum": [
           "everyday",
           "weekdays",
@@ -1000,46 +993,46 @@
           "Every day except Friday",
           "Every day except Saturday",
           "Every day except Sunday",
-          "Custom day checkboxes below"
+          "Choose days\u2026"
         ]
       },
       "octopusAgileOutgoingRunMonday": {
-        "title": "Run on Monday",
+        "title": "Monday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingRunTuesday": {
-        "title": "Run on Tuesday",
+        "title": "Tuesday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingRunWednesday": {
-        "title": "Run on Wednesday",
+        "title": "Wednesday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingRunThursday": {
-        "title": "Run on Thursday",
+        "title": "Thursday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingRunFriday": {
-        "title": "Run on Friday",
+        "title": "Friday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingRunSaturday": {
-        "title": "Run on Saturday",
+        "title": "Saturday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingRunSunday": {
-        "title": "Run on Sunday",
+        "title": "Sunday",
         "type": "boolean",
         "default": true
       },
       "octopusAgileOutgoingSlotSearchMode": {
-        "title": "Slot search",
+        "title": "When to look for export slots",
         "type": "string",
         "default": "anyHighValue",
         "enum": [
@@ -1054,41 +1047,41 @@
           "Evening focus",
           "Custom time window"
         ],
-        "description": "Default is Any high-value slot. GivHome searches every published Agile Outgoing half-hour that passes reserve, price and conflict checks. Custom time window is an optional limiter and should normally be left unused."
+        "description": "Search all published half-hours, use daytime (06:00\u201322:00), focus on evenings (16:00\u201323:30), or choose your own time window. Price and reserve checks always apply."
       },
       "enablePredictedSolar": {
         "title": "Enable Predicted Solar",
         "type": "boolean",
         "default": false,
-        "description": "Optional read-only solar forecast. When off, no Predicted Solar accessory is created and no Open-Meteo requests are made."
+        "description": "Show tomorrow\u2019s expected solar generation in Apple Home. GivHome requests forecasts from Open-Meteo only while this feature is enabled."
       },
       "predictedSolarLocation": {
-        "title": "Postcode / ZIP / location",
+        "title": "Postcode or location",
         "type": "string",
         "default": "",
-        "description": "Location used only for the solar forecast. UK postcodes are resolved directly; other locations use Open-Meteo geocoding."
+        "description": "The location used for your solar forecast. UK postcodes are looked up directly; other locations use Open-Meteo\u2019s location search."
       },
       "predictedSolarCountryCode": {
         "title": "Country code",
         "type": "string",
         "default": "GB",
         "pattern": "^[A-Za-z]{2}$",
-        "description": "Two-letter ISO country code, for example GB, IE, US, AU or NZ. Used to disambiguate the postcode/location."
+        "description": "Use a two-letter code, such as GB, IE, US, AU or NZ, to help find the right location."
       },
       "predictedSolarReferenceKwh": {
-        "title": "100% forecast reference (kWh)",
+        "title": "Solar 2mrw tile scale (kWh)",
         "type": "number",
         "default": 0,
         "minimum": 0,
         "maximum": 1000,
-        "description": "Optional scale for the Home tile. 0 uses 4 kWh per installed kWp as the reference. The tile itself is deliberately clamped to 1\u201399%."
+        "description": "The forecast amount used as 100% for the tile\u2019s display scale. Set 0 to use 4 kWh for each installed kWp. The tile displays 1\u201399%; this is a forecast scale, not a battery target."
       },
       "predictedSolarRefreshMinutes": {
-        "title": "Forecast refresh interval (minutes)",
+        "title": "Update forecast every (minutes)",
         "type": "integer",
         "default": 360,
         "minimum": 60,
-        "description": "Open-Meteo refresh interval. Minimum 60 minutes; 360 minutes is normally sufficient for a next-day forecast."
+        "description": "How often to refresh tomorrow\u2019s forecast. The minimum is 60 minutes; 360 minutes is usually enough."
       },
       "predictedSolarArrays": {
         "title": "PV arrays",
@@ -1099,32 +1092,34 @@
           "type": "object",
           "properties": {
             "name": {
-              "title": "Array name",
+              "title": "Panel group name",
               "type": "string",
-              "default": "Array"
+              "default": "Array",
+              "description": "Give each group a recognisable name, such as Main roof or Garage."
             },
             "capacityKw": {
-              "title": "Capacity (kWp)",
+              "title": "Panel capacity (kWp)",
               "type": "number",
               "minimum": 0.1,
               "maximum": 1000,
-              "default": 2.8
+              "default": 2.8,
+              "description": "The installed capacity of this group of panels. Check the starting value when adding a new group; GivHome does not detect it automatically."
             },
             "tiltDegrees": {
-              "title": "Tilt (degrees)",
+              "title": "Panel tilt (degrees)",
               "type": "number",
               "minimum": 0,
               "maximum": 90,
               "default": 35,
-              "description": "0\u00b0 is horizontal; 90\u00b0 is vertical."
+              "description": "0\u00b0 is flat; 90\u00b0 is vertical. Check this against your installation."
             },
             "azimuthDegrees": {
-              "title": "Azimuth / orientation (degrees)",
+              "title": "Panel direction (degrees)",
               "type": "number",
               "minimum": 0,
               "maximum": 359,
               "default": 180,
-              "description": "Compass bearing: 0\u00b0 north, 90\u00b0 east, 180\u00b0 south, 270\u00b0 west. GivHome converts this internally for Open-Meteo."
+              "description": "The direction the panels face: 0\u00b0 north, 90\u00b0 east, 180\u00b0 south, 270\u00b0 west."
             },
             "shading": {
               "title": "Shading periods",
@@ -1146,88 +1141,89 @@
                     "default": "00:00"
                   }
                 }
-              }
+              },
+              "description": "Times when this panel group is shaded. GivHome counts no generation from this group during these periods. Leave empty if you do not need this adjustment."
             }
           }
         }
       },
       "iogChargeTargetSoc": {
-        "title": "IOG battery charge target %",
+        "title": "IOG battery charge target (%)",
         "type": "integer",
         "default": 100,
         "minimum": 4,
         "maximum": 100,
-        "description": "Independent target for IOG charge-mode battery protection. The Cheap Overnight Night Target slider never changes this value."
+        "description": "The battery target used by Charge mode during smart slots. Night Target does not change this percentage."
       },
       "enableSolarAwareCheapOvernight": {
-        "title": "Show Solar-Aware Cheap Overnight switch",
+        "title": "Enable Solar-Aware Cheap Overnight and its Home switch",
         "type": "boolean",
         "default": false,
-        "description": "First enable Cheap Overnight, then enable Predicted Solar and enter your location and solar-panel details. Tick this box to add the Apple Home switch. Switch it on to use the forecast-based overnight levels below, or off to use your normal Night Target. If no usable forecast is available, GivHome uses your normal Night Target."
+        "description": "Needs Cheap Overnight and Predicted Solar set up first. The Apple Home switch chooses forecast-based levels when On and your normal Night Target when Off. An unavailable forecast also uses Night Target."
       },
       "solarAwareLowForecastKwh": {
-        "title": "Low solar forecast: below this amount (kWh)",
+        "title": "Low solar: below (kWh)",
         "type": "number",
         "default": 10,
         "minimum": 0,
         "maximum": 1000,
-        "description": "Forecasts below this amount use the low-solar overnight battery level. Enter the solar energy expected over a whole day, not your battery size or panel power rating. Default: 10 kWh."
+        "description": "Forecasts below this daily energy amount use your low-solar battery level."
       },
       "solarAwareHighForecastKwh": {
-        "title": "High solar forecast: from this amount (kWh)",
+        "title": "High solar: from (kWh)",
         "type": "number",
         "default": 20,
         "minimum": 0,
         "maximum": 1000,
-        "description": "Forecasts at or above this amount use the high-solar overnight battery level. Forecasts between the two amounts use the middle level. Enter an amount higher than the first. Default: 20 kWh."
+        "description": "Forecasts at or above this daily energy amount use your high-solar battery level. Forecasts between the two amounts use the medium level. This amount must be higher than the low-solar boundary."
       },
       "solarAwareLowTargetSoc": {
-        "title": "Overnight battery level for a low solar forecast (%)",
+        "title": "Battery level for low solar (%)",
         "type": "integer",
         "default": 100,
         "minimum": 4,
         "maximum": 100,
-        "description": "Charge more overnight when little solar is expected. Default: 100%, aiming for a full battery by the end of the cheap period. Your normal Night Target still sets the maximum."
+        "description": "Charge to this level when little solar is expected."
       },
       "solarAwareMediumTargetSoc": {
-        "title": "Overnight battery level for a middle solar forecast (%)",
+        "title": "Battery level for medium solar (%)",
         "type": "integer",
         "default": 80,
         "minimum": 4,
         "maximum": 100,
-        "description": "Used when the forecast is at least the first amount but below the second. Default: 80%, leaving about 20% of the battery capacity free when overnight charging finishes. Your normal Night Target still sets the maximum."
+        "description": "Charge to this level when tomorrow\u2019s forecast falls between your two boundaries."
       },
       "solarAwareHighTargetSoc": {
-        "title": "Overnight battery level for a high solar forecast (%)",
+        "title": "Battery level for high solar (%)",
         "type": "integer",
         "default": 60,
         "minimum": 4,
         "maximum": 100,
-        "description": "Used when the forecast reaches or exceeds the second amount. Default: 60%, leaving about 40% of the battery capacity free when overnight charging finishes. Your normal Night Target still sets the maximum."
+        "description": "Charge to this level when plenty of solar is expected, leaving room for your panels to fill the battery."
       },
       "enableEmergencyStopTile": {
-        "title": "Show Emergency Stop tile",
+        "title": "Show Emergency Stop in Apple Home",
         "type": "boolean",
         "default": true,
-        "description": "Shown by default on supported systems with appliance control enabled. Immediately cancel an unexpected forced battery charge or export, clear the associated active schedule, restore normal Eco operation and verify that GivHome's expected automation remains correctly configured. Untick to hide the tile; unfinished recovery is retained."
+        "description": "Shown by default on supported systems. Switch the tile on to request a stop; it returns to Off afterwards. Hiding the tile does not discard unfinished recovery. Eligible future schedules remain in place. Apple Home shows a fault if the stop cannot be confirmed."
       },
       "enableSolarObservation": {
-        "title": "Learn locally for future Automatic Solar-Aware Cheap Overnight",
+        "title": "Enable Local Learning",
         "type": "boolean",
         "default": true,
-        "description": "Enabled by default. GivHome quietly records existing readings and forecasts on this Homebridge device to begin learning its energy patterns. This foundation does not calculate or change charge targets. No observation history or learned model is sent to the developer. Untick to pause; existing charging, IOG protection and Eve history continue."
+        "description": "Enabled by default. GivHome uses existing readings and forecasts to learn locally, without changing charging targets. Switching it off leaves your charging controls and Eve history running."
       },
       "solarObservationResetKey": {
-        "title": "Start local learning again (optional)",
+        "title": "Reset Local Learning",
         "type": "string",
         "maxLength": 64,
-        "description": "To erase only this feature\u2019s local observations and model, enter a new short value, such as reset-1, then restart with local learning enabled. That value is applied once; change it again for another reset. Leave blank to keep learning. This does not erase Eve history, configuration or Emergency Stop recovery records."
+        "description": "Entering a new value, such as reset-1, clears this feature\u2019s observations and model after a restart with learning enabled. Leave blank to keep learning. Each value is used once; change it again for another reset."
       },
       "showOctopusFluxExportTile": {
         "title": "Show Flux Out in Apple Home",
         "type": "boolean",
         "default": true,
-        "description": "Adds an On/Off tile when Octopus Flux Export is enabled. Off stops Flux export owned by GivHome and prevents further Flux starts until switched on again. Hiding the tile does not disable Flux Export. After a Homebridge restart, Flux Export follows the enabled configuration again."
+        "description": "Add an On/Off tile for the enabled function. Off stops GivHome-owned Flux export and prevents further starts; On allows eligible export again. Hiding the tile leaves Flux enabled. After a Homebridge restart, the enabled configuration applies again."
       }
     },
     "required": [
@@ -1272,66 +1268,61 @@
     {
       "type": "fieldset",
       "title": "GivHome Setup",
-      "description": "Required local details and planning limits. GivTCP is not required.",
+      "expandable": true,
+      "expanded": true,
+      "description": "Connect to your inverter and tell GivHome about your battery. GivTCP is not required.",
       "items": [
         "inverterHost",
         "inverterSerial",
         "batteryCapacityKwh",
-        "maxBatteryChargePowerKw",
-        "maxPvKw"
+        "maxBatteryChargePowerKw"
       ]
     },
     {
       "type": "fieldset",
       "title": "Cheap Overnight",
-      "description": "Your normal low-rate period. This works even if you are not on Intelligent Octopus Go and even when no smart dispatches are supplied.",
+      "expandable": true,
+      "expanded": false,
+      "description": "Charge during your usual low-rate period, with or without Intelligent Octopus Go.",
       "items": [
         "enableCheapOvernightCharging",
-        "cheapStart",
-        "cheapEnd",
+        {
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableCheapOvernightCharging === true;"
+          },
+          "items": [
+            "cheapStart",
+            "cheapEnd"
+          ]
+        },
         "targetSoc",
         "enableChargeTargetTile"
       ]
     },
     {
       "type": "fieldset",
-      "title": "Solar-Aware Cheap Overnight",
-      "description": "Buy more cheap electricity before a dull day, or leave more room in the battery when sunshine is expected. GivHome uses the forecast to choose one of the three overnight battery levels you set below. Your normal Night Target remains the maximum; IOG battery protection, if enabled, keeps its separate target.",
+      "title": "Battery Care",
+      "expandable": true,
+      "expanded": false,
+      "description": "Choose a charging rate suited to the energy needed and time available in Cheap Overnight.",
       "items": [
+        "enableBatteryCareCharging",
         {
-          "type": "fieldset",
-          "title": "1. Set up and add the Home switch",
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableBatteryCareCharging === true;"
+          },
           "items": [
-            "enableSolarAwareCheapOvernight"
-          ]
-        },
-        {
-          "type": "fieldset",
-          "title": "2. Divide the solar forecast into three bands",
-          "description": "These amounts are solar energy expected over the day, in kWh. They are not battery capacity or the panels\u2019 kW rating. Below the first amount is low; between the amounts is middle; at or above the second is high. The second amount must be higher than the first.",
-          "items": [
-            "solarAwareLowForecastKwh",
-            "solarAwareHighForecastKwh"
-          ]
-        },
-        {
-          "type": "fieldset",
-          "title": "3. Choose how full to charge overnight",
-          "description": "Set a battery percentage for each forecast band. Choose the same or a lower level as more solar is expected. For example, 60% leaves about 40% of the battery capacity free when overnight charging finishes. A normal Night Target of 70% caps an 80% setting at 70%. This beta uses your choices; it does not yet calculate these levels from battery size or household use.",
-          "items": [
-            "solarAwareLowTargetSoc",
-            "solarAwareMediumTargetSoc",
-            "solarAwareHighTargetSoc"
+            {
+              "key": "batteryCareMode",
+              "required": true
+            },
+            "batteryCareMinimumWindowMinutes"
           ]
         }
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Emergency Stop",
-      "description": "Unwanted or unexpected battery charging or discharging? Add the Apple Home tile below so you can ask GivHome to find and stop the running forced operation and return to Eco. Switch it on for a one-time recovery; it returns to Off afterwards. Check the Homebridge log for the result. If communication is interrupted, GivHome retries with readback. A verified stop releases new actions immediately and preserves later schedules. An unresolved stop keeps conflicting controls on hold and reports the problem in the Homebridge log.",
-      "items": [
-        "enableEmergencyStopTile"
       ]
     },
     {
@@ -1339,171 +1330,54 @@
       "title": "Intelligent Octopus Go",
       "expandable": true,
       "expanded": false,
-      "description": "Optional Intelligent Octopus Go planned-dispatch polling. When a smart EV charging slot is scheduled, GivHome can protect the home battery from discharging into the car, then restore the previous state afterwards.",
+      "description": "Protect your home battery during the extra EV charging slots scheduled by Octopus.",
       "items": [
         "enableOctopusSmartWindows",
-        "octopusApiKey",
-        "octopusAccountNumber",
-        "enableEvSmartWindowBatteryProtection",
-        "iogHomeBatteryProtectionMode",
-        "iogChargeTargetSoc",
-        "graceMinutes"
+        {
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableOctopusSmartWindows === true;"
+          },
+          "items": [
+            {
+              "key": "octopusApiKey",
+              "type": "password"
+            },
+            "octopusAccountNumber",
+            "enableEvSmartWindowBatteryProtection",
+            {
+              "type": "div",
+              "notitle": true,
+              "condition": {
+                "functionBody": "return model.enableEvSmartWindowBatteryProtection === true;"
+              },
+              "items": [
+                {
+                  "key": "iogHomeBatteryProtectionMode",
+                  "required": true
+                },
+                {
+                  "key": "iogChargeTargetSoc",
+                  "condition": {
+                    "functionBody": "return model.iogHomeBatteryProtectionMode === 'charge' || !model.iogHomeBatteryProtectionMode;"
+                  }
+                },
+                "graceMinutes"
+              ]
+            }
+          ]
+        }
       ]
     },
     {
       "type": "fieldset",
-      "title": "Battery Care Charging",
+      "title": "Emergency Stop",
       "expandable": true,
       "expanded": false,
-      "description": "Optional charge-rate planning for the main Cheap Overnight window only. It does not apply to extra smart dispatches, grace periods or manual tiles.",
+      "description": "Stop an unexpected battery charge or export from Apple Home. GivHome finds the current forced action, returns the battery to normal Eco operation and checks the result.",
       "items": [
-        "enableBatteryCareCharging",
-        "batteryCareMode",
-        "batteryCareMinimumWindowMinutes"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Export Controls",
-      "expandable": true,
-      "expanded": false,
-      "description": "Shared export-power controls. Timed Export and Evening Excess Export use the same kW-to-HR112 calculation pattern, but keep separate power values because manual export and planner export have different purposes.",
-      "items": [
-        "maxBatteryExportPowerKw",
-        "maxGridExportPowerKw",
-        "timedExportPowerKw"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Evening Excess Export",
-      "expandable": true,
-      "expanded": false,
-      "description": "Optional evening sell-off automation carried forward from homebridge-giv-iog-local v3.7.5. Configure the planner here, then use the Evening Excess Export switch in Apple Home to arm or disarm it day to day.",
-      "items": [
-        "enableEveningExcessExport",
-        "eveningExportStartTime",
-        "eveningExportReserveSoc",
-        "eveningExportPowerKw",
-        "eveningExportSlotMinutes",
-        "eveningExportMarginSoc",
-        "serveOvernightLoadFromBattery"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Octopus Flux Export",
-      "expandable": true,
-      "expanded": false,
-      "description": "Sell spare battery energy during the Octopus Flux peak period, keeping your reserve and margin. Enable the function below and choose whether to show its On/Off tile in Apple Home. GivHome plans only the export needed; it may finish before the peak period ends.",
-      "items": [
-        "enableOctopusFluxExport",
-        "showOctopusFluxExportTile",
-        "octopusFluxReserveSoc",
-        "octopusFluxExportPowerKw",
-        "octopusFluxRunDaysPreset"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Octopus Flux Export \u2014 advanced",
-      "expandable": true,
-      "expanded": false,
-      "description": "Observed-power Flux settings. Change the eligible peak period only if you deliberately want a shorter or different selling period. A full 16:00-19:00 band at 6 kW would require about 18 kWh before reserves. CH/AIO planning uses observed/effective discharge rather than assuming HR112 limits the slot.",
-      "items": [
-        "octopusFluxExportStartTime",
-        "octopusFluxExportEndTime",
-        "octopusFluxEveningReserveKwh",
-        "octopusFluxSafetyMarginSoc",
-        "octopusFluxSlotMinutes",
-        "octopusFluxMinimumExportKwh",
-        "octopusFluxRunMonday",
-        "octopusFluxRunTuesday",
-        "octopusFluxRunWednesday",
-        "octopusFluxRunThursday",
-        "octopusFluxRunFriday",
-        "octopusFluxRunSaturday",
-        "octopusFluxRunSunday"
-      ]
-    },
-    {
-      "type": "fieldset",
-      "title": "Octopus Agile Export",
-      "expandable": true,
-      "expanded": false,
-      "items": [
-        "enableOctopusAgileOutgoingAutoExport",
-        "octopusAgileOutgoingDryRun",
-        "octopusAgileOutgoingExecutionStage",
-        "octopusAgileOutgoingReserveSoc",
-        "octopusAgileOutgoingExportPowerKw",
-        "octopusAgileOutgoingDailyExportMode",
-        "octopusAgileOutgoingDailyExportCapKwh",
-        "octopusAgileOutgoingMinimumExportPricePence",
-        "octopusAgileOutgoingStrategy",
-        "octopusAgileOutgoingSlotSearchMode",
-        "octopusAgileOutgoingRunDaysPreset"
-      ],
-      "description": "Agile Export searches any high-value Agile Outgoing half-hour by default. Keep Planner only and dry run on while observing. It is intentionally separate from Flux peak export and is not limited by the hidden custom time fields unless Slot search is set to Custom time window."
-    },
-    {
-      "type": "fieldset",
-      "title": "Octopus Agile Export \u2014 advanced",
-      "expandable": true,
-      "expanded": false,
-      "items": [
-        "octopusAgileOutgoingLearningMode",
-        "octopusAgileOutgoingEveningReserveKwh",
-        "octopusAgileOutgoingSafetyMarginSoc",
-        "octopusAgileOutgoingMinimumExportKwh",
-        "octopusAgileOutgoingMinimumGrossMarginPence",
-        "octopusAgileOutgoingReferenceImportPence",
-        "octopusAgileOutgoingProductCode",
-        "octopusAgileOutgoingRegionCode",
-        "octopusAgileOutgoingTariffCode",
-        "octopusAgileOutgoingLiveAcknowledgement",
-        "octopusAgileOutgoingRunMonday",
-        "octopusAgileOutgoingRunTuesday",
-        "octopusAgileOutgoingRunWednesday",
-        "octopusAgileOutgoingRunThursday",
-        "octopusAgileOutgoingRunFriday",
-        "octopusAgileOutgoingRunSaturday",
-        "octopusAgileOutgoingRunSunday",
-        "octopusAgileOutgoingEnableMpanAudit",
-        "octopusExportMpan",
-        "octopusExportMeterSerial",
-        "octopusAgileOutgoingMpanAuditDelayHours",
-        "octopusAgileOutgoingMpanMismatchToleranceKwh",
-        "octopusAgileOutgoingSuspendOnMpanMismatch"
-      ],
-      "description": "Advanced value, learning, tariff and audit settings. Time limiting is separated below because normal Agile mode should search the whole day."
-    },
-    {
-      "type": "fieldset",
-      "title": "Octopus Agile Export \u2014 custom time limiter",
-      "expandable": true,
-      "expanded": false,
-      "description": "Hidden unless Slot search is Custom time window. Normal Agile mode ignores these values completely and searches the whole day for any worthwhile published Agile half-hour.",
-      "items": [
-        "octopusAgileOutgoingAllowedStartTime",
-        "octopusAgileOutgoingAllowedEndTime"
-      ],
-      "condition": {
-        "functionBody": "return model.octopusAgileOutgoingSlotSearchMode === 'customWindow';"
-      }
-    },
-    {
-      "type": "fieldset",
-      "title": "HomeKit Controls",
-      "expandable": true,
-      "expanded": false,
-      "description": "Optional controls shown in Apple Home. GivHome handles local readback, safe command timing and inverter-model safeguards automatically.",
-      "items": [
-        "enableTimedChargeTiles",
-        "enableTimedExportTiles",
-        "enablePauseTiles",
-        "enableEveEnergyHistory",
-        "manualChargeExpiredSlotFailsafeGate"
+        "enableEmergencyStopTile"
       ]
     },
     {
@@ -1511,25 +1385,25 @@
       "title": "Predicted Solar",
       "expandable": true,
       "expanded": false,
-      "description": "Optional read-only next-day solar forecast using Open-Meteo Global Tilted Irradiance. It is isolated from inverter control and cannot write Modbus registers.",
+      "description": "See how much energy your panels could generate tomorrow. Set up your location and panels below.",
       "items": [
         "enablePredictedSolar"
       ]
     },
     {
       "type": "fieldset",
-      "title": "Predicted Solar \u2014 site",
+      "title": "Predicted Solar \u2014 panels and location",
       "expandable": true,
       "expanded": false,
-      "description": "Shown after Predicted Solar is enabled. Configure the forecast location and one or more PV arrays.",
+      "description": "Add one group for panels facing the same direction. Check the capacity, tilt and direction for each group; the starting values are examples.",
       "items": [
         "predictedSolarLocation",
         "predictedSolarCountryCode",
         {
           "key": "predictedSolarArrays",
           "type": "tabarray",
-          "add": "Add PV array",
-          "title": "{{ value.name || \"PV array\" }}",
+          "add": "Add panel group",
+          "title": "{{ value.name || \"Panel group\" }}",
           "notitle": false,
           "items": [
             {
@@ -1583,7 +1457,7 @@
       "title": "Predicted Solar \u2014 advanced",
       "expandable": true,
       "expanded": false,
-      "description": "Forecast tuning and request cadence. These settings affect only Predicted Solar.",
+      "description": "Adjust the forecast tile\u2019s display scale and how often tomorrow\u2019s forecast is refreshed.",
       "items": [
         "predictedSolarReferenceKwh",
         "predictedSolarRefreshMinutes"
@@ -1594,11 +1468,365 @@
     },
     {
       "type": "fieldset",
-      "title": "Automatic Solar-Aware: local learning foundation",
-      "description": "Help GivHome learn before it plans. Local learning is enabled by default and uses existing readings and forecasts to build a picture of your installation for future automatic planning. It does not change charging. Data stays on this Homebridge device, storage is capped, and you can switch learning off below. See the local-learning guide for privacy, retention and limits.",
+      "title": "Local Learning",
+      "expandable": true,
+      "expanded": false,
+      "description": "Help GivHome learn before it plans. Observations stay on this Homebridge device, with bounded storage and no learning history sent to the developer. This prepares for future Automatic Solar-Aware Cheap Overnight; it does not change charging.",
       "items": [
         "enableSolarObservation",
-        "solarObservationResetKey"
+        {
+          "type": "fieldset",
+          "title": "Reset Local Learning",
+          "expandable": true,
+          "expanded": false,
+          "description": "Clear only Local Learning observations and its model. Eve history, configuration and Emergency Stop recovery are kept.",
+          "items": [
+            "solarObservationResetKey"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Solar-Aware Cheap Overnight",
+      "expandable": true,
+      "expanded": false,
+      "description": "Leave more room for tomorrow\u2019s sunshine, or charge more before a dull day. Your Night Target remains the maximum and the fallback if a usable forecast is unavailable. IOG protection keeps its separate target.",
+      "items": [
+        "enableSolarAwareCheapOvernight",
+        {
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableSolarAwareCheapOvernight === true;"
+          },
+          "items": [
+            {
+              "type": "fieldset",
+              "title": "1. Choose the forecast bands",
+              "expandable": true,
+              "expanded": true,
+              "description": "Use the solar energy expected over a whole day, in kWh. These are not panel power ratings or battery capacity.",
+              "items": [
+                "solarAwareLowForecastKwh",
+                "solarAwareHighForecastKwh"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "2. Choose the overnight battery levels",
+              "expandable": true,
+              "expanded": true,
+              "description": "Choose the same or a lower target as the forecast improves. For example, 60% leaves about 40% of the battery free. Night Target caps every choice. GivHome uses these levels; Local Learning does not choose them for you.",
+              "items": [
+                "solarAwareLowTargetSoc",
+                "solarAwareMediumTargetSoc",
+                "solarAwareHighTargetSoc"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Apple Home controls",
+      "expandable": true,
+      "expanded": false,
+      "description": "Choose the extra controls and history you want in Apple Home.",
+      "items": [
+        "enableTimedChargeTiles",
+        "enableTimedExportTiles",
+        {
+          "key": "timedExportPowerKw",
+          "condition": {
+            "functionBody": "return model.enableTimedExportTiles === true;"
+          }
+        },
+        "enablePauseTiles",
+        "enableEveEnergyHistory",
+        {
+          "type": "fieldset",
+          "title": "Solar tile display",
+          "expandable": true,
+          "expanded": false,
+          "description": "Choose how live solar power is shown in Apple Home, with or without Predicted Solar.",
+          "items": [
+            "maxPvKw"
+          ]
+        },
+        {
+          "type": "fieldset",
+          "title": "Advanced charging check",
+          "expandable": true,
+          "expanded": false,
+          "description": "An optional check for a manual charging period that has already ended.",
+          "items": [
+            "manualChargeExpiredSlotFailsafeGate"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Export limits",
+      "expandable": true,
+      "expanded": false,
+      "description": "Set the battery capability and permitted grid export for your installation. Individual export features use these shared limits.",
+      "items": [
+        "maxBatteryExportPowerKw",
+        "maxGridExportPowerKw"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Evening Excess Export",
+      "expandable": true,
+      "expanded": false,
+      "description": "Sell spare evening battery energy before Cheap Overnight, keeping energy back for the home.",
+      "items": [
+        "enableEveningExcessExport",
+        {
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableEveningExcessExport === true;"
+          },
+          "items": [
+            "eveningExportStartTime",
+            "eveningExportReserveSoc",
+            "eveningExportPowerKw",
+            {
+              "type": "fieldset",
+              "title": "Evening export \u2014 advanced",
+              "expandable": true,
+              "expanded": false,
+              "description": "Adjust the reserve margin and how often the plan is checked.",
+              "items": [
+                "eveningExportSlotMinutes",
+                "eveningExportMarginSoc",
+                "serveOvernightLoadFromBattery"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Octopus Flux Export",
+      "expandable": true,
+      "expanded": false,
+      "description": "Sell spare battery energy during the Flux peak period, keeping your reserve and margin. GivHome may finish before the peak period ends.",
+      "items": [
+        "enableOctopusFluxExport",
+        {
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableOctopusFluxExport === true;"
+          },
+          "items": [
+            "showOctopusFluxExportTile",
+            "octopusFluxReserveSoc",
+            "octopusFluxExportPowerKw",
+            {
+              "key": "octopusFluxRunDaysPreset",
+              "required": true
+            },
+            {
+              "type": "fieldset",
+              "title": "Choose export days",
+              "expandable": true,
+              "expanded": true,
+              "description": "Select the days when GivHome may start export.",
+              "items": [
+                "octopusFluxRunMonday",
+                "octopusFluxRunTuesday",
+                "octopusFluxRunWednesday",
+                "octopusFluxRunThursday",
+                "octopusFluxRunFriday",
+                "octopusFluxRunSaturday",
+                "octopusFluxRunSunday"
+              ],
+              "condition": {
+                "functionBody": "return model.octopusFluxRunDaysPreset === 'custom';"
+              }
+            },
+            {
+              "type": "fieldset",
+              "title": "Flux Export \u2014 advanced",
+              "expandable": true,
+              "expanded": false,
+              "description": "Adjust the eligible peak period and how much energy to keep.",
+              "items": [
+                "octopusFluxExportStartTime",
+                "octopusFluxExportEndTime",
+                "octopusFluxEveningReserveKwh",
+                "octopusFluxSafetyMarginSoc",
+                "octopusFluxSlotMinutes",
+                "octopusFluxMinimumExportKwh"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Octopus Agile Export",
+      "expandable": true,
+      "expanded": false,
+      "description": "Plan sales of spare battery energy in worthwhile Agile Outgoing half-hours. Set up your tariff, review the plans, then deliberately enable live export when you are ready.",
+      "items": [
+        "enableOctopusAgileOutgoingAutoExport",
+        {
+          "type": "div",
+          "notitle": true,
+          "condition": {
+            "functionBody": "return model.enableOctopusAgileOutgoingAutoExport === true;"
+          },
+          "items": [
+            {
+              "type": "fieldset",
+              "title": "1. Your export tariff",
+              "expandable": true,
+              "expanded": true,
+              "description": "Use your Octopus export product and region, or enter the full tariff code.",
+              "items": [
+                "octopusAgileOutgoingProductCode",
+                "octopusAgileOutgoingRegionCode",
+                "octopusAgileOutgoingTariffCode"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "2. Plan your exports",
+              "expandable": true,
+              "expanded": true,
+              "description": "Choose when selling is worthwhile and how much energy to keep at home.",
+              "items": [
+                "octopusAgileOutgoingReserveSoc",
+                "octopusAgileOutgoingExportPowerKw",
+                "octopusAgileOutgoingMinimumExportPricePence",
+                {
+                  "key": "octopusAgileOutgoingDailyExportMode",
+                  "required": true
+                },
+                "octopusAgileOutgoingDailyExportCapKwh",
+                {
+                  "key": "octopusAgileOutgoingStrategy",
+                  "required": true
+                },
+                {
+                  "key": "octopusAgileOutgoingSlotSearchMode",
+                  "required": true
+                },
+                {
+                  "type": "fieldset",
+                  "title": "Your export time window",
+                  "expandable": true,
+                  "expanded": true,
+                  "description": "Only used when Custom time window is selected.",
+                  "items": [
+                    "octopusAgileOutgoingAllowedStartTime",
+                    "octopusAgileOutgoingAllowedEndTime"
+                  ],
+                  "condition": {
+                    "functionBody": "return model.octopusAgileOutgoingSlotSearchMode === 'customWindow';"
+                  }
+                },
+                {
+                  "key": "octopusAgileOutgoingRunDaysPreset",
+                  "required": true
+                },
+                {
+                  "type": "fieldset",
+                  "title": "Choose export days",
+                  "expandable": true,
+                  "expanded": true,
+                  "description": "Select the days when GivHome may start export.",
+                  "items": [
+                    "octopusAgileOutgoingRunMonday",
+                    "octopusAgileOutgoingRunTuesday",
+                    "octopusAgileOutgoingRunWednesday",
+                    "octopusAgileOutgoingRunThursday",
+                    "octopusAgileOutgoingRunFriday",
+                    "octopusAgileOutgoingRunSaturday",
+                    "octopusAgileOutgoingRunSunday"
+                  ],
+                  "condition": {
+                    "functionBody": "return model.octopusAgileOutgoingRunDaysPreset === 'custom';"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "3. Review plans and allow export",
+              "expandable": true,
+              "expanded": false,
+              "description": "Start with Plan without exporting on. Live export needs all three choices here to allow it, plus the Agile Out tile switched on in Apple Home.",
+              "items": [
+                "octopusAgileOutgoingDryRun",
+                {
+                  "key": "octopusAgileOutgoingExecutionStage",
+                  "required": true
+                },
+                "octopusAgileOutgoingLiveAcknowledgement"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Agile Export \u2014 advanced",
+              "expandable": true,
+              "expanded": false,
+              "description": "Fine-tune the energy kept for the home, the gain required and how Agile uses its own learning.",
+              "items": [
+                {
+                  "key": "octopusAgileOutgoingLearningMode",
+                  "required": true
+                },
+                "octopusAgileOutgoingEveningReserveKwh",
+                "octopusAgileOutgoingSafetyMarginSoc",
+                "octopusAgileOutgoingMinimumExportKwh",
+                "octopusAgileOutgoingMinimumGrossMarginPence",
+                "octopusAgileOutgoingReferenceImportPence"
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "Compare export meter readings",
+              "expandable": true,
+              "expanded": false,
+              "description": "An optional check after Octopus meter readings become available.",
+              "items": [
+                "octopusAgileOutgoingEnableMpanAudit",
+                {
+                  "type": "div",
+                  "notitle": true,
+                  "condition": {
+                    "functionBody": "return model.octopusAgileOutgoingEnableMpanAudit === true;"
+                  },
+                  "items": [
+                    {
+                      "key": "octopusApiKey",
+                      "type": "password",
+                      "condition": {
+                        "functionBody": "return model.enableOctopusSmartWindows !== true;"
+                      }
+                    },
+                    "octopusExportMpan",
+                    "octopusExportMeterSerial",
+                    "octopusAgileOutgoingMpanAuditDelayHours",
+                    "octopusAgileOutgoingMpanMismatchToleranceKwh",
+                    "octopusAgileOutgoingSuspendOnMpanMismatch"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
       ]
     }
   ],

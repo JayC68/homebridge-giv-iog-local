@@ -11,7 +11,13 @@ Start with the guide for what you want to do. Configure the plugin through the H
 | Understand control safeguards and limitations | [Safety](SAFETY.md) |
 | Fix missing data or controls that will not start | [Troubleshooting](TROUBLESHOOTING.md) |
 
-Local learning is optional and does not enable automatic solar planning. Read the safety guidance before trying charge or export controls.
+## Finding your settings
+
+Plugin Config follows the setup journey: connect your inverter, choose overnight charging and IOG protection, then set up solar and export features. Battery Care sits beside Cheap Overnight. Local Learning follows Predicted Solar — advanced, and Solar-Aware Cheap Overnight follows the forecast setup.
+
+Open the feature you want and enable it to see its settings. Custom export days and time windows appear beside their selectors. Advanced options stay with the feature they affect. Hiding these settings preserves their saved values.
+
+Local Learning is enabled by default and can be switched off. It does not enable automatic solar planning. Read the safety guidance before trying charge or export controls.
 
 For changes between versions, see the [release notes](../RELEASE_NOTES.md), [full changelog](../CHANGELOG.md) or [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases).
 
