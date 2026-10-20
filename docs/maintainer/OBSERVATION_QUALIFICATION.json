@@ -1,19 +1,21 @@
 {
-  "version": "4.0.3-beta.6",
+  "version": "4.0.3-beta.7",
   "status": "pending",
-  "runtimeSha256": "d830f8d52559b4a2a8021f805443790e62b955241760b3d587a06ce56c9b43b5",
+  "runtimeSha256": "75dfd5f2bb158966130448977e97de70e4f038095204cddfc6b49028dc3fdd86",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_BETA6.md",
-  "reason": "Physical Pi qualification and the accelerated RSS investigation remain outstanding. Opt-in beta publication is permitted for this version and default-off foundation; hardware performance is not qualified.",
+  "evidence": "docs/maintainer/VALIDATION_BETA7.md",
+  "reason": "Physical Pi resource measurements remain unqualified. The project owner accepted existing Pi field evidence and explicitly chose default-on Emergency Stop and local learning for beta.7 on 20 October 2026. This record does not claim measured hardware budgets or automatic planning.",
   "betaPublication": {
-    "version": "4.0.3-beta.6",
+    "version": "4.0.3-beta.7",
     "authorizedBy": "project owner",
-    "authorizedOn": "2026-10-19",
+    "authorizedOn": "2026-10-20",
     "channel": "beta",
     "optIn": true,
-    "piSoakRequiredBeforeBetaPublication": false
+    "piSoakRequiredBeforeBetaPublication": false,
+    "observationDefaultEnabled": true,
+    "emergencyStopDefaultEnabled": true
   }
 }

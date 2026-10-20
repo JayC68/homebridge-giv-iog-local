@@ -1,8 +1,8 @@
-name: Beta.6 candidate validation
+name: Beta.7 candidate validation
 
 on:
   push:
-    branches: ['release/v4.0.3-beta-6']
+    branches: ['release/v4.0.3-beta-7']
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
           npm run test:hap
           npm audit --audit-level=low
           npm pack
-      - name: Check opt-in beta publication approval
+      - name: Check default-on beta publication approval
         run: node tools/verify-observation-qualification.js --beta-publication
       - name: Accelerated observation smoke
         run: node --expose-gc tools/solar-observation-stress.js --days=2

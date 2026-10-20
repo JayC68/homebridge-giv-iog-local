@@ -310,3 +310,14 @@ for (const family of ['charge', 'export']) for (const fault of ['before', 'after
   assert.deepEqual(f.registers, original); assert.equal(f.p.currentControlOwner(family),null);
   assert.equal(f.writes[0][0], family==='charge'?96:59); assert.equal(f.writes[0][1],0);
 });
+
+test('Emergency Stop accepts an omitted exposure setting but explicit false refuses without writes', async t => {
+  const enabled = fixture(t); delete enabled.p.config.enableEmergencyStopTile;
+  await enabled.p.acceptEmergencyStopRequest();
+  assert.equal(enabled.p.emergencyState.status, 'released');
+  assert.equal(enabled.writes.length, 0, 'default exposure does not change an idle inverter');
+  const disabled = fixture(t, { now: null, config: { enableEmergencyStopTile: false } });
+  disabled.p.config.enableEmergencyStopTile = false;
+  assert.throws(() => disabled.p.acceptEmergencyStopRequest(), /not enabled/);
+  assert.equal(disabled.writes.length, 0);
+});

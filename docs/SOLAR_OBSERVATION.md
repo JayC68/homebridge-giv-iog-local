@@ -6,7 +6,7 @@ This foundation begins collecting that evidence. It does not calculate an overni
 
 ## Turn local observation on or pause it
 
-In Plugin Config, open **Automatic Solar-Aware: local learning foundation** and tick **Learn locally for future Automatic Solar-Aware Cheap Overnight**, then restart Homebridge in the usual way. The option is off by default. Existing read-only polling supplies the observations; enable and configure Predicted Solar if you also want forecast records. Learning does not need the appliance-control acknowledgement because it cannot send commands.
+In Plugin Config, open **Automatic Solar-Aware: local learning foundation** and **Learn locally for future Automatic Solar-Aware Cheap Overnight** is enabled by default. Leave it enabled to learn, or untick it and restart Homebridge in the usual way to pause. An explicitly saved disabled setting remains disabled on upgrade. Existing read-only polling supplies the observations; enable and configure Predicted Solar if you also want forecast records. Learning does not need the appliance-control acknowledgement because it cannot send commands.
 
 Untick the option and restart to pause recording. Previously collected local data is retained; a later compatible restart can resume provisional summaries. There is no new Home tile in this foundation and no automatic charging switch to enable.
 
@@ -41,7 +41,7 @@ Profiles use bounded, gradually decaying summaries. Older raw observations expir
 
 Storage faults or pressure drop/degrade observation work and mark gaps. They cannot acquire the command transport gate or send inverter writes. Repeated storage warnings are rate limited. A corrupt, oversized, incompatible or unexpectedly modified directory may suspend observation while ordinary GivHome operation continues.
 
-The proposed **8 MiB retained-memory**, **16 MiB added RSS**, **below 1% of one core** and latency budgets still require matched tests on a declared minimum Pi and a busier Pi. Accelerated desktop tests do not establish those results. This optional foundation is available through the opt-in beta channel while that evaluation continues. If you notice extra load, pause local observation and restart Homebridge. See [release preparation](maintainer/RELEASING.md) for release details and outstanding qualification.
+The proposed **8 MiB retained-memory**, **16 MiB added RSS**, **below 1% of one core** and latency budgets still require matched tests on a declared minimum Pi and a busier Pi. Accelerated desktop tests do not establish those results. This foundation is enabled by default in the beta channel while that evaluation continues. If you notice extra load, pause local observation and restart Homebridge. See [release preparation](maintainer/RELEASING.md) for release details and outstanding qualification.
 
 ## Check or clear local learning
 

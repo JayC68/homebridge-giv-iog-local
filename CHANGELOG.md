@@ -2,7 +2,13 @@
 
 This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.6](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.7](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.7 — Emergency Stop ready, local learning enabled (20 October 2026)
+
+- Made Emergency Stop available by default on supported systems with appliance control enabled, with an option to hide it in Plugin Config.
+- Enabled local learning by default, with an option to disable it. Preserved explicitly saved disabled settings on upgrade.
+- Retained existing control gates, accessory identities, recovery records and bounded local storage. Learning does not change charging targets.
 
 ## 4.0.3-beta.6 — Correct the developer-support link (19 October 2026)
 

@@ -329,7 +329,7 @@
         "title": "Enable Evening Excess Export",
         "type": "boolean",
         "default": false,
-        "description": "Optional. Enables GivHome’s evening sell-off planner. Once configured here, use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day. Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically before the cheap overnight charge window. Legacy v3.7.5 enableExcessEnergyExport is also honoured."
+        "description": "Optional. Enables GivHome\u2019s evening sell-off planner. Once configured here, use the GivHome Evening Excess Export switch in Apple Home to arm or disarm it day to day. Only enable this if you are paid for export and want GivHome to manage spare evening battery export automatically before the cheap overnight charge window. Legacy v3.7.5 enableExcessEnergyExport is also honoured."
       },
       "eveningExportStartTime": {
         "title": "Evening export earliest start",
@@ -929,7 +929,7 @@
           "adaptive"
         ],
         "enumNames": [
-          "Planner only — no inverter writes",
+          "Planner only \u2014 no inverter writes",
           "Single best slot only",
           "Multi-slot trader",
           "Adaptive trader"
@@ -977,7 +977,7 @@
           "custom"
         ],
         "enumNames": [
-          "Auto — learn how much is spare",
+          "Auto \u2014 learn how much is spare",
           "Custom cap"
         ]
       },
@@ -1081,7 +1081,7 @@
         "default": 0,
         "minimum": 0,
         "maximum": 1000,
-        "description": "Optional scale for the Home tile. 0 uses 4 kWh per installed kWp as the reference. The tile itself is deliberately clamped to 1–99%."
+        "description": "Optional scale for the Home tile. 0 uses 4 kWh per installed kWp as the reference. The tile itself is deliberately clamped to 1\u201399%."
       },
       "predictedSolarRefreshMinutes": {
         "title": "Forecast refresh interval (minutes)",
@@ -1116,7 +1116,7 @@
               "minimum": 0,
               "maximum": 90,
               "default": 35,
-              "description": "0° is horizontal; 90° is vertical."
+              "description": "0\u00b0 is horizontal; 90\u00b0 is vertical."
             },
             "azimuthDegrees": {
               "title": "Azimuth / orientation (degrees)",
@@ -1124,7 +1124,7 @@
               "minimum": 0,
               "maximum": 359,
               "default": 180,
-              "description": "Compass bearing: 0° north, 90° east, 180° south, 270° west. GivHome converts this internally for Open-Meteo."
+              "description": "Compass bearing: 0\u00b0 north, 90\u00b0 east, 180\u00b0 south, 270\u00b0 west. GivHome converts this internally for Open-Meteo."
             },
             "shading": {
               "title": "Shading periods",
@@ -1208,20 +1208,20 @@
       "enableEmergencyStopTile": {
         "title": "Show Emergency Stop tile",
         "type": "boolean",
-        "default": false,
-        "description": "Immediately cancel an unexpected forced battery charge or export, clear the associated active schedule, restore normal Eco operation and verify that GivHome's expected automation remains correctly configured."
+        "default": true,
+        "description": "Shown by default on supported systems with appliance control enabled. Immediately cancel an unexpected forced battery charge or export, clear the associated active schedule, restore normal Eco operation and verify that GivHome's expected automation remains correctly configured. Untick to hide the tile; unfinished recovery is retained."
       },
       "enableSolarObservation": {
         "title": "Learn locally for future Automatic Solar-Aware Cheap Overnight",
         "type": "boolean",
-        "default": false,
-        "description": "Optional and off by default. GivHome quietly records existing readings and forecasts on this Homebridge device to begin learning its energy patterns. This foundation does not calculate or change charge targets. No observation history or learned model is sent to the developer. Untick to pause; existing charging, IOG protection and Eve history continue."
+        "default": true,
+        "description": "Enabled by default. GivHome quietly records existing readings and forecasts on this Homebridge device to begin learning its energy patterns. This foundation does not calculate or change charge targets. No observation history or learned model is sent to the developer. Untick to pause; existing charging, IOG protection and Eve history continue."
       },
       "solarObservationResetKey": {
         "title": "Start local learning again (optional)",
         "type": "string",
         "maxLength": 64,
-        "description": "To erase only this feature’s local observations and model, enter a new short value, such as reset-1, then restart with local learning enabled. That value is applied once; change it again for another reset. Leave blank to keep learning. This does not erase Eve history, configuration or Emergency Stop recovery records."
+        "description": "To erase only this feature\u2019s local observations and model, enter a new short value, such as reset-1, then restart with local learning enabled. That value is applied once; change it again for another reset. Leave blank to keep learning. This does not erase Eve history, configuration or Emergency Stop recovery records."
       }
     },
     "required": [
@@ -1302,7 +1302,7 @@
         {
           "type": "fieldset",
           "title": "2. Divide the solar forecast into three bands",
-          "description": "These amounts are solar energy expected over the day, in kWh. They are not battery capacity or the panels’ kW rating. Below the first amount is low; between the amounts is middle; at or above the second is high. The second amount must be higher than the first.",
+          "description": "These amounts are solar energy expected over the day, in kWh. They are not battery capacity or the panels\u2019 kW rating. Below the first amount is low; between the amounts is middle; at or above the second is high. The second amount must be higher than the first.",
           "items": [
             "solarAwareLowForecastKwh",
             "solarAwareHighForecastKwh"
@@ -1408,7 +1408,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Octopus Flux Export — advanced",
+      "title": "Octopus Flux Export \u2014 advanced",
       "expandable": true,
       "expanded": false,
       "description": "Observed-power Flux settings. Change the eligible peak period only if you deliberately want a shorter or different selling period. A full 16:00-19:00 band at 6 kW would require about 18 kWh before reserves. CH/AIO planning uses observed/effective discharge rather than assuming HR112 limits the slot.",
@@ -1450,7 +1450,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Octopus Agile Export — advanced",
+      "title": "Octopus Agile Export \u2014 advanced",
       "expandable": true,
       "expanded": false,
       "items": [
@@ -1482,7 +1482,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Octopus Agile Export — custom time limiter",
+      "title": "Octopus Agile Export \u2014 custom time limiter",
       "expandable": true,
       "expanded": false,
       "description": "Hidden unless Slot search is Custom time window. Normal Agile mode ignores these values completely and searches the whole day for any worthwhile published Agile half-hour.",
@@ -1520,7 +1520,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Predicted Solar — site",
+      "title": "Predicted Solar \u2014 site",
       "expandable": true,
       "expanded": false,
       "description": "Shown after Predicted Solar is enabled. Configure the forecast location and one or more PV arrays.",
@@ -1582,7 +1582,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Predicted Solar — advanced",
+      "title": "Predicted Solar \u2014 advanced",
       "expandable": true,
       "expanded": false,
       "description": "Forecast tuning and request cadence. These settings affect only Predicted Solar.",

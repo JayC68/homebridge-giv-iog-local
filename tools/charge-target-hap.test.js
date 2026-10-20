@@ -130,9 +130,9 @@ test('real constructor reload isolates default and explicit IOG targets from sav
   assert.equal(defaultIog.applianceControl.iogChargeTargetSoc, 100);
 });
 
-test('new native switches are opt-in and reuse UUIDs on reload', async t => {
+test('native switches respect explicit opt-out and reuse UUIDs on reload', async t => {
   const directory = storage(t);
-  const ordinary = makePlatform(t, directory);
+  const ordinary = makePlatform(t, directory, { enableEmergencyStopTile: false });
   ordinary.platform.ensureBetaControlAccessories();
   assert.equal(ordinary.registered.length, 0);
   const first = makePlatform(t, directory, { enableSolarAwareCheapOvernight: true, enableEmergencyStopTile: true });
@@ -268,4 +268,19 @@ test('native idle Emergency Stop returns Off without disabling an armed future s
   assert.equal(await on.handleGetRequest(), false);
   assert.equal(p.emergencyHeld(), false); assert.equal(state[96], 1);
   assert.equal(p.emergencyState.outcome, 'nothing-running');
+});
+
+test('Emergency Stop is exposed by default without starting an action and explicit false removes it', t => {
+  const { platform: p, registered } = makePlatform(t, storage(t));
+  p.readHoldingRegisters = () => assert.fail('exposure must not read the inverter');
+  p.writeDirectRegister = () => assert.fail('exposure must not write the inverter');
+  p.ensureBetaControlAccessories();
+  assert.equal(registered.length, 1);
+  assert.equal(registered[0].displayName, 'Emergency Stop');
+  assert.equal(p.emergencyInFlight, undefined);
+  assert.equal(p.emergencyState, undefined);
+  const uuid = registered[0].UUID;
+  p.ensureBetaControlAccessories(); assert.equal(registered.length, 1);
+  p.config.enableEmergencyStopTile = false; p.ensureBetaControlAccessories();
+  assert.equal(p.accessoryByUUID.has(uuid), false);
 });

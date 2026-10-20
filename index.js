@@ -131,8 +131,8 @@ class GivHomeModbusPlatform {
     this.config = config || {};
     const flight = createInternalFlightRecorderLogger(log, {
       baseDir: this.config.flightRecorderDir || '/var/lib/homebridge/givhome-flight-recorder',
-      version: '4.0.3-beta.6',
-      stage: 'GivHome 4.0.3-beta.6'
+      version: '4.0.3-beta.7',
+      stage: 'GivHome 4.0.3-beta.7'
     });
     this.flightRecorder = flight.recorder;
     this.log = flight.log;
@@ -741,7 +741,7 @@ class GivHomeModbusPlatform {
         config: this.config,
         log: this.log,
         storagePath,
-        onObservationForecast: this.config.enableSolarObservation === true ? (record) => {
+        onObservationForecast: this.config.enableSolarObservation !== false ? (record) => {
           try { this.solarObservation?.forecast(record); } catch { /* Forecast observation is isolated. */ }
         } : undefined,
         onUpdate: (result) => {

@@ -1,7 +1,11 @@
-# GivHome 4.0.3-beta.6 — Correct the developer-support link
+# GivHome 4.0.3-beta.7 — Emergency Stop ready, local learning enabled
 
-The heart icon in Homebridge now links to the [GivHome Homebridge website](https://homebridge.givhome.kernowekconsulting.co.uk), where you can support development through Buy me a coffee.
+Emergency Stop is now shown by default on supported systems with appliance control enabled. You can hide it in Plugin Config; its existing compatibility and safety checks remain in place. Showing the tile does not issue a stop command.
 
-This maintenance beta changes donation metadata and release identity only. Battery-control behaviour, settings, defaults and HomeKit identities are unchanged. Local observation remains optional and off by default. HR242 remains diagnostic-only; hardware qualification remains pending. See the [user guides](docs/README.md) and [safety guidance](docs/SAFETY.md).
+Local learning is also enabled by default, using readings and forecasts GivHome already receives. You can disable it in Plugin Config. Explicitly saved disabled settings remain disabled after upgrading; an omitted setting uses the new default.
 
-**Full Changelog comparison:** [v4.0.3-beta.5...v4.0.3-beta.6](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.5...v4.0.3-beta.6).
+Learning stays on your Homebridge device, uses bounded storage and does not calculate or change charging targets. Solar-Aware Cheap Overnight remains a separate optional control with its existing forecast choices and normal-target fallback.
+
+Existing unfinished recovery is retained when the Emergency Stop tile is hidden. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
+
+**Full Changelog comparison:** [v4.0.3-beta.6...v4.0.3-beta.7](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.6...v4.0.3-beta.7).

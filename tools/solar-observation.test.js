@@ -273,7 +273,7 @@ test('forecast observation adds no service requests and preserves the published 
   assert.equal(observation.qualified, false); assert.ok(!('location' in observation));
 });
 test('disabled platform creates no observer, timer, listener, files or network work', () => {
-  const p = Object.create(GivHomeModbusPlatform.prototype); p.config = {}; p.api = { on() { assert.fail('listener'); } };
+  const p = Object.create(GivHomeModbusPlatform.prototype); p.config = { enableSolarObservation: false }; p.api = { on() { assert.fail('listener'); } };
   p.getStoragePath = () => assert.fail('storage'); p.startSolarObservation(); assert.equal(p.solarObservation, undefined);
 });
 test('renaming/replacing a device cannot create unbounded stores; duplicate local producer is isolated', async t => {
@@ -309,31 +309,34 @@ test('unverified responder never reaches observation callback', async () => {
 
 test('owner-approved beta publication is explicit and does not claim hardware qualification', () => {
   const { publicationDecision } = require('./verify-observation-qualification');
-  const input = { pkg: { version: '4.0.3-beta.6' }, runtimeSha256: 'reviewed',
-    schema: { schema: { properties: { enableSolarObservation: { default: false } } } },
+  const input = { pkg: { version: '4.0.3-beta.7' }, runtimeSha256: 'reviewed',
+    schema: { schema: { properties: { enableSolarObservation: { default: true }, enableEmergencyStopTile: { default: true } } } },
     foundation: { automaticControl: false, qualified: false },
-    record: { version: '4.0.3-beta.6', runtimeSha256: 'reviewed', status: 'pending',
+    record: { version: '4.0.3-beta.7', runtimeSha256: 'reviewed', status: 'pending',
       networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: 'local validation',
-      betaPublication: { version: '4.0.3-beta.6', authorizedBy: 'project owner', authorizedOn: '2026-10-19',
+      betaPublication: { version: '4.0.3-beta.7', authorizedBy: 'project owner', authorizedOn: '2026-10-20', observationDefaultEnabled: true, emergencyStopDefaultEnabled: true,
         channel: 'beta', optIn: true, piSoakRequiredBeforeBetaPublication: false } } };
   assert.equal(publicationDecision(input).allowed, false);
   assert.deepEqual(publicationDecision(input, true), { allowed: true, hardwareQualified: false });
 });
 
-test('beta approval cannot authorise another version, changed runtime, default-on or automatic control', () => {
+test('beta approval cannot authorise another version, changed runtime, unapproved defaults or automatic control', () => {
   const { publicationDecision } = require('./verify-observation-qualification');
-  const input = { pkg: { version: '4.0.3-beta.6' }, runtimeSha256: 'reviewed',
-    schema: { schema: { properties: { enableSolarObservation: { default: false } } } },
+  const input = { pkg: { version: '4.0.3-beta.7' }, runtimeSha256: 'reviewed',
+    schema: { schema: { properties: { enableSolarObservation: { default: true }, enableEmergencyStopTile: { default: true } } } },
     foundation: { automaticControl: false, qualified: false },
-    record: { version: '4.0.3-beta.6', runtimeSha256: 'reviewed', status: 'pending',
+    record: { version: '4.0.3-beta.7', runtimeSha256: 'reviewed', status: 'pending',
       networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: 'local validation',
-      betaPublication: { version: '4.0.3-beta.6', authorizedBy: 'project owner', authorizedOn: '2026-10-19',
+      betaPublication: { version: '4.0.3-beta.7', authorizedBy: 'project owner', authorizedOn: '2026-10-20', observationDefaultEnabled: true, emergencyStopDefaultEnabled: true,
         channel: 'beta', optIn: true, piSoakRequiredBeforeBetaPublication: false } } };
   for (const change of [
     x => { x.runtimeSha256 = 'different'; },
     x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3'; },
-    x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3-beta.7'; },
-    x => { x.schema.schema.properties.enableSolarObservation.default = true; },
+    x => { x.pkg.version = x.record.version = x.record.betaPublication.version = '4.0.3-beta.8'; },
+    x => { x.schema.schema.properties.enableSolarObservation.default = false; },
+    x => { x.schema.schema.properties.enableEmergencyStopTile.default = false; },
+    x => { delete x.record.betaPublication.observationDefaultEnabled; },
+    x => { delete x.record.betaPublication.emergencyStopDefaultEnabled; },
     x => { x.foundation.automaticControl = true; },
     x => { x.record.networkIsolationPassed = false; },
     x => { x.record.status = 'failed'; },
@@ -355,4 +358,27 @@ test('full qualification still needs matching measured budgets without beta appr
   assert.deepEqual(publicationDecision(input), { allowed: true, hardwareQualified: true });
   input.record.minimumPi = { ...pi, addedRssMiB: 17 };
   assert.equal(publicationDecision(input).allowed, false);
+});
+
+test('omitted local-learning setting starts one bounded observer; explicit false preserves an existing store', async t => {
+  const directory = await io.mkdtemp(path.join(os.tmpdir(), 'givhome-default-learning-'));
+  const listeners = [];
+  const p = Object.create(GivHomeModbusPlatform.prototype);
+  Object.assign(p, { config: {}, chargeTargetIdentity: 'default-learning-test', pollIntervalSeconds: 30,
+    applianceControl: { batteryCapacityKwh: 13.5, maxBatteryChargePowerKw: 6 }, log,
+    getStoragePath: () => directory, api: { on: (event, callback) => listeners.push([event, callback]) } });
+  t.after(async () => { await p.solarObservation?.stop(); await io.rm(directory, { recursive: true, force: true }); });
+  p.startSolarObservation(); await p.solarObservationStart;
+  assert.equal(p.solarObservation.store.ready, true);
+  assert.equal(p.solarObservation.model.automaticControl, false);
+  const first = p.solarObservation; p.startSolarObservation();
+  assert.equal(p.solarObservation, first); assert.equal(listeners.length, 1);
+  await first.checkpoint(); await first.stop();
+  const saved = await io.readFile(path.join(directory, 'givhome-solar-observation/model.json'));
+  const disabled = Object.create(GivHomeModbusPlatform.prototype);
+  Object.assign(disabled, { config: { enableSolarObservation: false },
+    getStoragePath() { assert.fail('disabled learning must not touch storage'); },
+    api: { on() { assert.fail('disabled learning must not add a listener'); } } });
+  disabled.startSolarObservation(); assert.equal(disabled.solarObservation, undefined);
+  assert.deepEqual(await io.readFile(path.join(directory, 'givhome-solar-observation/model.json')), saved);
 });
