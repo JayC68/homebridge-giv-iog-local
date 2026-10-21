@@ -360,6 +360,32 @@ test('full qualification still needs matching measured budgets without beta appr
   assert.equal(publicationDecision(input).allowed, false);
 });
 
+test('field-observed stable readiness accepts only the reviewed 4.1.0 runtime without claiming resource budgets', () => {
+  const { publicationDecision } = require('./verify-observation-qualification');
+  const input = { pkg: { version: '4.1.0' }, runtimeSha256: 'reviewed',
+    schema: { schema: { properties: { enableSolarObservation: { default: true }, enableEmergencyStopTile: { default: true } } } },
+    foundation: { automaticControl: false, qualified: false },
+    record: { version: '4.1.0', runtimeSha256: 'reviewed', status: 'field-observed',
+      networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: '4.1.0 validation',
+      stableReadiness: { version: '4.1.0', reviewedBy: 'project owner', reviewedOn: '2026-10-21', channel: 'stable',
+        fieldInstallationOperational: true, resourceBudgetsClaimed: false, automaticSolarPlanningEnabled: false } } };
+  assert.deepEqual(publicationDecision(input), { allowed: true, hardwareQualified: false });
+  for (const change of [
+    x => { x.pkg.version = x.record.version = x.record.stableReadiness.version = '4.1.1'; },
+    x => { x.runtimeSha256 = 'different'; },
+    x => { x.record.status = 'pending'; },
+    x => { x.record.stableReadiness.fieldInstallationOperational = false; },
+    x => { x.record.stableReadiness.resourceBudgetsClaimed = true; },
+    x => { x.record.stableReadiness.automaticSolarPlanningEnabled = true; },
+    x => { x.foundation.automaticControl = true; },
+    x => { x.record.networkIsolationPassed = false; },
+    x => { delete x.record.stableReadiness; }
+  ]) {
+    const changed = structuredClone(input); change(changed);
+    assert.equal(publicationDecision(changed).allowed, false);
+  }
+});
+
 test('omitted local-learning setting starts one bounded observer; explicit false preserves an existing store', async t => {
   const directory = await io.mkdtemp(path.join(os.tmpdir(), 'givhome-default-learning-'));
   const listeners = [];

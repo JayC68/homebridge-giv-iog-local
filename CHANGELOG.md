@@ -2,7 +2,43 @@
 
 This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.10](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.1.0](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.1.0 — Emergency Stop and Solar-Aware Cheap Overnight (21 October 2026)
+
+### Emergency Stop
+
+- Added Emergency Stop in Apple Home, available by default on supported systems with battery control enabled, with an option to hide it in Plugin Config.
+- Added verified cancellation of an unwanted forced battery charge or export and restoration of normal Eco operation.
+- Preserved eligible future schedules while cancelling the current occurrence. New actions can start once the stop is verified, without waiting for the old finishing time.
+- Retained unfinished recovery across restart, with a visible fault when the result cannot be verified.
+
+### Solar-Aware Cheap Overnight
+
+- Added forecast-based selection between three overnight battery levels, with editable forecast boundaries and targets.
+- Added an Apple Home switch to choose forecast-based charging or the normal Night Target.
+- Kept the normal Night Target as the ceiling and fallback; retained IOG protection’s independent target.
+- Calculated the Solar 2mrw tile scale from the combined capacity of every configured array while retaining each array’s direction, tilt and shading in its forecast.
+- Set tomorrow’s forecast to refresh every 90 minutes and removed the manual scale and refresh settings.
+
+### Local Learning
+
+- Enabled Local Learning by default, observing energy use, solar generation, forecasts and charging response from existing readings, with an option to disable it in Plugin Config.
+- Kept learning on the Homebridge device, with bounded storage. This foundation does not calculate or change charging targets.
+
+### Clearer controls
+
+- Renamed the Cheap Overnight percentage slider to Night Target, preserving its saved value and accessory identity.
+- Separated enabling Octopus Flux Export from showing its optional Flux Out tile in Apple Home. Retained configured export rules and startup behaviour.
+- Reorganised Plugin Config and rewrote its guidance in GivHome’s voice, keeping related choices together and simplifying the setup journey.
+- Removed the inaccessible export-meter comparison while retaining Agile Export planning, Apple Home control and local export measurement.
+- Updated the GivHome plugin logo.
+
+### Control continuity
+
+- Improved action ownership and interrupted cleanup so borrowed settings are restored without overwriting later changes made elsewhere.
+- Preserved Cheap Overnight priority and the handover to enabled IOG protection afterwards.
+- Preserved existing configuration, Apple Home accessory identities, Eve history, Local Learning data and saved control state through the revised Config UI and restart readback.
 
 ## 4.0.3-beta.10 — Simpler solar setup (21 October 2026)
 

@@ -28,7 +28,13 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
     && approval?.authorizedOn === '2026-10-21'
     && approval?.observationDefaultEnabled === true && approval?.emergencyStopDefaultEnabled === true && approval?.channel === 'beta'
     && approval?.optIn === true && approval?.piSoakRequiredBeforeBetaPublication === false && optionalFoundation;
-  return { allowed: Boolean(approvedBeta), hardwareQualified: false };
+  const readiness = record.stableReadiness;
+  const fieldObservedStable = !allowBeta && record.status === 'field-observed' && pkg.version === '4.1.0'
+    && readiness?.version === pkg.version && readiness?.reviewedBy === 'project owner'
+    && readiness?.reviewedOn === '2026-10-21' && readiness?.channel === 'stable'
+    && readiness?.fieldInstallationOperational === true && readiness?.resourceBudgetsClaimed === false
+    && readiness?.automaticSolarPlanningEnabled === false && optionalFoundation;
+  return { allowed: Boolean(approvedBeta || fieldObservedStable), hardwareQualified: false };
 }
 
 function main() {
@@ -41,15 +47,18 @@ function main() {
   const runtimeSha256 = digest.digest('hex');
   if (process.argv.includes('--runtime-hash')) { console.log(runtimeSha256); return; }
   const read = file => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
-  const decision = publicationDecision({ record: read('docs/maintainer/OBSERVATION_QUALIFICATION.json'), pkg: read('package.json'),
+  const pkg = read('package.json');
+  const decision = publicationDecision({ record: read('docs/maintainer/OBSERVATION_QUALIFICATION.json'), pkg,
     schema: read('config.schema.json'), foundation: require('../lib/solar-observation').emptyModel({}), runtimeSha256 },
   process.argv.includes('--beta-publication'));
   if (!decision.allowed) {
-    console.error('BLOCKED: matching hardware qualification or the specific owner-approved opt-in beta publication is required.');
+    console.error('BLOCKED: matching hardware qualification, the recorded beta exception or matching field-observed stable readiness is required.');
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');
+    : pkg.version === '4.1.0'
+      ? 'PASS field-observed 4.1.0 stable readiness; formal paired resource budgets are not claimed.'
+      : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');
 }
 
 module.exports = { publicationDecision };

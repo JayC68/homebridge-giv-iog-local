@@ -1,21 +1,28 @@
 {
-  "version": "4.0.3-beta.10",
-  "status": "pending",
-  "runtimeSha256": "4ae48c0f7a17d65b3a3a06fff0a95042b441fe2b01918d2b7f56764c195ff7d4",
+  "version": "4.1.0",
+  "status": "field-observed",
+  "runtimeSha256": "e44ae9cb9a468d9f9ae9f482dbb3f412446df47c4308a48a23a9a4d3d43bb310",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_BETA10.md",
-  "reason": "Physical resource budgets remain unmeasured. The project owner explicitly requested beta.10 build, validation and publication on 21 October 2026, retaining the previously accepted Emergency Stop and local-learning defaults. No automatic solar planning is enabled.",
-  "betaPublication": {
-    "version": "4.0.3-beta.10",
-    "authorizedBy": "project owner",
-    "authorizedOn": "2026-10-21",
-    "channel": "beta",
-    "optIn": true,
-    "piSoakRequiredBeforeBetaPublication": false,
-    "observationDefaultEnabled": true,
-    "emergencyStopDefaultEnabled": true
+  "evidence": "docs/maintainer/VALIDATION_4.1.0.md",
+  "reason": "The project owner accepted successful operation on the live Homebridge Pi as sufficient field evidence for stable readiness. Formal paired incremental resource budgets are not claimed. Local Learning remains bounded and cannot enable automatic solar planning or change charging targets.",
+  "fieldObservation": {
+    "hardware": "owner's Raspberry Pi Homebridge installation",
+    "operational": true,
+    "overnightChargeAndIogCleanupObserved": true,
+    "localLearningStorageFaults": 0,
+    "automaticSolarPlanningEnabled": false,
+    "source": "docs/maintainer/VALIDATION_4.1.0.md"
+  },
+  "stableReadiness": {
+    "version": "4.1.0",
+    "reviewedBy": "project owner",
+    "reviewedOn": "2026-10-21",
+    "channel": "stable",
+    "fieldInstallationOperational": true,
+    "resourceBudgetsClaimed": false,
+    "automaticSolarPlanningEnabled": false
   }
 }
