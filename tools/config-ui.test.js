@@ -7,7 +7,7 @@ const path = require('node:path');
 const schema = require('../config.schema.json');
 const { buildApplianceControlConfig } = require('../lib/appliance-integrated-control');
 const { migrateExistingConfig } = require('../homebridge-ui/public/config-migration');
-const expectedContract = '5e626269f93c2f38bf63693c9cf9fb5a1e3fc4d228511e3234c491d2e4c79d58';
+const expectedContract = 'fccd165a97734ebcd26275db2556cc56e034ddb6237cbbe026bb0ec481c0dab5';
 function runtimeContract(value) {
   if (Array.isArray(value)) return value.map(runtimeContract);
   if (!value || typeof value !== 'object') return value;

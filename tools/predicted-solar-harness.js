@@ -4,6 +4,7 @@ const {normaliseConfig,validateConfig,shadingMultiplier,energyFromHourly,brightn
 let ok=true; const check=(n,c,d='')=>{console.log(`${c?'PASS':'FAIL'} ${n}${d?` :: ${d}`:''}`);if(!c)ok=false;};
 const base={enablePredictedSolar:true,predictedSolarLocation:'CM2 8PW',predictedSolarCountryCode:'GB',predictedSolarRefreshMinutes:360,predictedSolarReferenceKwh:99,predictedSolarArrays:[{name:'South',capacityKw:2.8,tiltDegrees:45,azimuthDegrees:185,shading:[{start:'00:00',end:'10:00'}]}]};
 check('disabled mode valid and inert',validateConfig({}).ok&&!validateConfig({}).enabled);
+check('forecast refresh defaults to 90m',normaliseConfig({}).refreshMinutes===90);
 check('enabled missing location fails closed',!validateConfig({...base,predictedSolarLocation:''}).ok);
 check('enabled missing arrays fails closed',!validateConfig({...base,predictedSolarArrays:[]}).ok);
 check('split arrays accepted',validateConfig({...base,predictedSolarArrays:[...base.predictedSolarArrays,{name:'West',capacityKw:1,tiltDegrees:30,azimuthDegrees:270}]}).config.arrays.length===2);
