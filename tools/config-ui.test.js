@@ -7,7 +7,7 @@ const path = require('node:path');
 const schema = require('../config.schema.json');
 const { buildApplianceControlConfig } = require('../lib/appliance-integrated-control');
 const { migrateExistingConfig } = require('../homebridge-ui/public/config-migration');
-const expectedContract = 'fccd165a97734ebcd26275db2556cc56e034ddb6237cbbe026bb0ec481c0dab5';
+const expectedContract = '182f190548b05dbadce3eaddfbf8470eb121bca9d0390ea849ca12a96450023b';
 function runtimeContract(value) {
   if (Array.isArray(value)) return value.map(runtimeContract);
   if (!value || typeof value !== 'object') return value;
@@ -131,10 +131,11 @@ test('Existing configurations are prepared without changing their effective appl
 
 test('Sparse identity, old export days and unknown owner settings survive preparation', () => {
   const sparse = migrateExistingConfig({ platform: 'GivHomeModbus', inverterSerial: 'CH2344G083',
-    predictedSolarReferenceKwh: 27, customOwnerMetadata: { keep: true } }).config;
+    predictedSolarReferenceKwh: 27, predictedSolarRefreshMinutes: 360, customOwnerMetadata: { keep: true } }).config;
   assert.equal(sparse.name, 'GivHome Modbus');
   assert.equal(sparse.enableCheapOvernightCharging, false);
   assert.equal(Object.hasOwn(sparse, 'predictedSolarReferenceKwh'), false);
+  assert.equal(Object.hasOwn(sparse, 'predictedSolarRefreshMinutes'), false);
   assert.deepEqual(sparse.customOwnerMetadata, { keep: true });
   const days = migrateExistingConfig({ platform: 'GivHomeModbus', name: 'Home', inverterSerial: 'CH2344G083',
     octopusFluxDaysToRun: ['mon', 'wed'], octopusAgileOutgoingDaysToRun: ['tue', 'sat'] }).config;
@@ -158,7 +159,8 @@ test('Custom UI wrapper is packaged, migrates only existing blocks and retains u
   assert.match(ui, /\.\.\.\(passthrough\[0\]/);
 });
 
-test('Solar 2mrw has no manual scale or advanced panel', () => {
+test('Solar 2mrw has no manual scale, refresh setting or advanced panel', () => {
   assert.equal(Object.hasOwn(schema.schema.properties, 'predictedSolarReferenceKwh'), false);
+  assert.equal(Object.hasOwn(schema.schema.properties, 'predictedSolarRefreshMinutes'), false);
   assert.equal(schema.form.some(item => item && item.title === 'Predicted Solar \u2014 advanced'), false);
 });

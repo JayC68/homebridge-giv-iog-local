@@ -1069,13 +1069,6 @@
         "pattern": "^[A-Za-z]{2}$",
         "description": "Use a two-letter code, such as GB, IE, US, AU or NZ, to help find the right location."
       },
-      "predictedSolarRefreshMinutes": {
-        "title": "Check tomorrow\u2019s forecast every (minutes)",
-        "type": "integer",
-        "default": 90,
-        "minimum": 60,
-        "description": "GivHome checks tomorrow\u2019s forecast every 90 minutes."
-      },
       "predictedSolarArrays": {
         "title": "PV arrays",
         "type": "array",

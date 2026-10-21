@@ -82,6 +82,13 @@
       changed.push('predictedSolarReferenceKwh');
     }
 
+    // Forecast checks now use GivHome's 90-minute internal interval. Remove
+    // the retired setting so older six-hour installs cannot remain trapped on it.
+    if (Object.prototype.hasOwnProperty.call(config, 'predictedSolarRefreshMinutes')) {
+      delete config.predictedSolarRefreshMinutes;
+      changed.push('predictedSolarRefreshMinutes');
+    }
+
     mark('enableApplianceControl', copyAlias(config, 'enableApplianceControl', ['enableStage11ApplianceControl'], Boolean));
     mark('applianceControlAcknowledgement', copyAlias(config, 'applianceControlAcknowledgement', ['stage11ApplianceControlAcknowledgement']));
     mark('enableEveningExcessExport', copyAlias(config, 'enableEveningExcessExport', ['enableExcessEnergyExport'], Boolean));
