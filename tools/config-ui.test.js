@@ -7,7 +7,7 @@ const path = require('node:path');
 const schema = require('../config.schema.json');
 const { buildApplianceControlConfig } = require('../lib/appliance-integrated-control');
 const { migrateExistingConfig } = require('../homebridge-ui/public/config-migration');
-const expectedContract = '182f190548b05dbadce3eaddfbf8470eb121bca9d0390ea849ca12a96450023b';
+const expectedContract = 'a61871b310a53297dad11923e1fd7a285d35ad7ed9cdbb52c30bdd5f7fcbc1f4';
 function runtimeContract(value) {
   if (Array.isArray(value)) return value.map(runtimeContract);
   if (!value || typeof value !== 'object') return value;
@@ -26,7 +26,7 @@ test('Config presentation preserves all published defaults, keys, types, limits 
   const hash = crypto.createHash('sha256').update(JSON.stringify(runtimeContract(schema.schema))).digest('hex');
   assert.equal(hash, expectedContract);
   const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key))].sort())).digest('hex');
-  assert.equal(fieldHash, '3301ea65ce35c42b06c38364ca79779157cf816b08f404c84589c42864cea8e2', 'only the retired Solar 2mrw scale may disappear');
+  assert.equal(fieldHash, 'a507f158f6fa9be50528855a86d6bc37d3145d3446e58442e94a41eaa79e4b7c', 'only deliberately retired settings may disappear');
   const known = new Set(Object.keys(schema.schema.properties));
   for (const { key } of fields(schema.form, {})) assert.ok(known.has(key.split(/[.[]/)[0]), `unknown setting ${key}`);
 });
@@ -37,11 +37,9 @@ test('Hidden settings keep independent controls accessible without enabling anot
   assert.ok(visible(disabled).includes('enableEmergencyStopTile'));
   assert.ok(visible(disabled).includes('maxPvKw'), 'live solar display does not require forecast enablement');
   assert.ok(!visible(disabled).includes('octopusApiKey'));
-  const audit = { ...disabled, enableOctopusAgileOutgoingAutoExport: true, octopusAgileOutgoingEnableMpanAudit: true };
-  assert.equal(visible(audit).filter(k => k === 'octopusApiKey').length, 1, 'meter audit can use API key without IOG');
-  audit.enableOctopusSmartWindows = true;
-  assert.equal(visible(audit).filter(k => k === 'octopusApiKey').length, 1, 'API key is not duplicated');
-  for (const item of fields(schema.form, audit, true).filter(n => n.key === 'octopusApiKey')) assert.equal(item.type, 'password');
+  const smart = { ...disabled, enableOctopusSmartWindows: true };
+  assert.equal(visible(smart).filter(k => k === 'octopusApiKey').length, 1, 'IOG exposes one API key field');
+  for (const item of fields(schema.form, smart, true).filter(n => n.key === 'octopusApiKey')) assert.equal(item.type, 'password');
 });
 
 test('Custom days, time limits and IOG target follow only their matching choices', () => {
@@ -103,8 +101,7 @@ test('Existing configurations are prepared without changing their effective appl
     '05-numeric-strings': { ...identity, name: 'String settings', enableCheapOvernightCharging: false,
       octopusAgileOutgoingReferenceImportPence: '7.5', octopusAgileOutgoingMinimumGrossMarginPence: '6.25',
       octopusAgileOutgoingEveningReserveKwh: '4.25', octopusAgileOutgoingSafetyMarginSoc: '5.5',
-      octopusAgileOutgoingMinimumExportKwh: '0.75', octopusAgileOutgoingMpanAuditDelayHours: '24',
-      octopusAgileOutgoingMpanMismatchToleranceKwh: '0.6' },
+      octopusAgileOutgoingMinimumExportKwh: '0.75' },
     '06-canonical-precedence': { ...identity, name: 'Canonical wins', enableCheapOvernightCharging: false,
       enableEveningExcessExport: false, enableExcessEnergyExport: true,
       eveningExportReserveSoc: 33, excessExportReserveSoc: 77,
@@ -131,11 +128,16 @@ test('Existing configurations are prepared without changing their effective appl
 
 test('Sparse identity, old export days and unknown owner settings survive preparation', () => {
   const sparse = migrateExistingConfig({ platform: 'GivHomeModbus', inverterSerial: 'CH2344G083',
-    predictedSolarReferenceKwh: 27, predictedSolarRefreshMinutes: 360, customOwnerMetadata: { keep: true } }).config;
+    predictedSolarReferenceKwh: 27, predictedSolarRefreshMinutes: 360,
+    octopusAgileOutgoingEnableMpanAudit: true, octopusExportMpan: '1200000000000',
+    octopusExportMeterSerial: 'meter-1', customOwnerMetadata: { keep: true } }).config;
   assert.equal(sparse.name, 'GivHome Modbus');
   assert.equal(sparse.enableCheapOvernightCharging, false);
   assert.equal(Object.hasOwn(sparse, 'predictedSolarReferenceKwh'), false);
   assert.equal(Object.hasOwn(sparse, 'predictedSolarRefreshMinutes'), false);
+  assert.equal(Object.hasOwn(sparse, 'octopusAgileOutgoingEnableMpanAudit'), false);
+  assert.equal(Object.hasOwn(sparse, 'octopusExportMpan'), false);
+  assert.equal(Object.hasOwn(sparse, 'octopusExportMeterSerial'), false);
   assert.deepEqual(sparse.customOwnerMetadata, { keep: true });
   const days = migrateExistingConfig({ platform: 'GivHomeModbus', name: 'Home', inverterSerial: 'CH2344G083',
     octopusFluxDaysToRun: ['mon', 'wed'], octopusAgileOutgoingDaysToRun: ['tue', 'sat'] }).config;
@@ -159,8 +161,12 @@ test('Custom UI wrapper is packaged, migrates only existing blocks and retains u
   assert.match(ui, /\.\.\.\(passthrough\[0\]/);
 });
 
-test('Solar 2mrw has no manual scale, refresh setting or advanced panel', () => {
+test('retired automatic settings and inaccessible export comparison are absent', () => {
   assert.equal(Object.hasOwn(schema.schema.properties, 'predictedSolarReferenceKwh'), false);
   assert.equal(Object.hasOwn(schema.schema.properties, 'predictedSolarRefreshMinutes'), false);
   assert.equal(schema.form.some(item => item && item.title === 'Predicted Solar \u2014 advanced'), false);
+  for (const key of ['octopusAgileOutgoingEnableMpanAudit', 'octopusExportMpan', 'octopusExportMeterSerial',
+    'octopusAgileOutgoingMpanAuditDelayHours', 'octopusAgileOutgoingMpanMismatchToleranceKwh',
+    'octopusAgileOutgoingSuspendOnMpanMismatch']) assert.equal(Object.hasOwn(schema.schema.properties, key), false);
+  assert.equal(JSON.stringify(schema.form).includes('Compare export meter readings'), false);
 });

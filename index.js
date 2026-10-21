@@ -282,8 +282,6 @@ class GivHomeModbusPlatform {
     this.octopusAgileOutgoingLastMonitorMs = 0;
     this.octopusAgileOutgoingObservedExportKwh = 0;
     this.octopusAgileOutgoingLastObservedAtMs = 0;
-    this.octopusAgileOutgoingLastAuditMs = 0;
-    this.octopusAgileOutgoingSuspendedReason = '';
     this.octopusAgileOutgoingLastPlannerLogSignature = '';
     this.octopusAgileOutgoingLastPlannerLogMs = 0;
     this.octopusAgileOutgoingLastLearningSaveMs = 0;
@@ -346,10 +344,10 @@ class GivHomeModbusPlatform {
     this.log.warn('GivHome evidence Intelligent Octopus Go dynamic-slot enforcement: original plugin semantic snapshot model retained; grid flow split corrected (IR30 positive=export, negative=import); Intelligent Octopus Go dispatch windows are logged, home-battery protection is continuously re-enforced while smart windows or early-termination billing grace are active, SOC-at-target no longer suppresses protection, changed dispatch windows can update the active inverter charge window, and plugin-internal Flight Recorder records GivHome evidence without relying on the external tail service.');
     this.log.warn('GivHome evidence Advanced Modbus unit policy: normalUnitAddress=17 configuredModbusUnitAddress=%s engineeringOverride=%s activeUnitAddress=%s uiExposure=hidden-from-normal-config automaticMutationPath=absent', this.configuredModbusUnitAddress ?? 'unset', this.engineeringModbusUnitOverride ? 'yes' : 'no', this.deviceAddress);
     this.log.warn('GivHome evidence smart-window policy: graceMinutes=%s cheapStart=%s cheapEnd=%s octopusPollSeconds=%s scope=Intelligent-Octopus-Go-dispatch-plus-early-termination-billing-grace gracePolicy=ceil-to-next-half-hour-up-to-configured-cap normalDispatchEndExtended=no dynamicDispatchUpdates=yes batteryCareGracePeriodsExcluded=yes automaticMutationPath=absent', this.applianceControl.graceMinutes, this.applianceControl.cheapStart, this.applianceControl.cheapEnd, this.applianceControl.octopusPollSeconds);
-    this.log.warn('GivHome evidence v3.7.5 parity policy: octopusAgileOutgoingAutonomousExport=yes octopusAgileOutgoingMpanAudit=yes octopusFluxPeakExportPlanner=yes eveningExcessExportConfigSection=yes eveningExcessExportLegacyAliases=yes eveningExcessExportPlannerIdleReasons=yes eveningExcessExportRecoverySharedSnapshot=yes eveningExcessExportRecovery=yes truthBackedCommandSwitches=yes ceAcPersistentChargeSlotMemory=yes ceAcCleanupReconcilesFutureSchedules=yes eveHistoryHardening=yes normalDispatchEndExtended=no automaticMutationPath=absent');
+    this.log.warn('GivHome evidence v3.7.5 parity policy: octopusAgileOutgoingAutonomousExport=yes octopusFluxPeakExportPlanner=yes eveningExcessExportConfigSection=yes eveningExcessExportLegacyAliases=yes eveningExcessExportPlannerIdleReasons=yes eveningExcessExportRecoverySharedSnapshot=yes eveningExcessExportRecovery=yes truthBackedCommandSwitches=yes ceAcPersistentChargeSlotMemory=yes ceAcCleanupReconcilesFutureSchedules=yes eveHistoryHardening=yes normalDispatchEndExtended=no automaticMutationPath=absent');
     this.log.warn('GivHome evidence Battery Care configuration: enabled=%s batteryCapacityKwh=%s maxBatteryChargePowerKw=%s batteryCareMode=%s minimumOvernightMinutes=%s targetSoc=%s route=HR111,HR116,HR94,HR95,HR96 scope=main-overnight-cheap-window-only excludes=short-IOG-dispatches,grace-periods,manual-tiles automaticMutationPath=%s', this.applianceControl.features.batteryCare ? 'yes' : 'no', this.applianceControl.batteryCapacityKwh, this.applianceControl.maxBatteryChargePowerKw, this.applianceControl.batteryCareMode, this.applianceControl.batteryCareMinimumWindowMinutes, this.applianceControl.targetSoc, this.applianceControl.automaticMutationPath);
     this.log.warn('GivHome evidence AC charge target reconciliation: establishedWrites=HR20,HR116 diagnosticOnly=HR242-on-CH-AIO noUnsafeSpeculativeWrites=yes preservesCustomerPrestate=yes logicalSlotMapping=model-aware');
-    this.log.warn('GivHome evidence Octopus Agile Export Autopilot configuration: enabled=%s armed=%s stage=%s dryRun=%s slotSearchMode=%s allowedWindow=%s strategy=%s learningMode=%s dailyExportMode=%s region=%s product=%s tariff=%s daysPreset=%s daysToRun=%s minimumPricePence=%s minimumExtraRewardPence=%s energyCostBaselinePence=%s reserveSoc=%s reserveKwh=%s safetyMarginSoc=%s exportPowerKw=%s dailyExportCapKwh=%s mpanAudit=%s exportMpanConfigured=%s exportMeterSerialConfigured=%s automaticMutationPath=%s', this.applianceControl.features.octopusAgileOutgoingExport ? 'yes' : 'no', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', this.getOctopusAgileOutgoingExecutionStage(), this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no', this.getOctopusAgileOutgoingSlotSearchMode(), this.formatOctopusAgileOutgoingAllowedWindow(), this.applianceControl.octopusAgileOutgoingStrategy, this.applianceControl.octopusAgileOutgoingLearningMode, this.applianceControl.octopusAgileOutgoingDailyExportMode, this.applianceControl.octopusAgileOutgoingRegionCode, this.applianceControl.octopusAgileOutgoingProductCode, this.getOctopusAgileOutgoingTariffCode(), this.applianceControl.octopusAgileOutgoingRunDaysPreset || 'legacy-list', this.formatOctopusAgileOutgoingDaysToRun(), this.applianceControl.octopusAgileOutgoingMinimumExportPricePence, this.applianceControl.octopusAgileOutgoingMinimumGrossMarginPence, this.applianceControl.octopusAgileOutgoingReferenceImportPence, this.applianceControl.octopusAgileOutgoingReserveSoc, this.applianceControl.octopusAgileOutgoingEveningReserveKwh, this.applianceControl.octopusAgileOutgoingSafetyMarginSoc, this.applianceControl.octopusAgileOutgoingExportPowerKw, this.applianceControl.octopusAgileOutgoingDailyExportCapKwh, this.applianceControl.octopusAgileOutgoingEnableMpanAudit ? 'yes' : 'no', this.applianceControl.octopusExportMpan ? 'yes' : 'no', this.applianceControl.octopusExportMeterSerial ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
+    this.log.warn('GivHome evidence Octopus Agile Export Autopilot configuration: enabled=%s armed=%s stage=%s dryRun=%s slotSearchMode=%s allowedWindow=%s strategy=%s learningMode=%s dailyExportMode=%s region=%s product=%s tariff=%s daysPreset=%s daysToRun=%s minimumPricePence=%s minimumExtraRewardPence=%s energyCostBaselinePence=%s reserveSoc=%s reserveKwh=%s safetyMarginSoc=%s exportPowerKw=%s dailyExportCapKwh=%s automaticMutationPath=%s', this.applianceControl.features.octopusAgileOutgoingExport ? 'yes' : 'no', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', this.getOctopusAgileOutgoingExecutionStage(), this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no', this.getOctopusAgileOutgoingSlotSearchMode(), this.formatOctopusAgileOutgoingAllowedWindow(), this.applianceControl.octopusAgileOutgoingStrategy, this.applianceControl.octopusAgileOutgoingLearningMode, this.applianceControl.octopusAgileOutgoingDailyExportMode, this.applianceControl.octopusAgileOutgoingRegionCode, this.applianceControl.octopusAgileOutgoingProductCode, this.getOctopusAgileOutgoingTariffCode(), this.applianceControl.octopusAgileOutgoingRunDaysPreset || 'legacy-list', this.formatOctopusAgileOutgoingDaysToRun(), this.applianceControl.octopusAgileOutgoingMinimumExportPricePence, this.applianceControl.octopusAgileOutgoingMinimumGrossMarginPence, this.applianceControl.octopusAgileOutgoingReferenceImportPence, this.applianceControl.octopusAgileOutgoingReserveSoc, this.applianceControl.octopusAgileOutgoingEveningReserveKwh, this.applianceControl.octopusAgileOutgoingSafetyMarginSoc, this.applianceControl.octopusAgileOutgoingExportPowerKw, this.applianceControl.octopusAgileOutgoingDailyExportCapKwh, this.applianceControl.automaticMutationPath);
     const fluxEligibleMinutes = clockWindowDurationMinutes(this.applianceControl.octopusFluxExportStartTime, this.applianceControl.octopusFluxExportEndTime);
     const fluxFullBandKwh = Number.isFinite(fluxEligibleMinutes) ? ((Number(this.applianceControl.octopusFluxExportPowerKw) || 0) * (fluxEligibleMinutes / 60)).toFixed(2) : 'n/a';
     this.log.warn('GivHome evidence Octopus Flux Export configuration: enabled=%s armed=%s mode=fixed-peak-window eligiblePeakWindow=%s-%s fullBandKwhAtRequestedPower=%s windowMeaning=eligible-peak-period actualRun=energy-budgeted-short-slots daysPreset=%s daysToRun=%s reserveSoc=%s reserveKwh=%s safetyMarginSoc=%s exportPowerKw=%s slotMinutes=%s minimumExportKwh=%s automaticMutationPath=%s', this.applianceControl.features.octopusFluxExport ? 'yes' : 'no', this.octopusFluxExportArmed ? 'yes' : 'no', this.applianceControl.octopusFluxExportStartTime, this.applianceControl.octopusFluxExportEndTime, fluxFullBandKwh, this.applianceControl.octopusFluxRunDaysPreset || 'legacy-list', this.formatOctopusFluxDaysToRun(), this.applianceControl.octopusFluxReserveSoc, this.applianceControl.octopusFluxEveningReserveKwh, this.applianceControl.octopusFluxSafetyMarginSoc, this.applianceControl.octopusFluxExportPowerKw, this.applianceControl.octopusFluxSlotMinutes, this.applianceControl.octopusFluxMinimumExportKwh, this.applianceControl.automaticMutationPath);
@@ -1007,7 +1005,7 @@ class GivHomeModbusPlatform {
     const handler = async (value) => {
       this.octopusAgileOutgoingExportArmed = Boolean(value);
       service.updateCharacteristic(this.Characteristic.On, this.octopusAgileOutgoingExportArmed);
-      this.log.warn('Octopus Agile Export %s from Apple Home: autonomousExport=%s dryRun=%s mpanAudit=%s automaticMutationPath=%s', this.octopusAgileOutgoingExportArmed ? 'armed' : 'disarmed', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingEnableMpanAudit ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
+      this.log.warn('Octopus Agile Export %s from Apple Home: autonomousExport=%s dryRun=%s automaticMutationPath=%s', this.octopusAgileOutgoingExportArmed ? 'armed' : 'disarmed', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
       if (this.octopusAgileOutgoingExportArmed) this.allowStoppedOccurrence('Octopus Agile Export');
       if (!this.octopusAgileOutgoingExportArmed && this.currentControlOwner('export')?.source === 'Octopus Agile Export') {
         await this.cleanupApplianceCommandFamily('export', 'Octopus Agile Export disarmed');
@@ -2369,7 +2367,7 @@ class GivHomeModbusPlatform {
       const memoryActive = Boolean(this.activeOctopusAgileOutgoingSlot?.end instanceof Date && new Date() < this.activeOctopusAgileOutgoingSlot.end);
       const value = Boolean(this.octopusAgileOutgoingExportArmed || memoryActive || (truth.enabled && truth.active && this.activeOctopusAgileOutgoingSlot));
       this.setApplianceCommandState(COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT, value);
-      this.log.info('GivHome evidence truth switch readback: kind=Octopus_Agile_Outgoing armed=%s liveExportActive=%s memoryActive=%s HR59=%s HR112=%s value=%s dryRun=%s mpanAudit=%s source=single-shared-register-snapshot', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', truth.active ? 'yes' : 'no', memoryActive ? 'yes' : 'no', pre.HR59, pre.HR112, value ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingEnableMpanAudit ? 'yes' : 'no');
+      this.log.info('GivHome evidence truth switch readback: kind=Octopus_Agile_Outgoing armed=%s liveExportActive=%s memoryActive=%s HR59=%s HR112=%s value=%s dryRun=%s source=single-shared-register-snapshot', this.octopusAgileOutgoingExportArmed ? 'yes' : 'no', truth.active ? 'yes' : 'no', memoryActive ? 'yes' : 'no', pre.HR59, pre.HR112, value ? 'yes' : 'no', this.applianceControl.octopusAgileOutgoingDryRun ? 'yes' : 'no');
       return value;
     } catch (err) {
       const fallback = this.octopusAgileOutgoingExportArmed === true;
@@ -2834,7 +2832,6 @@ class GivHomeModbusPlatform {
       this.pollOctopusDispatches(false).catch((err) => this.log.warn('Intelligent Octopus Go poll failed: %s', err && err.message ? err.message : String(err)));
       try { if (this.health.state === 'online') this.updateOctopusAgileOutgoingLearning(this.latestModel); }
       catch (err) { this.log.warn('Agile local learning deferred: %s', err.message); }
-      this.maybeAuditOctopusAgileOutgoingMpan().catch(err => this.log.warn('Agile audit deferred: %s', err.message));
       this.applyApplianceAutomation().catch((err) => this.log.warn('GivHome command appliance automation failed safely: %s', err && err.message ? err.message : String(err)));
       this.recordEveHistory(false).catch((err) => this.log.warn('GivHome command Eve history record failed safely: %s', err && err.message ? err.message : String(err)));
     }, APPLIANCE_AUTOMATION_INTERVAL_MS);
@@ -3201,7 +3198,7 @@ class GivHomeModbusPlatform {
   }
 
   loadOctopusAgileOutgoingState() {
-    const fallback = { version: '4.0.0', serial: this.inverterSerial, dayKey: this.localDayKey(), daily: { plannedKwh: 0, observedInverterKwh: 0, estimatedValuePence: 0 }, slots: [], activeSlot: null, suspendedReason: '' };
+    const fallback = { version: '4.0.0', serial: this.inverterSerial, dayKey: this.localDayKey(), daily: { plannedKwh: 0, observedInverterKwh: 0, estimatedValuePence: 0 }, slots: [], activeSlot: null };
     const payload = loadJson(this.octopusAgileOutgoingStatePath(), fallback) || fallback;
     if (payload.serial && payload.serial !== this.inverterSerial) return fallback;
     if (payload.dayKey !== this.localDayKey()) {
@@ -3241,8 +3238,7 @@ class GivHomeModbusPlatform {
       expectedValuePence: slot.expectedValuePence,
       observedInverterKwh: Number(slot.observedInverterKwh || 0),
       source: slot.source || 'octopus-agile-export-autopilot',
-      reason: reason || 'agile-outgoing-export-start',
-      mpanAuditStatus: 'pending'
+      reason: reason || 'agile-outgoing-export-start'
     };
     state.activeSlot = activeSlot;
     const exists = state.slots.some((candidate) => candidate.start === activeSlot.start && candidate.end === activeSlot.end && candidate.source === activeSlot.source);
@@ -3250,12 +3246,11 @@ class GivHomeModbusPlatform {
     state.daily.plannedKwh = Number((Number(state.daily.plannedKwh || 0) + Number(activeSlot.expectedKwh || 0)).toFixed(4));
     state.daily.estimatedValuePence = Number((Number(state.daily.estimatedValuePence || 0) + Number(activeSlot.expectedValuePence || 0)).toFixed(2));
     this.saveOctopusAgileOutgoingState(state);
-    this.log.warn('GivHome evidence Octopus Agile Export memory saved: start=%s end=%s pricePence=%s expectedKwh=%s expectedValuePence=%s reason=%s mpanAudit=pending automaticMutationPath=absent', activeSlot.start ? dateToDisplayHmm(new Date(activeSlot.start)) : 'unknown', activeSlot.end ? dateToDisplayHmm(new Date(activeSlot.end)) : 'unknown', activeSlot.pricePence, activeSlot.expectedKwh, activeSlot.expectedValuePence, activeSlot.reason);
+    this.log.warn('GivHome evidence Octopus Agile Export memory saved: start=%s end=%s pricePence=%s expectedKwh=%s expectedValuePence=%s reason=%s automaticMutationPath=absent', activeSlot.start ? dateToDisplayHmm(new Date(activeSlot.start)) : 'unknown', activeSlot.end ? dateToDisplayHmm(new Date(activeSlot.end)) : 'unknown', activeSlot.pricePence, activeSlot.expectedKwh, activeSlot.expectedValuePence, activeSlot.reason);
   }
 
   loadOctopusAgileOutgoingMemory() {
     const payload = this.loadOctopusAgileOutgoingState();
-    if (payload.suspendedReason) this.octopusAgileOutgoingSuspendedReason = payload.suspendedReason;
     const slot = payload.activeSlot;
     if (!slot) return;
     const start = new Date(slot.start);
@@ -3469,7 +3464,6 @@ class GivHomeModbusPlatform {
   }
 
   buildOctopusAgileOutgoingPlan(model, cheapState, rates, now = new Date()) {
-    if (this.octopusAgileOutgoingSuspendedReason) return { start: false, reason: `suspended:${this.octopusAgileOutgoingSuspendedReason}` };
     if (!this.octopusAgileOutgoingExportArmed) return { start: false, reason: 'switch-off' };
     if (cheapState.cheapActive || cheapState.smartActive || cheapState.graceActive) return { start: false, reason: `protected-window cheap=${cheapState.cheapActive ? 'yes' : 'no'} smart=${cheapState.smartActive ? 'yes' : 'no'} grace=${cheapState.graceActive ? 'yes' : 'no'}` };
     if (!this.isOctopusAgileOutgoingRunDay(now)) return { start: false, reason: `day-not-enabled day=${this.getOctopusAgileOutgoingDayLabel(now)} daysToRun=${this.formatOctopusAgileOutgoingDaysToRun()} failClosed=yes` };
@@ -3592,7 +3586,7 @@ class GivHomeModbusPlatform {
     this.octopusAgileOutgoingLastObservedAtMs = Date.now();
     this.persistOctopusAgileOutgoingMemory(this.activeOctopusAgileOutgoingSlot, 'planner-started');
     this.scheduleApplianceCommandCleanup(COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT, 'export', plan.minutes);
-    this.log.warn('GivHome evidence Octopus Agile Export Autopilot command queued: start=%s end=%s minutes=%s pricePence=%s reserveSoc=%s reserveKwh=%s expectedKwh=%s expectedValuePence=%s memorySaved=yes mpanAuditPending=%s automaticMutationPath=%s', dateToHmm(plan.startDate), dateToHmm(plan.endDate), plan.minutes, plan.pricePence.toFixed(2), plan.reserveSoc, plan.reserveKwh.toFixed(2), plan.expectedKwh.toFixed(2), plan.expectedValuePence.toFixed(1), this.applianceControl.octopusAgileOutgoingEnableMpanAudit ? 'yes' : 'no', this.applianceControl.automaticMutationPath);
+    this.log.warn('GivHome evidence Octopus Agile Export Autopilot command queued: start=%s end=%s minutes=%s pricePence=%s reserveSoc=%s reserveKwh=%s expectedKwh=%s expectedValuePence=%s memorySaved=yes automaticMutationPath=%s', dateToHmm(plan.startDate), dateToHmm(plan.endDate), plan.minutes, plan.pricePence.toFixed(2), plan.reserveSoc, plan.reserveKwh.toFixed(2), plan.expectedKwh.toFixed(2), plan.expectedValuePence.toFixed(1), this.applianceControl.automaticMutationPath);
     return true;
   }
 
@@ -3641,61 +3635,6 @@ class GivHomeModbusPlatform {
     }
     try { this.saveOctopusAgileOutgoingState(state); } catch {}
   }
-
-  async maybeAuditOctopusAgileOutgoingMpan(now = new Date()) {
-    if (!this.applianceControl.features.octopusAgileOutgoingExport) return;
-    if (!this.applianceControl.octopusAgileOutgoingEnableMpanAudit) return;
-    if (!this.applianceControl.octopusApiKey || !this.applianceControl.octopusExportMpan || !this.applianceControl.octopusExportMeterSerial) {
-      this.logOctopusAgileOutgoingDecision('mpan-audit: waiting for Octopus API key, export MPAN and export meter serial', false);
-      return;
-    }
-    if (Date.now() - this.octopusAgileOutgoingLastAuditMs < 60 * 60 * 1000) return;
-    this.octopusAgileOutgoingLastAuditMs = Date.now();
-    const state = this.loadOctopusAgileOutgoingState();
-    const delayMs = this.applianceControl.octopusAgileOutgoingMpanAuditDelayHours * 60 * 60 * 1000;
-    const pending = (state.slots || []).filter((slot) => slot.mpanAuditStatus !== 'matched' && slot.mpanAuditStatus !== 'mismatch' && slot.end && now.getTime() - new Date(slot.end).getTime() >= delayMs);
-    if (!pending.length) return;
-    for (const slot of pending.slice(0, 3)) {
-      try {
-        const from = new Date(slot.start);
-        const to = new Date(slot.end);
-        const octopusKwh = await this.fetchOctopusExportMpanKwh(from, to);
-        const inverterKwh = Number(slot.observedInverterKwh || 0);
-        const difference = Math.abs(octopusKwh - inverterKwh);
-        slot.octopusMpanKwh = Number(octopusKwh.toFixed(4));
-        slot.mpanAuditAt = now.toISOString();
-        slot.mpanAuditStatus = difference <= this.applianceControl.octopusAgileOutgoingMpanMismatchToleranceKwh ? 'matched' : 'mismatch';
-        this.log.warn('GivHome evidence Octopus Agile Export MPAN audit: start=%s end=%s inverterKwh=%s octopusExportMpanKwh=%s differenceKwh=%s toleranceKwh=%s status=%s source=octopus-export-mpan-consumption-api', dateToDisplayHmm(from), dateToDisplayHmm(to), inverterKwh.toFixed(3), octopusKwh.toFixed(3), difference.toFixed(3), this.applianceControl.octopusAgileOutgoingMpanMismatchToleranceKwh, slot.mpanAuditStatus);
-        if (slot.mpanAuditStatus === 'mismatch' && this.applianceControl.octopusAgileOutgoingSuspendOnMpanMismatch) {
-          this.octopusAgileOutgoingSuspendedReason = `mpan-mismatch-${from.toISOString()}`;
-          this.octopusAgileOutgoingExportArmed = false;
-          state.suspendedReason = this.octopusAgileOutgoingSuspendedReason;
-          this.setApplianceCommandState(COMMAND_KINDS.OCTOPUS_AGILE_OUTGOING_EXPORT, false);
-          this.log.warn('GivHome evidence Octopus Agile Export suspended: reason=%s action=disarmed failClosed=yes', this.octopusAgileOutgoingSuspendedReason);
-        }
-      } catch (err) {
-        slot.mpanAuditStatus = 'deferred';
-        slot.mpanAuditError = err && err.message ? err.message : String(err);
-        this.log.warn('GivHome evidence Octopus Agile Export MPAN audit deferred: start=%s end=%s error=%s retryLater=yes', slot.start, slot.end, slot.mpanAuditError);
-      }
-    }
-    this.saveOctopusAgileOutgoingState(state);
-  }
-
-  async fetchOctopusExportMpanKwh(periodFrom, periodTo) {
-    const mpan = encodeURIComponent(this.applianceControl.octopusExportMpan);
-    const serial = encodeURIComponent(this.applianceControl.octopusExportMeterSerial);
-    const from = encodeURIComponent(periodFrom.toISOString());
-    const to = encodeURIComponent(periodTo.toISOString());
-    const url = `https://api.octopus.energy/v1/electricity-meter-points/${mpan}/meters/${serial}/consumption/?period_from=${from}&period_to=${to}&page_size=250`;
-    const auth = Buffer.from(`${this.applianceControl.octopusApiKey}:`).toString('base64');
-    const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Basic ${auth}` } });
-    if (!response.ok) throw new Error(`Octopus export MPAN consumption HTTP ${response.status}`);
-    const body = await response.json();
-    const rows = Array.isArray(body?.results) ? body.results : [];
-    return rows.reduce((sum, row) => sum + (Number.isFinite(Number(row.consumption)) ? Number(row.consumption) : 0), 0);
-  }
-
 
   logOctopusFluxExportDecision(message, force = false) {
     const nowMs = Date.now();

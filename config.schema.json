@@ -816,44 +816,6 @@
         "default": "",
         "description": "To allow live export, enter ENABLE_AGILE_OUTGOING_LIVE_EXPORT exactly, choose a live operating mode and turn Plan without exporting off. Your other limits still apply."
       },
-      "octopusAgileOutgoingEnableMpanAudit": {
-        "title": "Compare exports with Octopus meter readings",
-        "type": "boolean",
-        "default": false,
-        "description": "Use your Octopus API key and export meter details to compare recorded exports with Octopus readings after they become available."
-      },
-      "octopusExportMpan": {
-        "title": "Export MPAN",
-        "type": "string",
-        "default": "",
-        "description": "The export supply number for your property. Used only for the optional meter comparison."
-      },
-      "octopusExportMeterSerial": {
-        "title": "Export meter serial number",
-        "type": "string",
-        "default": "",
-        "description": "The meter serial number associated with your export MPAN."
-      },
-      "octopusAgileOutgoingMpanAuditDelayHours": {
-        "title": "Wait before checking readings (hours)",
-        "type": "string",
-        "default": "12",
-        "description": "Allow time for Octopus export readings to arrive. These delayed readings are not used to decide whether it is safe to export now.",
-        "placeholder": "12"
-      },
-      "octopusAgileOutgoingMpanMismatchToleranceKwh": {
-        "title": "Allowed difference (kWh)",
-        "type": "string",
-        "default": "1",
-        "description": "The difference allowed between GivHome\u2019s recorded export and the Octopus meter reading before reporting a mismatch.",
-        "placeholder": "1"
-      },
-      "octopusAgileOutgoingSuspendOnMpanMismatch": {
-        "title": "Pause Agile Export if readings differ",
-        "type": "boolean",
-        "default": true,
-        "description": "Turn Agile Export off if the optional meter comparison finds a difference above your allowance."
-      },
       "octopusFluxRunDaysPreset": {
         "title": "Days to export",
         "type": "string",
@@ -1221,7 +1183,7 @@
       {
         "type": "fieldset",
         "title": "Octopus Agile Outgoing Auto Export",
-        "description": "Autonomous sell/export optimiser. The Apple Home switch arms the optimiser; live inverter writes require dry-run off and the live acknowledgement. MPAN audit is delayed evidence, not live protection.",
+        "description": "Autonomous sell/export optimiser. The Apple Home switch arms the optimiser; live inverter writes require dry-run off and the live acknowledgement.",
         "items": [
           "enableOctopusAgileOutgoingAutoExport",
           "octopusAgileOutgoingProductCode",
@@ -1239,13 +1201,7 @@
           "octopusAgileOutgoingMinimumExportKwh",
           "octopusAgileOutgoingDailyExportCapKwh",
           "octopusAgileOutgoingDryRun",
-          "octopusAgileOutgoingLiveAcknowledgement",
-          "octopusAgileOutgoingEnableMpanAudit",
-          "octopusExportMpan",
-          "octopusExportMeterSerial",
-          "octopusAgileOutgoingMpanAuditDelayHours",
-          "octopusAgileOutgoingMpanMismatchToleranceKwh",
-          "octopusAgileOutgoingSuspendOnMpanMismatch"
+          "octopusAgileOutgoingLiveAcknowledgement"
         ]
       }
     ]
@@ -1755,37 +1711,6 @@
                 "octopusAgileOutgoingMinimumExportKwh",
                 "octopusAgileOutgoingMinimumGrossMarginPence",
                 "octopusAgileOutgoingReferenceImportPence"
-              ]
-            },
-            {
-              "type": "fieldset",
-              "title": "Compare export meter readings",
-              "expandable": true,
-              "expanded": false,
-              "description": "An optional check after Octopus meter readings become available.",
-              "items": [
-                "octopusAgileOutgoingEnableMpanAudit",
-                {
-                  "type": "div",
-                  "notitle": true,
-                  "condition": {
-                    "functionBody": "return model.octopusAgileOutgoingEnableMpanAudit === true;"
-                  },
-                  "items": [
-                    {
-                      "key": "octopusApiKey",
-                      "type": "password",
-                      "condition": {
-                        "functionBody": "return model.enableOctopusSmartWindows !== true;"
-                      }
-                    },
-                    "octopusExportMpan",
-                    "octopusExportMeterSerial",
-                    "octopusAgileOutgoingMpanAuditDelayHours",
-                    "octopusAgileOutgoingMpanMismatchToleranceKwh",
-                    "octopusAgileOutgoingSuspendOnMpanMismatch"
-                  ]
-                }
               ]
             }
           ]

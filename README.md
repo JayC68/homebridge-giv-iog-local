@@ -94,8 +94,6 @@ GivHome can obtain Agile Outgoing rates from Octopus, examine the available peri
 
 The Agile work has deliberately been cautious. Planning, observed export and live control have been separated by explicit safety gates while the behaviour is proved.
 
-Where the required Octopus account information is configured, GivHome can also compare export recorded by Octopus for the export MPAN with export observed at the inverter. That gives us two independent views of what happened rather than simply assuming our own measurement must be right.
-
 ## One Octopus story
 
 Smart Window, Cheap Overnight, Evening Excess Export, Flux and Agile are not a collection of unrelated tariff switches.

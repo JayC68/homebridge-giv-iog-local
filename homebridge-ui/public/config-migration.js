@@ -89,6 +89,21 @@
       changed.push('predictedSolarRefreshMinutes');
     }
 
+    // The delayed export-meter comparison had no accessible user result and
+    // could silently disarm Agile Export. Retire every setting with the feature.
+    for (const key of [
+      'octopusAgileOutgoingEnableMpanAudit',
+      'octopusExportMpan',
+      'octopusExportMeterSerial',
+      'octopusAgileOutgoingMpanAuditDelayHours',
+      'octopusAgileOutgoingMpanMismatchToleranceKwh',
+      'octopusAgileOutgoingSuspendOnMpanMismatch'
+    ]) {
+      if (!Object.prototype.hasOwnProperty.call(config, key)) continue;
+      delete config[key];
+      changed.push(key);
+    }
+
     mark('enableApplianceControl', copyAlias(config, 'enableApplianceControl', ['enableStage11ApplianceControl'], Boolean));
     mark('applianceControlAcknowledgement', copyAlias(config, 'applianceControlAcknowledgement', ['stage11ApplianceControlAcknowledgement']));
     mark('enableEveningExcessExport', copyAlias(config, 'enableEveningExcessExport', ['enableExcessEnergyExport'], Boolean));
