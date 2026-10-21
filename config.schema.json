@@ -1069,14 +1069,6 @@
         "pattern": "^[A-Za-z]{2}$",
         "description": "Use a two-letter code, such as GB, IE, US, AU or NZ, to help find the right location."
       },
-      "predictedSolarReferenceKwh": {
-        "title": "Solar 2mrw: energy for a full tile (kWh)",
-        "type": "number",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 1000,
-        "description": "Solar 2mrw shows tomorrow\u2019s forecast as a percentage. With 10 kWh here, a 5 kWh forecast shows 50%. Leave 0 for GivHome to use 4 kWh for each kWp of panels: a 2.8 kWp array uses 11.2 kWh. The tile displays 1\u201399%. This changes the percentage shown, not the forecast itself."
-      },
       "predictedSolarRefreshMinutes": {
         "title": "Check tomorrow\u2019s forecast every (minutes)",
         "type": "integer",
@@ -1449,20 +1441,6 @@
             }
           ]
         }
-      ],
-      "condition": {
-        "functionBody": "return model.enablePredictedSolar === true;"
-      }
-    },
-    {
-      "type": "fieldset",
-      "title": "Predicted Solar \u2014 advanced",
-      "expandable": true,
-      "expanded": false,
-      "description": "Choose how tomorrow\u2019s forecast is shown as a percentage in Solar 2mrw, and how often GivHome checks for a fresh forecast.",
-      "items": [
-        "predictedSolarReferenceKwh",
-        "predictedSolarRefreshMinutes"
       ],
       "condition": {
         "functionBody": "return model.enablePredictedSolar === true;"

@@ -7,7 +7,7 @@ const path = require('node:path');
 const schema = require('../config.schema.json');
 const { buildApplianceControlConfig } = require('../lib/appliance-integrated-control');
 const { migrateExistingConfig } = require('../homebridge-ui/public/config-migration');
-const expectedContract = '47207a5e754243c5231ca027be49f367add5a319571c84f9e78576d3386b8a2f';
+const expectedContract = '5e626269f93c2f38bf63693c9cf9fb5a1e3fc4d228511e3234c491d2e4c79d58';
 function runtimeContract(value) {
   if (Array.isArray(value)) return value.map(runtimeContract);
   if (!value || typeof value !== 'object') return value;
@@ -26,7 +26,7 @@ test('Config presentation preserves all published defaults, keys, types, limits 
   const hash = crypto.createHash('sha256').update(JSON.stringify(runtimeContract(schema.schema))).digest('hex');
   assert.equal(hash, expectedContract);
   const fieldHash = crypto.createHash('sha256').update(JSON.stringify([...new Set(fields(schema.form, {}).map(n => n.key))].sort())).digest('hex');
-  assert.equal(fieldHash, '3088f63c0896a5ef8f927295e0283d3fa27053cfde6e2b49048df0d32297dd37', 'no previously exposed setting may disappear');
+  assert.equal(fieldHash, '3301ea65ce35c42b06c38364ca79779157cf816b08f404c84589c42864cea8e2', 'only the retired Solar 2mrw scale may disappear');
   const known = new Set(Object.keys(schema.schema.properties));
   for (const { key } of fields(schema.form, {})) assert.ok(known.has(key.split(/[.[]/)[0]), `unknown setting ${key}`);
 });
@@ -130,9 +130,11 @@ test('Existing configurations are prepared without changing their effective appl
 });
 
 test('Sparse identity, old export days and unknown owner settings survive preparation', () => {
-  const sparse = migrateExistingConfig({ platform: 'GivHomeModbus', inverterSerial: 'CH2344G083', customOwnerMetadata: { keep: true } }).config;
+  const sparse = migrateExistingConfig({ platform: 'GivHomeModbus', inverterSerial: 'CH2344G083',
+    predictedSolarReferenceKwh: 27, customOwnerMetadata: { keep: true } }).config;
   assert.equal(sparse.name, 'GivHome Modbus');
   assert.equal(sparse.enableCheapOvernightCharging, false);
+  assert.equal(Object.hasOwn(sparse, 'predictedSolarReferenceKwh'), false);
   assert.deepEqual(sparse.customOwnerMetadata, { keep: true });
   const days = migrateExistingConfig({ platform: 'GivHomeModbus', name: 'Home', inverterSerial: 'CH2344G083',
     octopusFluxDaysToRun: ['mon', 'wed'], octopusAgileOutgoingDaysToRun: ['tue', 'sat'] }).config;
@@ -154,4 +156,9 @@ test('Custom UI wrapper is packaged, migrates only existing blocks and retains u
   assert.match(ui, /createForm\(pluginSchema, prepared\[0\]\)/);
   assert.match(ui, /form\.onChange/);
   assert.match(ui, /\.\.\.\(passthrough\[0\]/);
+});
+
+test('Solar 2mrw has no manual scale or advanced panel', () => {
+  assert.equal(Object.hasOwn(schema.schema.properties, 'predictedSolarReferenceKwh'), false);
+  assert.equal(schema.form.some(item => item && item.title === 'Predicted Solar \u2014 advanced'), false);
 });

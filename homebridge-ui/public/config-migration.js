@@ -75,6 +75,13 @@
       changed.push('enableCheapOvernightCharging');
     }
 
+    // Solar 2mrw derives its display scale from total installed kWp.
+    // Remove the retired override so an older saved value cannot remain active.
+    if (Object.prototype.hasOwnProperty.call(config, 'predictedSolarReferenceKwh')) {
+      delete config.predictedSolarReferenceKwh;
+      changed.push('predictedSolarReferenceKwh');
+    }
+
     mark('enableApplianceControl', copyAlias(config, 'enableApplianceControl', ['enableStage11ApplianceControl'], Boolean));
     mark('applianceControlAcknowledgement', copyAlias(config, 'applianceControlAcknowledgement', ['stage11ApplianceControlAcknowledgement']));
     mark('enableEveningExcessExport', copyAlias(config, 'enableEveningExcessExport', ['enableExcessEnergyExport'], Boolean));
