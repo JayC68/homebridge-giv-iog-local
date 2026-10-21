@@ -1,11 +1,15 @@
-# GivHome 4.0.3-beta.9 — Safer upgrades, clearer setup
+# GivHome 4.0.3-beta.10 — Simpler solar setup
 
-Plugin Config now prepares existing GivHome settings before showing the revised form. Long-standing installations keep their established identity and behaviour when older names, export choices or omitted settings are encountered. Saved Night Target, forecast preference, Emergency Stop state, action ownership, Eve history and Local Learning data continue to use their existing files and accessory identities.
+Solar 2mrw now takes care of its own display scale. It calculates the scale automatically from the combined capacity of all solar arrays entered during setup. Each array’s direction, tilt and shading remain part of its individual forecast.
 
-The Config UI has a clearer flow and more direct explanations in the GivHome voice. Related features now sit together, advanced choices explain what they change, Solar Now describes its live generation percentage accurately, and new users receive clearer guidance for Advanced charging. Existing owner-managed settings that GivHome does not recognise are carried through a save instead of being removed.
+GivHome now checks tomorrow’s forecast every 90 minutes. This replaces the previous user setting, including saved six-hour intervals, so forecasts can respond better to changeable conditions without another choice to manage. Each GivHome instance begins its interval when it starts, helping to spread forecast requests rather than tying them to fixed clock times.
 
-**Night Target** remains the Cheap Overnight percentage slider. IOG battery protection keeps its separate target. **Flux Out** remains an optional Apple Home tile for an independently enabled Octopus Flux Export function. Emergency Stop and Local Learning remain enabled by default and can be disabled in Plugin Config.
+The Predicted Solar advanced section has been removed. Older scale and refresh settings are ignored immediately and cleared when Plugin Config is next saved. Other settings, accessory identities and saved data retain their established continuity.
 
-Charging and export control rules are unchanged. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
+The inaccessible Compare export meter readings feature has also been removed. It produced no result in Apple Home, Eve or Plugin Config and could silently turn Agile Export off. Agile Export planning, its Apple Home switch and local export measurement remain available.
 
-**Full Changelog comparison:** [v4.0.3-beta.8...v4.0.3-beta.9](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.8...v4.0.3-beta.9).
+The Homebridge plugin now uses the updated GivHome logo.
+
+Charging and export control rules are otherwise unchanged. HR242 remains diagnostic-only. See the [user guides](docs/README.md) for setup and control details.
+
+**Full Changelog comparison:** [v4.0.3-beta.9...v4.0.3-beta.10](https://github.com/KernowekConsulting/homebridge-giv-iog-local/compare/v4.0.3-beta.9...v4.0.3-beta.10).

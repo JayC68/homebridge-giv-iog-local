@@ -2,7 +2,14 @@
 
 This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
 
-[Release notes for 4.0.3-beta.9](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.0.3-beta.10](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+
+## 4.0.3-beta.10 — Simpler solar setup (21 October 2026)
+
+- Solar 2mrw now calculates its tile scale automatically from the combined capacity of all solar arrays entered during setup. Each array’s direction, tilt and shading remain part of its individual forecast.
+- Fixed Predicted Solar refreshes at 90-minute intervals for every installation. Retired manual scale and refresh settings are ignored immediately and removed on the next Plugin Config save.
+- Removed Compare export meter readings, its configuration and its inaccessible background suspension path. Retained Agile Export planning, Apple Home control and local export measurement.
+- Updated the Homebridge plugin logo and extended migration checks for the retired settings while preserving unrelated configuration, accessory identity and saved-state continuity.
 
 ## 4.0.3-beta.9 — Safer upgrades, clearer setup (20 October 2026)
 

@@ -23,9 +23,9 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
   const optionalFoundation = schema?.schema?.properties?.enableSolarObservation?.default === true
     && schema?.schema?.properties?.enableEmergencyStopTile?.default === true
     && foundation?.automaticControl === false && foundation?.qualified === false;
-  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.9'
+  const approvedBeta = allowBeta && record.status === 'pending' && pkg.version === '4.0.3-beta.10'
     && approval?.version === pkg.version && approval?.authorizedBy === 'project owner'
-    && approval?.authorizedOn === '2026-10-20'
+    && approval?.authorizedOn === '2026-10-21'
     && approval?.observationDefaultEnabled === true && approval?.emergencyStopDefaultEnabled === true && approval?.channel === 'beta'
     && approval?.optIn === true && approval?.piSoakRequiredBeforeBetaPublication === false && optionalFoundation;
   return { allowed: Boolean(approvedBeta), hardwareQualified: false };
@@ -49,7 +49,7 @@ function main() {
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : 'PASS owner-authorised beta.9 publication; formal resource budgets remain unmeasured.');
+    : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');
 }
 
 module.exports = { publicationDecision };
