@@ -20,7 +20,7 @@ Those two ideas shaped GivHome v4: **understand what the inverter is really doin
 
 ## Version and installation
 
-This is **4.1.0** of `homebridge-giv-iog-local`. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so an upgrade can reuse cached accessories rather than creating replacements. Read the release notes for Emergency Stop, Solar-Aware Cheap Overnight, action ownership and remaining model/firmware limits.
+This is **4.1.1** of `homebridge-giv-iog-local`. It keeps the established `GivHomeModbus` Homebridge platform alias and existing accessory UUID recipes so an upgrade can reuse cached accessories rather than creating replacements. Read the release notes for Emergency Stop, Solar-Aware Cheap Overnight, action ownership and remaining model/firmware limits.
 
 The optional [local learning foundation](docs/SOLAR_OBSERVATION.md) begins observing this installation for future Automatic Solar-Aware Cheap Overnight. It does not choose targets or enable automatic charging. Learning is enabled by default and can be disabled in Plugin Config. Its data stays on your device and is not sent to the developer.
 

@@ -1,8 +1,14 @@
 # Changelog
 
-This changelog covers GivHome v4. See [published releases](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases) for release downloads.
+This changelog lists stable GivHome v4 releases. Each release brings together the improvements developed during its beta cycle. Beta notes remain available in the [GitHub prereleases and tags](https://github.com/KernowekConsulting/homebridge-giv-iog-local/releases).
 
-[Release notes for 4.1.0](RELEASE_NOTES.md) explain the current features and limitations. Each older entry records what was done and proved at that point in the project's history.
+[Release notes for 4.1.1](RELEASE_NOTES.md) describe the current update. Older entries record the behaviour and validation at the time of each release.
+
+## 4.1.1 — Clearer release history (22 October 2026)
+
+- Simplified the main changelog to show stable releases, with the beta-cycle improvements consolidated under their final releases.
+- Retained beta history in GitHub prereleases and tags.
+- Updated the changelog included with the installed plugin. Battery controls and behaviour are unchanged from 4.1.0.
 
 ## 4.1.0 — Emergency Stop and Solar-Aware Cheap Overnight (21 October 2026)
 
@@ -39,77 +45,6 @@ This changelog covers GivHome v4. See [published releases](https://github.com/Ke
 - Improved action ownership and interrupted cleanup so borrowed settings are restored without overwriting later changes made elsewhere.
 - Preserved Cheap Overnight priority and the handover to enabled IOG protection afterwards.
 - Preserved existing configuration, Apple Home accessory identities, Eve history, Local Learning data and saved control state through the revised Config UI and restart readback.
-
-## 4.0.3-beta.10 — Simpler solar setup (21 October 2026)
-
-- Solar 2mrw now calculates its tile scale automatically from the combined capacity of all solar arrays entered during setup. Each array’s direction, tilt and shading remain part of its individual forecast.
-- Fixed Predicted Solar refreshes at 90-minute intervals for every installation. Retired manual scale and refresh settings are ignored immediately and removed on the next Plugin Config save.
-- Removed Compare export meter readings, its configuration and its inaccessible background suspension path. Retained Agile Export planning, Apple Home control and local export measurement.
-- Updated the Homebridge plugin logo and extended migration checks for the retired settings while preserving unrelated configuration, accessory identity and saved-state continuity.
-
-## 4.0.3-beta.9 — Safer upgrades, clearer setup (20 October 2026)
-
-- Reorganised Plugin Config and rewrote its guidance in the GivHome voice, including clearer Solar Now, Predicted Solar, Local Learning and advanced-charging explanations.
-- Added upgrade conversion for older setting names, omitted legacy defaults and export-day choices while preserving effective behaviour and canonical-setting precedence.
-- Preserved saved Night Target, forecast preference, Emergency Stop state, control ownership, Eve totals, Local Learning data, cached accessory UUIDs and owner-managed unknown settings through repeated saves and restart readback.
-
-## 4.0.3-beta.8 — Clearer overnight and Flux controls (20 October 2026)
-
-- Renamed the Apple Home percentage slider to Night Target and clarified that it applies to Cheap Overnight only. Preserved saved settings and accessory identity.
-- Separated enabling Octopus Flux Export from showing its optional Flux Out tile. Preserved existing export rules, startup behaviour and default tile visibility.
-- Moved Local Learning below Predicted Solar — advanced and corrected its description to reflect the enabled-by-default setting and option to disable.
-
-## 4.0.3-beta.7 — Emergency Stop ready, local learning enabled (20 October 2026)
-
-- Made Emergency Stop available by default on supported systems with appliance control enabled, with an option to hide it in Plugin Config.
-- Enabled local learning by default, with an option to disable it. Preserved explicitly saved disabled settings on upgrade.
-- Retained existing control gates, accessory identities, recovery records and bounded local storage. Learning does not change charging targets.
-
-## 4.0.3-beta.6 — Correct the developer-support link (19 October 2026)
-
-- Point Homebridge’s heart/donation link to the Homebridge website instead of the separate iOS site. Plugin behaviour and settings are unchanged.
-
-## 4.0.3-beta.5 — Repository rename and simpler documentation (19 October 2026)
-
-- Update repository, support and release links to KernowekConsulting after the GitHub account rename. Keep the npm package name and existing HomeKit identities.
-- Keep six current user guides and a task-based index; remove pre-v4 history, obsolete private-trial instructions and duplicate release bodies. Group engineering and validation records separately.
-- Update release checks for the current documentation and account identity. Battery-control behaviour, settings and defaults are unchanged from beta.4. HR242 remains diagnostic-only and physical Pi qualification remains pending.
-
-## 4.0.3-beta.4 — Stop this action, keep the next one (18 October 2026)
-
-- Make Emergency Stop acknowledge promptly in Apple Home and release new actions as soon as inverter readback verifies the stop. Remove the wait to an old action’s finishing time.
-- Treat nothing running as a no-change result when Eco is normal. Preserve armed future schedules, unrelated settings and cleanup ownership.
-- Persist stop and cleanup progress; retry interrupted communication with bounded backoff and reconcile uncertain writes before resending. Resume recovery after restart and migrate older stop records using fresh evidence.
-- Add durable action ownership and timer tokens for charge, export and pause. Restore borrowed settings only for a matching action; preserve external changes, refuse conflicting starts safely, and make unrelated Off presses harmless.
-- Reconcile shared charge/export enable flags with future schedules. Cancel only the current automation occurrence, restore recurring hardware windows after it ends, and retain Cheap Overnight priority and later IOG handover if enabled.
-- Cover documented two-slot CE/AC and ED/Hybrid routes as well as CH/All-in-One; route ED export through its core bank. Read supported pause capabilities and verify inverter time, including the repeated autumn hour. Keep HR242 diagnostic-only.
-- Retain reserve limits, Flux single-peak protection, Agile learning, Eve history and the optional local observation foundation. Local learning data stays on the device and is not sent to the developer.
-
-## 4.0.3-beta.3 — Local learning foundation (17 October 2026)
-
-- Add optional, off-by-default local observation for future Automatic Solar-Aware Cheap Overnight. Reuse verified polls and existing forecasts, with minute/half-hour energy summaries, provisional weekday/weekend site-load profiles and observed charging response.
-- Preserve forecast revisions as received; label unresolved DST times, missing values, gaps and control context. Do not claim EV separation, solar correction, battery capacity or automatic-planning readiness.
-- Bound queues, records, model dimensions, files and storage; batch asynchronous writes, rotate old records, recover compatible snapshots and isolate observation failures from telemetry and controls.
-- Add pause and one-time local reset settings, installation/setup fingerprints, service-account file permissions and explicit local-data privacy documentation. No observation or learning data is sent to the developer.
-- Retain existing charging decisions, IOG battery protection, Agile learning, Emergency Stop and Eve history. No new HomeKit service or automatic controller is added.
-- Local observation is off by default in this opt-in Homebridge beta. Pi CPU and memory performance are still being evaluated; automatic planning is not enabled.
-
-## 4.0.3-beta.2 - 2026-10-17
-
-Clearer guidance for the choices introduced in beta-1. Charging behaviour, configuration values and defaults are unchanged.
-
-- Reorganised Solar-Aware Cheap Overnight setup into three steps: add the Home switch, choose the daily solar forecast bands, then choose the overnight battery levels. Explained kWh versus battery %, prerequisites, the normal Charge Target cap and fallback, with a worked example.
-- Introduced Emergency Stop by the problem it addresses: an unwanted or unexpected forced battery charge or discharge. Kept the approved Plugin Config description and existing safety controls.
-- Clarified that IOG protection takes over after the overnight window if enabled. Reworked the upgrade guidance and removed internal build-process wording from the release notes.
-
-## 4.0.3-beta.1 - 2026-10-17
-
-Solar-Aware Cheap Overnight and Emergency Stop, with the existing IOG protection, Agile learning and Eve history retained:
-
-- Added optional Solar-Aware Cheap Overnight: two editable forecast thresholds, three charge targets, normal-target fallback and a persisted Apple Home on/off switch. Retained the morning forecast across midnight and restart. The normal Charge Target caps the selected target; IOG retains its own target.
-- Added opt-in Emergency Stop with the approved Plugin Config description. Fresh profile-aware reads precede disable-first cancellation, clearing only validated implicated slots, Eco restoration and readback. A durable hold blocks queued commands and supervisors through the affected window; failed verification keeps the hold across restart. Unvalidated active slots report incomplete rather than receiving speculative writes.
-
-Existing HR242 and CH restart-restoration limitations remain. See the release notes for setup guidance and the recovery limitations to understand before upgrading.
 
 ## 4.0.2 - 2026-10-14
 
@@ -191,25 +126,3 @@ Full Changelog comparison: [v4.0.0...v4.0.1](https://github.com/KernowekConsulti
 The public product remains `homebridge-giv-iog-local` / GivHome. The compatibility platform alias `GivHomeModbus` and established accessory identity recipes are deliberately retained to protect Homebridge/HomeKit continuity. Core local telemetry and control do not require GivTCP, MQTT or GivEnergy Cloud.
 
 Release validation covers source/build integrity, Config UI parity against the mature 1.3.1 functional baseline, JavaScript syntax, release verification, Predicted Solar harness and npm publication contents. A production switchover from the live 1.3.1 controller was deliberately not performed as part of release preparation, to avoid placing two controllers in contention for the same inverter and HomeKit surfaces.
-
-# GivHome — Changelog
-
-## 4.0.0-beta.3 — Direct-local v4 convergence candidate
-
-4.0.0-beta.3 uses the validated `homebridge-givhome-modbus` 1.3.1 implementation as its functional baseline and converts it into the established `homebridge-giv-iog-local` v4 product identity.
-
-It retains the mature 1.3.1 behaviour: fast cached Apple Home command state with background authoritative inverter reconciliation, Eve Energy history, Predicted Solar, requested-energy-budgeted Flux export with observed-discharge stopping and single-peak protection, active Flux route recovery, Agile export intelligence, Intelligent Octopus Go / Smart Window behaviour, guarded manual controls and direct local GivEnergy Modbus telemetry.
-
-The v4 conversion preserves the `GivHomeModbus` platform alias and existing v4 accessory UUID recipes, restores the GPL-3.0-or-later legal/support/publication layer, and keeps the 1.3.1 Smart Window improvement where the tile follows `cheapActive`.
-
-This is an isolated build candidate. Live deployment requires offline validation followed by a fresh verified rollback of the currently running installation.
-
-## Direct-Modbus development lineage incorporated into v4
-
-The narrative below is retained because it documents how the implementation now used by v4 matured. Version numbers in this section refer to the earlier `homebridge-givhome-modbus` development line.
-
-GivHome Modbus did not begin as a list of features. It began with ordinary problems we wanted to solve in our own energy system.
-
-We wanted Homebridge to talk directly to the inverter instead of relying on layers of GivTCP and MQTT. We wanted Intelligent Octopus Go to charge the EV from cheap grid electricity without the home battery quietly helping it. And we wanted the result to feel at home in Apple Home rather than like an engineering console.
-
-The releases below are the main steps from that beginning to the product we have now.

@@ -360,18 +360,18 @@ test('full qualification still needs matching measured budgets without beta appr
   assert.equal(publicationDecision(input).allowed, false);
 });
 
-test('field-observed stable readiness accepts only the reviewed 4.1.0 runtime without claiming resource budgets', () => {
+test('field-observed stable readiness accepts only the reviewed 4.1.1 runtime without claiming resource budgets', () => {
   const { publicationDecision } = require('./verify-observation-qualification');
-  const input = { pkg: { version: '4.1.0' }, runtimeSha256: 'reviewed',
+  const input = { pkg: { version: '4.1.1' }, runtimeSha256: 'reviewed',
     schema: { schema: { properties: { enableSolarObservation: { default: true }, enableEmergencyStopTile: { default: true } } } },
     foundation: { automaticControl: false, qualified: false },
-    record: { version: '4.1.0', runtimeSha256: 'reviewed', status: 'field-observed',
-      networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: '4.1.0 validation',
-      stableReadiness: { version: '4.1.0', reviewedBy: 'project owner', reviewedOn: '2026-10-21', channel: 'stable',
+    record: { version: '4.1.1', runtimeSha256: 'reviewed', status: 'field-observed',
+      networkIsolationPassed: true, faultAndRetentionPassed: true, evidence: '4.1.1 validation',
+      stableReadiness: { version: '4.1.1', reviewedBy: 'project owner', reviewedOn: '2026-10-21', channel: 'stable',
         fieldInstallationOperational: true, resourceBudgetsClaimed: false, automaticSolarPlanningEnabled: false } } };
   assert.deepEqual(publicationDecision(input), { allowed: true, hardwareQualified: false });
   for (const change of [
-    x => { x.pkg.version = x.record.version = x.record.stableReadiness.version = '4.1.1'; },
+    x => { x.pkg.version = x.record.version = x.record.stableReadiness.version = '4.1.2'; },
     x => { x.runtimeSha256 = 'different'; },
     x => { x.record.status = 'pending'; },
     x => { x.record.stableReadiness.fieldInstallationOperational = false; },

@@ -1,13 +1,13 @@
 {
-  "version": "4.1.0",
+  "version": "4.1.1",
   "status": "field-observed",
-  "runtimeSha256": "e44ae9cb9a468d9f9ae9f482dbb3f412446df47c4308a48a23a9a4d3d43bb310",
+  "runtimeSha256": "57ad4a755d14f5fa5f758d277fc2b86e828f5f1dd9fa57ca0c2c748b992c3519",
   "minimumPi": null,
   "busierPi": null,
   "networkIsolationPassed": true,
   "faultAndRetentionPassed": true,
-  "evidence": "docs/maintainer/VALIDATION_4.1.0.md",
-  "reason": "The project owner accepted successful operation on the live Homebridge Pi as sufficient field evidence for stable readiness. Formal paired incremental resource budgets are not claimed. Local Learning remains bounded and cannot enable automatic solar planning or change charging targets.",
+  "evidence": "docs/maintainer/VALIDATION_4.1.1.md",
+  "reason": "Documentation-only patch to the accepted 4.1.0 runtime. Only release identity changes in runtime files; field evidence and control behaviour are retained. Formal paired resource budgets are not claimed.",
   "fieldObservation": {
     "hardware": "owner's Raspberry Pi Homebridge installation",
     "operational": true,
@@ -17,7 +17,7 @@
     "source": "docs/maintainer/VALIDATION_4.1.0.md"
   },
   "stableReadiness": {
-    "version": "4.1.0",
+    "version": "4.1.1",
     "reviewedBy": "project owner",
     "reviewedOn": "2026-10-21",
     "channel": "stable",

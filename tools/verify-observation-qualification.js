@@ -29,7 +29,7 @@ function publicationDecision({ record, pkg, runtimeSha256, schema, foundation },
     && approval?.observationDefaultEnabled === true && approval?.emergencyStopDefaultEnabled === true && approval?.channel === 'beta'
     && approval?.optIn === true && approval?.piSoakRequiredBeforeBetaPublication === false && optionalFoundation;
   const readiness = record.stableReadiness;
-  const fieldObservedStable = !allowBeta && record.status === 'field-observed' && pkg.version === '4.1.0'
+  const fieldObservedStable = !allowBeta && record.status === 'field-observed' && pkg.version === '4.1.1'
     && readiness?.version === pkg.version && readiness?.reviewedBy === 'project owner'
     && readiness?.reviewedOn === '2026-10-21' && readiness?.channel === 'stable'
     && readiness?.fieldInstallationOperational === true && readiness?.resourceBudgetsClaimed === false
@@ -56,8 +56,8 @@ function main() {
     console.error(`Runtime SHA-256: ${runtimeSha256}`); process.exitCode = 1; return;
   }
   console.log(decision.hardwareQualified ? 'PASS matched 72-hour Pi qualification record.'
-    : pkg.version === '4.1.0'
-      ? 'PASS field-observed 4.1.0 stable readiness; formal paired resource budgets are not claimed.'
+    : pkg.version === '4.1.1'
+      ? 'PASS field-observed 4.1.1 stable readiness; formal paired resource budgets are not claimed.'
       : 'PASS owner-authorised beta.10 publication; formal resource budgets remain unmeasured.');
 }
 
